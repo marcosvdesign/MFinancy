@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<title>Minhas Finanças</title>
+<!-- Permite "Adicionar à Tela de Início" no iPad/iPhone com cara de app -->
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Finanças" />
+<meta name="theme-color" content="#141a2b" />
+<link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">
+      <span class="brand-dot"></span>
+      <span>Minhas Finanças</span>
+    </div>
+
+    <div class="profile-switch">
+      <label>Perfil</label>
+      <div class="custom-select" id="profileSelectWrap">
+        <button type="button" class="custom-select-trigger" id="profileSelectTrigger">
+          <span id="profileSelectLabel">Todos os perfis</span>
+          <span class="chevron">▾</span>
+        </button>
+        <div class="custom-select-menu hidden" id="profileSelectMenu"></div>
+      </div>
+    </div>
+
+    <nav>
+      <button class="nav-item active" data-tab="dashboard">📊 Dashboard</button>
+      <button class="nav-item" data-tab="lancamentos">🧾 Lançamentos</button>
+      <button class="nav-item" data-tab="contatos">👥 Contatos</button>
+      <button class="nav-item" data-tab="relatorios">📈 Relatórios</button>
+      <button class="nav-item" data-tab="configuracoes">⚙️ Configurações</button>
+    </nav>
+    <form method="POST" action="/api/logout" style="padding: 0 8px;">
+      <button type="submit" class="btn-secondary" style="width:100%;">Sair</button>
+    </form>
+    <div class="sidebar-footer">Dados salvos na nuvem (Postgres)</div>
+  </aside>
+
+  <main class="content">
+
+    <!-- ============ DASHBOARD ============ -->
+    <section id="tab-dashboard" class="tab active">
+      <header class="page-header">
+        <div>
+          <h1>Dashboard</h1>
+          <div class="greeting" id="greeting">Olá!</div>
+        </div>
+        <div class="month-switch">
+          <button id="prevMonth">‹</button>
+          <span id="monthLabel">—</span>
+          <button id="nextMonth">›</button>
+        </div>
+      </header>
+
+      <div class="grid-2">
+        <div class="panel">
+          <h2>Previsto x Realizado</h2>
+          <div class="donut-row">
+            <div class="donut-block">
+              <canvas id="donutReceitas" width="140" height="140"></canvas>
+              <div class="donut-caption">RECEBIMENTOS</div>
+              <div class="donut-lines">
+                <div><span>Realizado</span><b id="dReceitaRealizado">R$ 0,00</b></div>
+                <div><span>Falta</span><b id="dReceitaFalta">R$ 0,00</b></div>
+                <div><span>Previsto</span><b id="dReceitaPrevisto">R$ 0,00</b></div>
+              </div>
+            </div>
+            <div class="donut-block">
+              <canvas id="donutDespesas" width="140" height="140"></canvas>
+              <div class="donut-caption">DESPESAS</div>
+              <div class="donut-lines">
+                <div><span>Realizado</span><b id="dDespesaRealizado">R$ 0,00</b></div>
+                <div><span>Falta</span><b id="dDespesaFalta">R$ 0,00</b></div>
+                <div><span>Previsto</span><b id="dDespesaPrevisto">R$ 0,00</b></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel">
+          <div class="saldo-head">
+            <div>
+              <div class="card-label">Saldo · perfil selecionado</div>
+              <div class="card-value" id="saldoAtual">R$ 0,00</div>
+            </div>
+            <button id="btnToggleSaldoPerfil" class="btn-secondary">Por perfil ▾</button>
+          </div>
+          <div id="saldoPorPerfil" class="account-balance-list hidden"></div>
+          <hr class="divider" />
+          <div class="card-label">Saldo por conta</div>
+          <div id="saldoPorConta" class="account-balance-list"></div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="panel">
+          <h2>Fluxo de caixa do semestre</h2>
+          <canvas id="chartComparativo" height="200"></canvas>
+        </div>
+        <div class="panel">
+          <h2>Comparativo com mês anterior</h2>
+          <div id="comparativoGrupos" class="mini-table"></div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="panel">
+          <h2>Agenda do mês</h2>
+          <div id="calendarWrap"></div>
+        </div>
+        <div class="panel">
+          <h2 id="agendaDiaTitulo">Vencimentos do dia</h2>
+          <div id="agendaDiaLista" class="mini-table"></div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="panel">
+          <h2>Próximos vencimentos (30 dias)</h2>
+          <div id="proximosVencimentos" class="mini-table"></div>
+        </div>
+        <div class="panel">
+          <h2>Lançamentos em atraso <span class="badge badge-vencido" id="qtdVencidasBadge">0</span></h2>
+          <div class="card-sub" style="margin-bottom:8px;">Total em atraso: <b class="negative" id="totalVencidas">R$ 0,00</b></div>
+          <div id="listaVencidas" class="mini-table"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2>Demonstração de Resultados (DRE) — mês atual</h2>
+        <div id="dreDashboard" class="dre-table"></div>
+      </div>
+    </section>
+
+    <!-- ============ LANCAMENTOS ============ -->
+    <section id="tab-lancamentos" class="tab">
+      <header class="page-header">
+        <h1>Lançamentos</h1>
+      </header>
+
+      <div class="subtabs" id="lancamentosSubtabs">
+        <button class="subtab active" data-group="recebimento">Recebimentos</button>
+        <button class="subtab" data-group="despesa_fixa">Despesas Fixas</button>
+        <button class="subtab" data-group="despesa_variavel">Despesas Variáveis</button>
+        <button class="subtab" data-group="pessoas">Pessoas</button>
+        <button class="subtab" data-group="impostos">Impostos</button>
+        <button class="subtab" data-group="transferencias">🔁 Transferências</button>
+      </div>
+
+      <div id="groupPanel">
+        <div class="filters">
+          <select id="filterPeriodo">
+            <option value="mes_atual">Este mês</option>
+            <option value="mes_passado">Mês passado</option>
+            <option value="ano_atual">Este ano</option>
+            <option value="tudo">Tudo</option>
+            <option value="custom">Personalizado</option>
+          </select>
+          <input type="date" id="filterStart" class="hidden" />
+          <span id="filterAteLabel" class="hidden">até</span>
+          <input type="date" id="filterEnd" class="hidden" />
+          <select id="filterStatus">
+            <option value="">Todos os status</option>
+            <option value="pendente">Não pagos</option>
+            <option value="pago">Pagos</option>
+          </select>
+          <input type="text" id="filterSearch" placeholder="Buscar descrição..." />
+          <button id="btnFiltrar" class="btn-primary">Filtrar</button>
+          <button class="btn-secondary" id="btnNovoLancamento" style="margin-left:auto;">+ Adicionar</button>
+        </div>
+
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Data</th><th>Descrição</th><th>Contato</th><th>Categoria</th>
+              <th>Valor</th><th>Pago?</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="transactionsBody"></tbody>
+        </table>
+      </div>
+
+      <div id="transfersPanel" class="hidden">
+        <div class="filters">
+          <button class="btn-secondary" id="btnNovaTransferencia" style="margin-left:auto;">+ Nova transferência</button>
+        </div>
+        <table class="data-table">
+          <thead><tr><th>Data</th><th>De</th><th>Para</th><th>Valor</th><th>Observações</th><th></th></tr></thead>
+          <tbody id="transfersBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ============ CONTATOS ============ -->
+    <section id="tab-contatos" class="tab">
+      <header class="page-header">
+        <h1>Contatos</h1>
+        <button class="btn-primary" id="btnNovoContato">+ Novo contato</button>
+      </header>
+
+      <div class="grid-contacts">
+        <div class="panel">
+          <input type="text" id="contactSearch" placeholder="Pesquisar contatos..." class="search-input" />
+          <div id="contactsList" class="mini-table mini-table-tall"></div>
+        </div>
+        <div class="panel">
+          <h2 class="positive">Quem está me devendo <span id="totalMeDevem"></span></h2>
+          <div id="quemMeDeve" class="mini-table"></div>
+        </div>
+        <div class="panel">
+          <h2 class="negative">Quem estou devendo <span id="totalEuDevo"></span></h2>
+          <div id="quemEuDevo" class="mini-table"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ RELATORIOS ============ -->
+    <section id="tab-relatorios" class="tab">
+      <header class="page-header"><h1>Relatórios</h1></header>
+
+      <div class="reports-layout">
+        <div class="reports-sidebar">
+          <div class="reports-group-title">Despesas</div>
+          <button class="report-link" data-report="por_descricao" data-side="despesa">Por Descrição</button>
+          <button class="report-link" data-report="por_dia" data-side="despesa">Por Dia</button>
+          <button class="report-link" data-report="por_tipo" data-side="despesa">Por Tipo</button>
+          <button class="report-link" data-report="por_categoria" data-side="despesa">Por Categoria</button>
+          <button class="report-link" data-report="por_tag" data-side="despesa">Por Tags</button>
+          <button class="report-link" data-report="por_centro_custo" data-side="despesa">Por Centro de Custo</button>
+          <button class="report-link" data-report="por_contato" data-side="despesa">Pago a...</button>
+
+          <div class="reports-group-title">Recebimentos</div>
+          <button class="report-link" data-report="por_descricao" data-side="receita">Por Descrição</button>
+          <button class="report-link" data-report="por_dia" data-side="receita">Por Dia</button>
+          <button class="report-link" data-report="por_categoria" data-side="receita">Por Categoria</button>
+          <button class="report-link" data-report="por_tag" data-side="receita">Por Tags</button>
+          <button class="report-link" data-report="por_centro_custo" data-side="receita">Por Centro de Custo</button>
+          <button class="report-link" data-report="por_contato" data-side="receita">Recebido de...</button>
+
+          <div class="reports-group-title">Fluxo de Caixa</div>
+          <button class="report-link" data-report="extrato">Extrato</button>
+          <button class="report-link" data-report="despesas_receitas">Despesas/Receitas</button>
+          <button class="report-link" data-report="historico">Histórico</button>
+          <button class="report-link" data-report="dre">Demonstrativo (DRE)</button>
+          <button class="report-link" data-report="performance_mensal">Performance Mensal</button>
+          <button class="report-link" data-report="performance_anual">Performance Anual</button>
+          <button class="report-link" data-report="saldos">Saldos</button>
+        </div>
+
+        <div class="reports-content">
+          <div class="filters" id="reportFilters">
+            <input type="date" id="repStart" />
+            <span>até</span>
+            <input type="date" id="repEnd" />
+            <select id="repStatus">
+              <option value="">Pagos e não pagos</option>
+              <option value="pago">Somente pagos</option>
+              <option value="pendente">Somente não pagos</option>
+            </select>
+            <button id="btnGerarRelatorio" class="btn-primary">Gerar</button>
+          </div>
+          <h2 id="reportTitle" class="report-title">Despesas/Receitas</h2>
+          <div id="reportBody"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ CONFIGURACOES ============ -->
+    <section id="tab-configuracoes" class="tab">
+      <header class="page-header"><h1>Configurações</h1></header>
+
+      <div class="reports-layout">
+        <div class="reports-sidebar">
+          <button class="report-link config-link active" data-config="perfis">Perfis</button>
+          <button class="report-link config-link" data-config="contas">Contas bancárias</button>
+          <button class="report-link config-link" data-config="categorias">Categorias</button>
+          <button class="report-link config-link" data-config="centros">Centros de Custo</button>
+          <button class="report-link config-link" data-config="tags">Tags</button>
+          <button class="report-link config-link" data-config="preferencias">Preferências</button>
+          <button class="report-link config-link" data-config="logs">Logs de atividade</button>
+          <button class="report-link config-link" data-config="exportar">Exportar dados</button>
+          <button class="report-link config-link" data-config="excluir">Excluir dados</button>
+        </div>
+
+        <div class="reports-content">
+
+          <div id="cfg-perfis" class="config-panel">
+            <div class="page-header"><h2>Perfis</h2><button class="btn-primary" id="btnNovoPerfil">+ Novo perfil</button></div>
+            <div id="profilesGrid" class="cards-grid"></div>
+          </div>
+
+          <div id="cfg-contas" class="config-panel hidden">
+            <div class="page-header"><h2>Contas bancárias</h2><button class="btn-primary" id="btnNovaConta">+ Nova conta</button></div>
+            <div id="accountsGrid" class="cards-grid"></div>
+          </div>
+
+          <div id="cfg-categorias" class="config-panel hidden">
+            <div class="page-header"><h2>Categorias</h2><button class="btn-primary" id="btnNovaCategoria">+ Nova categoria</button></div>
+            <div class="subtabs" id="categoriesSubtabs">
+              <button class="subtab active" data-group="recebimento">Recebimentos</button>
+              <button class="subtab" data-group="despesa_fixa">Despesas Fixas</button>
+              <button class="subtab" data-group="despesa_variavel">Despesas Variáveis</button>
+              <button class="subtab" data-group="pessoas">Pessoas</button>
+              <button class="subtab" data-group="impostos">Impostos</button>
+            </div>
+            <div id="categoriesGrid" class="cards-grid"></div>
+          </div>
+
+          <div id="cfg-centros" class="config-panel hidden">
+            <div class="page-header"><h2>Centros de Custo</h2><button class="btn-primary" id="btnNovoCentro">+ Novo centro de custo</button></div>
+            <div id="costCentersGrid" class="cards-grid"></div>
+          </div>
+
+          <div id="cfg-tags" class="config-panel hidden">
+            <div class="page-header"><h2>Tags</h2><button class="btn-primary" id="btnNovaTag">+ Nova tag</button></div>
+            <div id="tagsGrid" class="cards-grid"></div>
+          </div>
+
+          <div id="cfg-preferencias" class="config-panel hidden">
+            <div class="page-header"><h2>Preferências</h2></div>
+            <div class="panel" style="max-width:480px;">
+              <div class="form-row">
+                <label>Seu nome (usado na saudação do dashboard)</label>
+                <input type="text" id="prefDisplayName" />
+              </div>
+              <div class="form-row toggle-row">
+                <label>Visualizar todos os perfis como padrão</label>
+                <input type="checkbox" id="prefDefaultAll" />
+              </div>
+              <div class="form-row toggle-row">
+                <label>Confirmar data ao marcar um lançamento atrasado como pago</label>
+                <input type="checkbox" id="prefConfirmPaidDate" />
+              </div>
+              <div class="form-actions"><button class="btn-primary" id="btnSalvarPreferencias">Salvar</button></div>
+            </div>
+          </div>
+
+          <div id="cfg-logs" class="config-panel hidden">
+            <div class="page-header"><h2>Logs de atividade</h2></div>
+            <div class="filters">
+              <input type="date" id="logStart" /><span>até</span><input type="date" id="logEnd" />
+              <input type="text" id="logSearch" placeholder="Filtrar por texto..." />
+              <button class="btn-primary" id="btnFiltrarLogs">Filtrar</button>
+            </div>
+            <div id="logsTable" class="mini-table mini-table-tall"></div>
+          </div>
+
+          <div id="cfg-exportar" class="config-panel hidden">
+            <div class="page-header"><h2>Exportar dados</h2></div>
+            <div class="panel" style="max-width:480px;">
+              <div class="form-row-2">
+                <div class="form-row"><label>Data inicial</label><input type="date" id="exportStart" /></div>
+                <div class="form-row"><label>Data final</label><input type="date" id="exportEnd" /></div>
+              </div>
+              <div class="form-actions" style="justify-content:flex-start; gap:12px;">
+                <button class="btn-primary" id="btnExportJson">Exportar JSON</button>
+                <button class="btn-secondary" id="btnExportCsv">Exportar CSV</button>
+              </div>
+              <p class="card-sub">Deixe as datas em branco para exportar tudo. O arquivo é salvo pelo seu navegador (pasta de Downloads).</p>
+            </div>
+          </div>
+
+          <div id="cfg-excluir" class="config-panel hidden">
+            <div class="page-header"><h2>Excluir todos os dados</h2></div>
+            <div class="panel" style="max-width:480px;">
+              <p>Isso apaga <b>permanentemente</b> todos os dados salvos em <code>data/db.json</code> nesta máquina (contas, lançamentos, categorias, contatos etc.) e recria o app do zero.</p>
+              <div id="dataSummary" class="mini-table"></div>
+              <div class="form-row" style="margin-top:14px;">
+                <label>Digite <b>EXCLUIR</b> para confirmar</label>
+                <input type="text" id="wipeConfirm" />
+              </div>
+              <div class="form-actions" style="justify-content:flex-start;">
+                <button class="btn-primary" style="background:#d64545;" id="btnWipe">Excluir todos os dados</button>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- MODAL genérico -->
+<div id="modalOverlay" class="modal-overlay hidden">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modalTitle">Título</h3>
+      <button id="modalClose">✕</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+  </div>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="/charts.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>
