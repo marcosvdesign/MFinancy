@@ -628,6 +628,8 @@ export interface TransactionFilters {
   status?: string;
   search?: string;
   profile_id?: string;
+  installment_group_id?: string;
+  recurrence_group_id?: string;
 }
 
 async function getTransactionById(id: string): Promise<Transaction | null> {
@@ -651,6 +653,8 @@ export async function listTransactions(filters: TransactionFilters): Promise<Tra
   if (filters.cost_center_id) add("t.cost_center_id = ?", filters.cost_center_id);
   if (filters.tag_id) add("? = ANY(t.tag_ids)", filters.tag_id);
   if (filters.group) add('t."group" = ?', filters.group);
+  if (filters.installment_group_id) add("t.installment_group_id = ?", filters.installment_group_id);
+  if (filters.recurrence_group_id) add("t.recurrence_group_id = ?", filters.recurrence_group_id);
   if (filters.side === "receita") conditions.push(`t."group" = 'recebimento'`);
   else if (filters.side === "despesa") conditions.push(`t."group" != 'recebimento'`);
   if (filters.status) add("t.status = ?", filters.status);
@@ -714,11 +718,27 @@ async function insertTransactionRow(t: BaseTransactionFields & {
   return mapTransaction(rows[0]);
 }
 
+// Frequencias suportadas (chaves em portugues, usadas tanto na recorrencia
+// quanto no gerador de datas do parcelamento com valores personalizados).
 const FREQUENCY_STEP: Record<string, (date: string, i: number) => string> = {
+  semanal: (date, i) => addDays(date, i * 7),
+  quinzenal: (date, i) => addDays(date, i * 14),
+  mensal: (date, i) => addMonths(date, i),
+  bimestral: (date, i) => addMonths(date, i * 2),
+  trimestral: (date, i) => addMonths(date, i * 3),
+  semestral: (date, i) => addMonths(date, i * 6),
+  anual: (date, i) => addMonths(date, i * 12),
+  // aliases em ingles, mantidos por compatibilidade com dados/integrações antigas
   weekly: (date, i) => addDays(date, i * 7),
   monthly: (date, i) => addMonths(date, i),
   yearly: (date, i) => addMonths(date, i * 12),
 };
+
+export interface InstallmentScheduleEntry {
+  due_date: string;
+  amount: number;
+  status?: string;
+}
 
 export async function createTransaction(payload: any): Promise<Transaction[]> {
   const base = buildBaseFields(payload);
@@ -726,7 +746,31 @@ export async function createTransaction(payload: any): Promise<Transaction[]> {
   const installments = payload.installments;
   const recurrence = payload.recurrence;
 
-  if (installments?.enabled && Number(installments.total) > 1) {
+  if (installments?.enabled && Array.isArray(installments.schedule) && installments.schedule.length > 1) {
+    // Cronograma personalizado (popup de Parcelas): cada parcela pode ter
+    // data, valor e status proprios, definidos pelo usuario.
+    const schedule: InstallmentScheduleEntry[] = installments.schedule;
+    const total = schedule.length;
+    const groupId = newId();
+    for (let i = 0; i < total; i++) {
+      const entry = schedule[i];
+      const status = entry.status || "pendente";
+      const row = await insertTransactionRow({
+        ...base,
+        id: newId(),
+        due_date: entry.due_date,
+        amount: round2(Number(entry.amount)),
+        installment_group_id: groupId,
+        installment_number: i + 1,
+        installment_total: total,
+        recurrence_group_id: null,
+        recurrence_frequency: null,
+        status,
+        paid_date: status === "pago" ? entry.due_date : null,
+      });
+      created.push(row);
+    }
+  } else if (installments?.enabled && Number(installments.total) > 1) {
     const total = Number(installments.total);
     const groupId = newId();
     for (let i = 0; i < total; i++) {
@@ -746,8 +790,8 @@ export async function createTransaction(payload: any): Promise<Transaction[]> {
     }
   } else if (recurrence?.enabled && Number(recurrence.occurrences) > 1) {
     const occurrences = Number(recurrence.occurrences);
-    const frequency = recurrence.frequency || "monthly";
-    const step = FREQUENCY_STEP[frequency] || FREQUENCY_STEP.monthly;
+    const frequency = recurrence.frequency || "mensal";
+    const step = FREQUENCY_STEP[frequency] || FREQUENCY_STEP.mensal;
     const groupId = newId();
     for (let i = 0; i < occurrences; i++) {
       const row = await insertTransactionRow({

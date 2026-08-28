@@ -555,6 +555,214 @@ function tagChipsHtml(selectedIds) {
     </label>`).join("")}</div>`;
 }
 
+// ---------------------------------------------------------------------
+// Modal secundario (empilhado) + popups de Parcelas / Repetir
+// ---------------------------------------------------------------------
+
+function openModal2(title, bodyHtml) {
+  document.getElementById("modalTitle2").textContent = title;
+  document.getElementById("modalBody2").innerHTML = bodyHtml;
+  document.getElementById("modalOverlay2").classList.remove("hidden");
+}
+function closeModal2() { document.getElementById("modalOverlay2").classList.add("hidden"); }
+document.getElementById("modalClose2")?.addEventListener("click", closeModal2);
+document.getElementById("modalOverlay2")?.addEventListener("click", (e) => { if (e.target.id === "modalOverlay2") closeModal2(); });
+
+// Datas: mesma matematica (UTC) usada no backend, pra gerar exatamente as
+// mesmas datas que o servidor geraria.
+function jsPad(n) { return String(n).padStart(2, "0"); }
+function jsAddDays(dateStr, days) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const date = new Date(Date.UTC(y, m - 1, d + days));
+  return `${date.getUTCFullYear()}-${jsPad(date.getUTCMonth() + 1)}-${jsPad(date.getUTCDate())}`;
+}
+function jsAddMonths(dateStr, n) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const total = y * 12 + (m - 1) + n;
+  const newYear = Math.floor(total / 12);
+  const newMonthIndex = total - newYear * 12;
+  const daysInMonth = new Date(Date.UTC(newYear, newMonthIndex + 1, 0)).getUTCDate();
+  const day = Math.min(d, daysInMonth);
+  return `${newYear}-${jsPad(newMonthIndex + 1)}-${jsPad(day)}`;
+}
+const FREQ_STEP_JS = {
+  semanal: (d, i) => jsAddDays(d, i * 7),
+  quinzenal: (d, i) => jsAddDays(d, i * 14),
+  mensal: (d, i) => jsAddMonths(d, i),
+  bimestral: (d, i) => jsAddMonths(d, i * 2),
+  trimestral: (d, i) => jsAddMonths(d, i * 3),
+  semestral: (d, i) => jsAddMonths(d, i * 6),
+  anual: (d, i) => jsAddMonths(d, i * 12),
+};
+const FREQ_LABELS_PT = { semanal: "Semanal", quinzenal: "Quinzenal", mensal: "Mensal", bimestral: "Bimestral", trimestral: "Trimestral", semestral: "Semestral", anual: "Anual" };
+
+function openRepetirPopup(existing, onSave) {
+  const freq = existing?.frequency || "mensal";
+  const occ = existing?.occurrences || 12;
+  openModal2("Repetir transação", `
+    <p class="card-sub" style="margin-top:-6px;">Com que frequência esse lançamento se repete?</p>
+    <div class="radio-group" style="flex-direction:column; align-items:flex-start; gap:11px; margin-bottom:16px;">
+      ${Object.entries(FREQ_LABELS_PT).map(([key, label]) => `
+        <label><input type="radio" name="rf_freq" value="${key}" ${freq === key ? "checked" : ""}/> ${label}</label>
+      `).join("")}
+    </div>
+    <div class="form-row">
+      <label>Quantas ocorrências (incluindo esta)</label>
+      <input type="number" min="2" id="rf_occurrences" value="${occ}" />
+    </div>
+    <div class="form-actions">
+      <button class="btn-secondary" id="rf_cancel">Cancelar</button>
+      <button class="btn-primary" id="rf_save">Salvar</button>
+    </div>
+  `);
+  document.getElementById("rf_cancel").addEventListener("click", closeModal2);
+  document.getElementById("rf_save").addEventListener("click", () => {
+    const frequency = document.querySelector('input[name="rf_freq"]:checked').value;
+    const occurrences = parseInt(document.getElementById("rf_occurrences").value || "2");
+    if (occurrences < 2) return showToast("Informe pelo menos 2 ocorrências.", true);
+    closeModal2();
+    onSave({ frequency, occurrences });
+  });
+}
+
+function computeParcelasRows(pState) {
+  const step = FREQ_STEP_JS[pState.frequencia] || FREQ_STEP_JS.mensal;
+  const n = Math.max(1, pState.numero);
+  const rows = [];
+  if (pState.valorModo === "total") {
+    const per = Math.floor((pState.valorTotal / n) * 100) / 100;
+    let allocated = 0;
+    for (let i = 0; i < n; i++) {
+      let amount = per;
+      if (i === n - 1) amount = Math.round((pState.valorTotal - allocated) * 100) / 100;
+      else allocated = Math.round((allocated + per) * 100) / 100;
+      rows.push({ number: i + 1, due_date: step(pState.startDate, i), amount, status: "pendente" });
+    }
+  } else {
+    for (let i = 0; i < n; i++) {
+      rows.push({ number: i + 1, due_date: step(pState.startDate, i), amount: pState.valorParcela, status: "pendente" });
+    }
+  }
+  return rows;
+}
+
+function parcelasTableHtml(rows) {
+  const total = rows.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+  const body = rows.map((r, i) => `
+    <tr>
+      <td class="pnum">${r.number}/${rows.length}</td>
+      <td><input type="date" class="prow-date" data-idx="${i}" value="${r.due_date}" /></td>
+      <td><input type="number" step="0.01" class="prow-amount" data-idx="${i}" value="${r.amount}" /></td>
+      <td style="text-align:center;">
+        <label class="toggle-switch"><input type="checkbox" class="prow-status" data-idx="${i}" ${r.status === "pago" ? "checked" : ""}/><span class="toggle-slider"></span></label>
+      </td>
+      <td><button type="button" class="prow-remove" data-idx="${i}">✕</button></td>
+    </tr>`).join("");
+  return `
+    <div class="parcelas-table-wrap">
+      <table class="parcelas-table">
+        <thead><tr><th>#</th><th>Vencimento</th><th>Valor</th><th>Pago?</th><th></th></tr></thead>
+        <tbody>${body}</tbody>
+      </table>
+    </div>
+    <div class="parcelas-total-row"><span>Total</span><span id="pf_total_value">${formatCurrency(total)}</span></div>
+  `;
+}
+
+function openParcelasPopup(defaults, existing, onSave) {
+  const pState = {
+    valorModo: existing?.valorModo || "parcela",
+    valorTotal: existing?.valorTotal ?? Number(defaults.amount || 0),
+    valorParcela: existing?.valorParcela ?? Number(defaults.amount || 0),
+    numero: existing?.rows?.length || 3,
+    frequencia: existing?.frequencia || "mensal",
+    startDate: defaults.due_date || todayIso(),
+  };
+  let rows = existing?.rows ? existing.rows.map((r) => ({ ...r })) : computeParcelasRows(pState);
+
+  function renderTable() {
+    document.getElementById("pf_table_area").innerHTML = parcelasTableHtml(rows);
+    document.querySelectorAll(".prow-date").forEach((inp) => inp.addEventListener("change", () => { rows[inp.dataset.idx].due_date = inp.value; }));
+    document.querySelectorAll(".prow-amount").forEach((inp) => inp.addEventListener("input", () => {
+      rows[inp.dataset.idx].amount = parseFloat(inp.value || "0");
+      document.getElementById("pf_total_value").textContent = formatCurrency(rows.reduce((s, r) => s + (Number(r.amount) || 0), 0));
+    }));
+    document.querySelectorAll(".prow-status").forEach((inp) => inp.addEventListener("change", () => { rows[inp.dataset.idx].status = inp.checked ? "pago" : "pendente"; }));
+    document.querySelectorAll(".prow-remove").forEach((btn) => btn.addEventListener("click", () => {
+      if (rows.length <= 1) return showToast("É preciso ao menos uma parcela.", true);
+      rows.splice(parseInt(btn.dataset.idx), 1);
+      rows.forEach((r, i) => { r.number = i + 1; });
+      renderTable();
+    }));
+  }
+
+  openModal2("Parcelas", `
+    <div class="form-row-2">
+      <div class="form-row">
+        <label>Modo</label>
+        <select id="pf_modo">
+          <option value="parcela" ${pState.valorModo === "parcela" ? "selected" : ""}>Valor de cada parcela</option>
+          <option value="total" ${pState.valorModo === "total" ? "selected" : ""}>Valor total</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label id="pf_valor_label">${pState.valorModo === "total" ? "Valor Total (R$)" : "Valor de cada parcela (R$)"}</label>
+        <div class="value-input-wrap">
+          <input type="number" step="0.01" id="pf_valor" value="${pState.valorModo === "total" ? pState.valorTotal : pState.valorParcela}" />
+          <button type="button" class="calc-trigger" data-calc-target="pf_valor">🖩</button>
+        </div>
+      </div>
+    </div>
+    <div class="form-row-2">
+      <div class="form-row"><label>Número de parcelas</label><input type="number" min="1" id="pf_numero" value="${pState.numero}" /></div>
+      <div class="form-row"><label>Frequência</label>
+        <select id="pf_frequencia">
+          ${Object.entries(FREQ_LABELS_PT).map(([k, l]) => `<option value="${k}" ${pState.frequencia === k ? "selected" : ""}>${l}</option>`).join("")}
+        </select>
+      </div>
+    </div>
+    <button type="button" class="btn-secondary" id="pf_gerar">Gerar parcelas</button>
+    <div id="pf_table_area">${parcelasTableHtml(rows)}</div>
+    <div class="form-actions">
+      <button class="btn-secondary" id="pf_cancel">Cancelar</button>
+      <button class="btn-primary" id="pf_save">Salvar</button>
+    </div>
+  `);
+
+  document.querySelectorAll(".prow-date").forEach((inp) => inp.addEventListener("change", () => { rows[inp.dataset.idx].due_date = inp.value; }));
+  document.querySelectorAll(".prow-amount").forEach((inp) => inp.addEventListener("input", () => {
+    rows[inp.dataset.idx].amount = parseFloat(inp.value || "0");
+    document.getElementById("pf_total_value").textContent = formatCurrency(rows.reduce((s, r) => s + (Number(r.amount) || 0), 0));
+  }));
+  document.querySelectorAll(".prow-status").forEach((inp) => inp.addEventListener("change", () => { rows[inp.dataset.idx].status = inp.checked ? "pago" : "pendente"; }));
+  document.querySelectorAll(".prow-remove").forEach((btn) => btn.addEventListener("click", () => {
+    if (rows.length <= 1) return showToast("É preciso ao menos uma parcela.", true);
+    rows.splice(parseInt(btn.dataset.idx), 1);
+    rows.forEach((r, i) => { r.number = i + 1; });
+    renderTable();
+  }));
+
+  document.getElementById("pf_modo").addEventListener("change", (e) => {
+    pState.valorModo = e.target.value;
+    document.getElementById("pf_valor_label").textContent = pState.valorModo === "total" ? "Valor Total (R$)" : "Valor de cada parcela (R$)";
+    document.getElementById("pf_valor").value = pState.valorModo === "total" ? pState.valorTotal : pState.valorParcela;
+  });
+  document.getElementById("pf_gerar").addEventListener("click", () => {
+    const val = parseFloat(document.getElementById("pf_valor").value || "0");
+    if (pState.valorModo === "total") pState.valorTotal = val; else pState.valorParcela = val;
+    pState.numero = Math.max(1, parseInt(document.getElementById("pf_numero").value || "1"));
+    pState.frequencia = document.getElementById("pf_frequencia").value;
+    rows = computeParcelasRows(pState);
+    renderTable();
+  });
+  document.getElementById("pf_cancel").addEventListener("click", closeModal2);
+  document.getElementById("pf_save").addEventListener("click", () => {
+    if (!rows.length) return showToast("Gere ao menos uma parcela.", true);
+    closeModal2();
+    onSave({ rows: rows.map((r) => ({ ...r })), valorModo: pState.valorModo, valorTotal: pState.valorTotal, valorParcela: pState.valorParcela, frequencia: pState.frequencia });
+  });
+}
+
 function transactionFormHtml(t, presetGroup) {
   const group = t?.group || presetGroup;
   const accounts = state.accounts.map((a) => `<option value="${a.id}" ${t?.account_id === a.id ? "selected" : ""}>${escapeHtml(accountLabel(a))}</option>`).join("");
@@ -604,7 +812,9 @@ function transactionFormHtml(t, presetGroup) {
         <select id="f_cost_center_id"><option value="">-</option>${costCenters}</select>
       </div>
     </div>
-    <div class="form-row">
+    ${isEdit && t.installment_group_id ? `<div class="card-sub" id="installmentInfoBox" style="margin-bottom:14px;">Carregando informações do parcelamento...</div>` : ""}
+
+    <div class="form-row" id="statusFieldRow">
       <label>Status</label>
       <select id="f_status">
         <option value="pendente" ${(!t || t.status === "pendente") ? "selected" : ""}>Pendente</option>
@@ -622,32 +832,13 @@ function transactionFormHtml(t, presetGroup) {
 
     ${isEdit ? "" : `
     <div class="form-row radio-group">
-      <label><input type="radio" name="repeatMode" value="none" checked/> Lançamento único</label>
+      <label><input type="radio" name="repeatMode" value="none" checked/> Único</label>
       <label><input type="radio" name="repeatMode" value="installments"/> Parcelado</label>
-      <label><input type="radio" name="repeatMode" value="recurrence"/> Recorrente</label>
+      <label><input type="radio" name="repeatMode" value="recurrence"/> Repetir</label>
     </div>
-    <div class="extra-fields hidden" id="installmentsFields">
-      <div class="form-row">
-        <label>Número de parcelas</label>
-        <input type="number" min="2" id="f_installments_total" value="2" />
-      </div>
-      <div class="card-sub">Uma parcela por mês, no mesmo valor informado acima.</div>
-    </div>
-    <div class="extra-fields hidden" id="recurrenceFields">
-      <div class="form-row-2">
-        <div class="form-row">
-          <label>Frequência</label>
-          <select id="f_recurrence_frequency">
-            <option value="monthly">Mensal</option>
-            <option value="weekly">Semanal</option>
-            <option value="yearly">Anual</option>
-          </select>
-        </div>
-        <div class="form-row">
-          <label>Quantas ocorrências</label>
-          <input type="number" min="2" id="f_recurrence_occurrences" value="12" />
-        </div>
-      </div>
+    <div class="repeat-summary-row hidden" id="repeatSummaryRow">
+      <span class="card-sub" id="repeatSummaryText">Ainda não configurado</span>
+      <button type="button" class="btn-secondary" id="btnConfigRepeat" style="padding:6px 12px;font-size:12px;">Configurar</button>
     </div>
     `}
 
@@ -679,13 +870,63 @@ function openTransactionModal(t, scope) {
     } catch (e) { showToast(e.message, true); }
   });
 
+  let repeatConfig = null; // { type: "installments"|"recurrence", ... }
+
+  function updateRepeatSummary(mode) {
+    const row = document.getElementById("repeatSummaryRow");
+    const text = document.getElementById("repeatSummaryText");
+    if (!row) return;
+    document.getElementById("statusFieldRow").classList.toggle("hidden", mode === "installments");
+    if (mode === "none") { row.classList.add("hidden"); return; }
+    row.classList.remove("hidden");
+    if (mode === "installments" && repeatConfig?.type === "installments") {
+      const total = repeatConfig.rows.reduce((s, r) => s + Number(r.amount || 0), 0);
+      text.textContent = `${repeatConfig.rows.length}x — total ${formatCurrency(total)}`;
+    } else if (mode === "recurrence" && repeatConfig?.type === "recurrence") {
+      text.textContent = `${FREQ_LABELS_PT[repeatConfig.frequency]}, ${repeatConfig.occurrences}x`;
+    } else {
+      text.textContent = "Ainda não configurado";
+    }
+  }
+
   if (!t) {
     document.querySelectorAll('input[name="repeatMode"]').forEach((radio) => {
       radio.addEventListener("change", () => {
-        document.getElementById("installmentsFields").classList.toggle("hidden", radio.value !== "installments" || !radio.checked);
-        document.getElementById("recurrenceFields").classList.toggle("hidden", radio.value !== "recurrence" || !radio.checked);
+        if (!radio.checked) return;
+        if (radio.value === "none") repeatConfig = null;
+        updateRepeatSummary(radio.value);
       });
     });
+    document.getElementById("btnConfigRepeat")?.addEventListener("click", () => {
+      const mode = document.querySelector('input[name="repeatMode"]:checked').value;
+      const defaults = {
+        amount: parseFloat(document.getElementById("f_amount").value || "0"),
+        due_date: document.getElementById("f_due_date").value || todayIso(),
+      };
+      if (mode === "installments") {
+        openParcelasPopup(defaults, repeatConfig?.type === "installments" ? repeatConfig : null, (result) => {
+          repeatConfig = { type: "installments", ...result };
+          updateRepeatSummary("installments");
+        });
+      } else if (mode === "recurrence") {
+        openRepetirPopup(repeatConfig?.type === "recurrence" ? repeatConfig : null, (result) => {
+          repeatConfig = { type: "recurrence", ...result };
+          updateRepeatSummary("recurrence");
+        });
+      } else {
+        showToast("Escolha \"Parcelado\" ou \"Repetir\" primeiro.", true);
+      }
+    });
+  }
+
+  if (t && t.installment_group_id) {
+    api("GET", "/api/transactions?" + qs({ installment_group_id: t.installment_group_id }))
+      .then((siblings) => {
+        const total = siblings.reduce((s, s2) => s + Number(s2.amount || 0), 0);
+        const box = document.getElementById("installmentInfoBox");
+        if (box) box.textContent = `Parcela ${t.installment_number} de ${t.installment_total} — total do parcelamento: ${formatCurrency(total)}`;
+      })
+      .catch(() => {});
   }
 
   document.getElementById("btnSaveTransaction").addEventListener("click", async () => {
@@ -703,17 +944,25 @@ function openTransactionModal(t, scope) {
       status: document.getElementById("f_status").value,
       notes: document.getElementById("f_notes").value,
     };
-    if (!payload.description || !payload.amount || !payload.due_date || !payload.account_id) {
-      return showToast("Preencha descrição, valor, vencimento e conta.", true);
+    const mode = !t ? document.querySelector('input[name="repeatMode"]:checked').value : "none";
+    if (!payload.description || !payload.due_date || !payload.account_id) {
+      return showToast("Preencha descrição, vencimento e conta.", true);
+    }
+    if (mode !== "installments" && !payload.amount) {
+      return showToast("Preencha o valor.", true);
     }
     try {
       if (t) {
         await api("PUT", `/api/transactions/${t.id}?scope=${scope}`, payload);
         showToast("Lançamento atualizado." + (scope !== "single" ? " (outras ocorrências também foram atualizadas)" : ""));
       } else {
-        const mode = document.querySelector('input[name="repeatMode"]:checked').value;
-        if (mode === "installments") payload.installments = { enabled: true, total: parseInt(document.getElementById("f_installments_total").value || "2") };
-        else if (mode === "recurrence") payload.recurrence = { enabled: true, frequency: document.getElementById("f_recurrence_frequency").value, occurrences: parseInt(document.getElementById("f_recurrence_occurrences").value || "12") };
+        if (mode === "installments") {
+          if (!repeatConfig || repeatConfig.type !== "installments") return showToast("Clique em \"Configurar\" para montar as parcelas.", true);
+          payload.installments = { enabled: true, schedule: repeatConfig.rows.map((r) => ({ due_date: r.due_date, amount: r.amount, status: r.status })) };
+        } else if (mode === "recurrence") {
+          if (!repeatConfig || repeatConfig.type !== "recurrence") return showToast("Clique em \"Configurar\" para definir a repetição.", true);
+          payload.recurrence = { enabled: true, frequency: repeatConfig.frequency, occurrences: repeatConfig.occurrences };
+        }
         await api("POST", "/api/transactions", payload);
         showToast("Lançamento criado.");
       }

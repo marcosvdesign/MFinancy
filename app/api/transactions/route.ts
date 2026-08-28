@@ -18,6 +18,8 @@ export async function GET(request: NextRequest) {
       status: sp.get("status") || undefined,
       search: sp.get("search") || undefined,
       profile_id: sp.get("profile_id") || undefined,
+      installment_group_id: sp.get("installment_group_id") || undefined,
+      recurrence_group_id: sp.get("recurrence_group_id") || undefined,
     };
     return NextResponse.json(await db.listTransactions(filters));
   });

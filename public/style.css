@@ -414,3 +414,21 @@ nav { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
 .calc-grid .calc-op { background: var(--border); font-weight: 700; }
 .calc-clear { grid-column: span 2; color: var(--red); font-weight: 600; }
 .calc-confirm { grid-column: span 2; background: var(--primary) !important; color: #fff !important; font-weight: 600; }
+
+/* ---------- Modal secundario (Parcelas / Repetir) ---------- */
+
+.modal-overlay-2 { z-index: 55; background: rgba(0,0,0,0.35); }
+
+.repeat-summary-row { display: flex; align-items: center; gap: 10px; margin: -6px 0 14px 0; }
+.repeat-summary-row .card-sub { margin: 0; flex: 1; }
+
+.parcelas-table-wrap { max-height: 280px; overflow-y: auto; margin: 12px 0; border: 1px solid var(--border); border-radius: 8px; }
+.parcelas-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.parcelas-table th { text-align: left; padding: 8px 10px; background: var(--surface-alt); border-bottom: 1px solid var(--border); font-size: 11px; text-transform: uppercase; color: var(--text-muted); position: sticky; top: 0; }
+.parcelas-table td { padding: 6px 8px; border-bottom: 1px solid var(--border); }
+.parcelas-table tr:last-child td { border-bottom: none; }
+.parcelas-table input { width: 100%; padding: 6px 7px; border-radius: 6px; border: 1px solid var(--border); font-size: 13px; background: var(--input-bg); color: var(--text); }
+.parcelas-table .pnum { text-align: center; color: var(--text-muted); width: 36px; }
+.parcelas-table .prow-remove { border: none; background: transparent; color: var(--text-muted); cursor: pointer; font-size: 14px; }
+.parcelas-table .prow-remove:hover { color: var(--red); }
+.parcelas-total-row { display: flex; justify-content: space-between; font-weight: 700; padding: 10px 4px; font-size: 14.5px; }
