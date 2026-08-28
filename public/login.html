@@ -5,23 +5,33 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Entrar — Minhas Finanças</title>
 <link rel="stylesheet" href="/style.css" />
+<script>
+  (function () {
+    try {
+      var saved = localStorage.getItem("theme");
+      var theme = saved || (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+      document.documentElement.setAttribute("data-theme", theme);
+    } catch (e) {}
+  })();
+</script>
 <style>
-  body { display: flex; align-items: center; justify-content: center; min-height: 100vh; background: #141a2b; }
+  body { display: flex; align-items: center; justify-content: center; min-height: 100vh; background: var(--sidebar-bg); }
   .login-card {
-    background: #fff; border-radius: 16px; padding: 32px 30px; width: 340px; max-width: 90vw;
+    background: var(--surface); color: var(--text); border-radius: 16px; padding: 32px 30px; width: 340px; max-width: 90vw;
     box-shadow: 0 24px 60px rgba(0,0,0,0.35);
   }
   .login-brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 18px; margin-bottom: 22px; }
-  .login-brand .brand-dot { width: 10px; height: 10px; border-radius: 50%; background: #2f6fed; box-shadow: 0 0 0 4px rgba(47,111,237,0.25); }
+  .login-brand .brand-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--primary); box-shadow: 0 0 0 4px rgba(47,111,237,0.25); }
   .login-card input {
-    width: 100%; padding: 11px 12px; border-radius: 8px; border: 1px solid #e3e7ee; font-size: 14px; margin-bottom: 14px;
+    width: 100%; padding: 11px 12px; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--input-bg); color: var(--text); font-size: 14px; margin-bottom: 14px;
   }
   .login-card button {
-    width: 100%; padding: 11px; border: none; border-radius: 8px; background: #2f6fed; color: #fff;
+    width: 100%; padding: 11px; border: none; border-radius: 8px; background: var(--primary); color: #fff;
     font-weight: 600; font-size: 14px; cursor: pointer;
   }
-  .login-card button:hover { background: #1e4fc4; }
-  .login-error { color: #d64545; font-size: 13px; margin: -8px 0 14px 0; display: none; }
+  .login-card button:hover { background: var(--primary-dark); }
+  .login-error { color: var(--red); font-size: 13px; margin: -8px 0 14px 0; display: none; }
   .login-error.show { display: block; }
 </style>
 </head>

@@ -574,7 +574,10 @@ function transactionFormHtml(t, presetGroup) {
     <div class="form-row-2">
       <div class="form-row">
         <label>Valor (R$)</label>
-        <input type="number" step="0.01" id="f_amount" value="${t?.amount ?? ""}" />
+        <div class="value-input-wrap">
+          <input type="number" step="0.01" id="f_amount" value="${t?.amount ?? ""}" />
+          <button type="button" class="calc-trigger" data-calc-target="f_amount">🖩</button>
+        </div>
       </div>
       <div class="form-row">
         <label>Vencimento</label>
@@ -758,7 +761,12 @@ function openTransferModal() {
       <div class="form-row"><label>Para</label><select id="f_to">${opts}</select></div>
     </div>
     <div class="form-row-2">
-      <div class="form-row"><label>Valor (R$)</label><input type="number" step="0.01" id="f_amount" /></div>
+      <div class="form-row"><label>Valor (R$)</label>
+        <div class="value-input-wrap">
+          <input type="number" step="0.01" id="f_amount" />
+          <button type="button" class="calc-trigger" data-calc-target="f_amount">🖩</button>
+        </div>
+      </div>
       <div class="form-row"><label>Data</label><input type="date" id="f_date" value="${todayIso()}" /></div>
     </div>
     <div class="form-row"><label>Observações</label><input type="text" id="f_notes" /></div>
@@ -1346,6 +1354,154 @@ document.getElementById("btnWipe").addEventListener("click", async () => {
     await refreshLookups();
     switchTab("dashboard");
   } catch (e) { showToast(e.message, true); }
+});
+
+// ---------------------------------------------------------------------
+// Tema (claro/escuro)
+// ---------------------------------------------------------------------
+// O <head> já aplica o tema salvo antes da página renderizar (evita
+// "flash" de tela clara); aqui só sincronizamos o ícone/rótulo do botão.
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute("data-theme", theme);
+  const icon = document.getElementById("themeToggleIcon");
+  const label = document.getElementById("themeToggleLabel");
+  if (icon) icon.textContent = theme === "dark" ? "☀️" : "🌙";
+  if (label) label.textContent = theme === "dark" ? "Modo claro" : "Modo escuro";
+}
+
+(function initTheme() {
+  const current = document.documentElement.getAttribute("data-theme") || "light";
+  applyTheme(current);
+})();
+
+document.getElementById("btnToggleTheme")?.addEventListener("click", () => {
+  const current = document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
+  const next = current === "dark" ? "light" : "dark";
+  applyTheme(next);
+  try { localStorage.setItem("theme", next); } catch (e) {}
+});
+
+// ---------------------------------------------------------------------
+// Sidebar retrátil (recolhe para ícones; passar o mouse expande)
+// ---------------------------------------------------------------------
+
+(function initSidebar() {
+  const sidebar = document.getElementById("sidebar");
+  const btn = document.getElementById("btnToggleSidebar");
+  let collapsed = false;
+  try { collapsed = localStorage.getItem("sidebarCollapsed") === "1"; } catch (e) {}
+  sidebar.classList.toggle("collapsed", collapsed);
+  if (btn) btn.textContent = collapsed ? "»" : "«";
+})();
+
+document.getElementById("btnToggleSidebar")?.addEventListener("click", (e) => {
+  e.stopPropagation();
+  const sidebar = document.getElementById("sidebar");
+  const isCollapsed = sidebar.classList.toggle("collapsed");
+  try { localStorage.setItem("sidebarCollapsed", isCollapsed ? "1" : "0"); } catch (err) {}
+  document.getElementById("btnToggleSidebar").textContent = isCollapsed ? "»" : "«";
+});
+
+// ---------------------------------------------------------------------
+// Calculadora (respeitando vírgula como separador decimal)
+// ---------------------------------------------------------------------
+
+const calcState = { display: "0", stored: null, operator: null, waitingForOperand: false, targetInput: null };
+
+function calcParseNumber(s) { return parseFloat(String(s).replace(",", ".")) || 0; }
+function calcFormatNumber(n) {
+  const rounded = Math.round((n + Number.EPSILON) * 100) / 100;
+  return String(rounded).replace(".", ",");
+}
+function calcRender() {
+  const el = document.getElementById("calcDisplay");
+  if (el) el.textContent = calcState.display;
+}
+function calcInputDigit(d) {
+  if (calcState.waitingForOperand) { calcState.display = d; calcState.waitingForOperand = false; }
+  else calcState.display = calcState.display === "0" ? d : calcState.display + d;
+  calcRender();
+}
+function calcInputComma() {
+  if (calcState.waitingForOperand) { calcState.display = "0,"; calcState.waitingForOperand = false; calcRender(); return; }
+  if (!calcState.display.includes(",")) { calcState.display += ","; calcRender(); }
+}
+function calcBackspace() {
+  calcState.display = calcState.display.length > 1 ? calcState.display.slice(0, -1) : "0";
+  calcRender();
+}
+function calcClear() {
+  calcState.display = "0"; calcState.stored = null; calcState.operator = null; calcState.waitingForOperand = false;
+  calcRender();
+}
+function calcApplyOperator(nextOperator) {
+  const inputValue = calcParseNumber(calcState.display);
+  if (calcState.operator && calcState.waitingForOperand) { calcState.operator = nextOperator; return; }
+  if (calcState.stored === null) {
+    calcState.stored = inputValue;
+  } else if (calcState.operator) {
+    const a = calcState.stored, b = inputValue;
+    let result = a;
+    if (calcState.operator === "+") result = a + b;
+    else if (calcState.operator === "−") result = a - b;
+    else if (calcState.operator === "×") result = a * b;
+    else if (calcState.operator === "÷") result = b !== 0 ? a / b : 0;
+    calcState.stored = result;
+    calcState.display = calcFormatNumber(result);
+  }
+  calcState.waitingForOperand = true;
+  calcState.operator = nextOperator;
+  calcRender();
+}
+function calcConfirm() {
+  if (calcState.operator && !calcState.waitingForOperand) calcApplyOperator(calcState.operator);
+  const finalValue = calcState.stored !== null ? calcState.stored : calcParseNumber(calcState.display);
+  if (calcState.targetInput) {
+    calcState.targetInput.value = finalValue;
+    calcState.targetInput.dispatchEvent(new Event("input", { bubbles: true }));
+    calcState.targetInput.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+  closeCalcPopup();
+}
+function openCalcPopup(triggerEl, targetInput) {
+  calcState.display = targetInput.value ? calcFormatNumber(Number(targetInput.value)) : "0";
+  calcState.stored = null; calcState.operator = null; calcState.waitingForOperand = false;
+  calcState.targetInput = targetInput;
+  calcRender();
+  const popup = document.getElementById("calcPopup");
+  const rect = triggerEl.getBoundingClientRect();
+  popup.style.top = `${rect.bottom + 4}px`;
+  popup.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - 236))}px`;
+  popup.classList.remove("hidden");
+}
+function closeCalcPopup() {
+  document.getElementById("calcPopup")?.classList.add("hidden");
+}
+
+document.addEventListener("click", (e) => {
+  const trigger = e.target.closest(".calc-trigger");
+  if (trigger) {
+    e.preventDefault();
+    e.stopPropagation();
+    const targetInput = document.getElementById(trigger.dataset.calcTarget);
+    if (targetInput) openCalcPopup(trigger, targetInput);
+    return;
+  }
+  if (!e.target.closest("#calcPopup")) closeCalcPopup();
+});
+
+document.getElementById("calcPopup")?.addEventListener("click", (e) => {
+  e.stopPropagation();
+  const btn = e.target.closest("[data-calc]");
+  if (!btn) return;
+  const key = btn.dataset.calc;
+  if (key === "clear") calcClear();
+  else if (key === "back") calcBackspace();
+  else if (key === "confirm") calcConfirm();
+  else if (key === ",") calcInputComma();
+  else if (["+", "−", "×", "÷"].includes(key)) calcApplyOperator(key);
+  else calcInputDigit(key);
 });
 
 // ---------------------------------------------------------------------

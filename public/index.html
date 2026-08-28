@@ -10,14 +10,24 @@
 <meta name="apple-mobile-web-app-title" content="Finanças" />
 <meta name="theme-color" content="#141a2b" />
 <link rel="stylesheet" href="/style.css" />
+<script>
+  (function () {
+    try {
+      var saved = localStorage.getItem("theme");
+      var theme = saved || (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+      document.documentElement.setAttribute("data-theme", theme);
+    } catch (e) {}
+  })();
+</script>
 </head>
 <body>
 
 <div class="app">
-  <aside class="sidebar">
+  <aside class="sidebar" id="sidebar">
     <div class="brand">
       <span class="brand-dot"></span>
-      <span>Minhas Finanças</span>
+      <span class="brand-text">Minhas Finanças</span>
+      <button type="button" id="btnToggleSidebar" class="sidebar-toggle-btn" title="Recolher/expandir menu">«</button>
     </div>
 
     <div class="profile-switch">
@@ -32,13 +42,18 @@
     </div>
 
     <nav>
-      <button class="nav-item active" data-tab="dashboard">📊 Dashboard</button>
-      <button class="nav-item" data-tab="lancamentos">🧾 Lançamentos</button>
-      <button class="nav-item" data-tab="contatos">👥 Contatos</button>
-      <button class="nav-item" data-tab="relatorios">📈 Relatórios</button>
-      <button class="nav-item" data-tab="configuracoes">⚙️ Configurações</button>
+      <button class="nav-item active" data-tab="dashboard"><span class="nav-icon">📊</span><span class="nav-label">Dashboard</span></button>
+      <button class="nav-item" data-tab="lancamentos"><span class="nav-icon">🧾</span><span class="nav-label">Lançamentos</span></button>
+      <button class="nav-item" data-tab="contatos"><span class="nav-icon">👥</span><span class="nav-label">Contatos</span></button>
+      <button class="nav-item" data-tab="relatorios"><span class="nav-icon">📈</span><span class="nav-label">Relatórios</span></button>
+      <button class="nav-item" data-tab="configuracoes"><span class="nav-icon">⚙️</span><span class="nav-label">Configurações</span></button>
     </nav>
-    <form method="POST" action="/api/logout" style="padding: 0 8px;">
+
+    <button type="button" id="btnToggleTheme" class="theme-toggle-row">
+      <span class="nav-icon" id="themeToggleIcon">🌙</span><span class="nav-label theme-toggle-label" id="themeToggleLabel">Modo escuro</span>
+    </button>
+
+    <form method="POST" action="/api/logout" class="logout-form" style="padding: 0 8px;">
       <button type="submit" class="btn-secondary" style="width:100%;">Sair</button>
     </form>
     <div class="sidebar-footer">Dados salvos na nuvem (Postgres)</div>
@@ -420,6 +435,18 @@
 
 <div id="toast" class="toast hidden"></div>
 <div id="rowActionMenu" class="row-menu-dropdown hidden"></div>
+
+<div id="calcPopup" class="calc-popup hidden">
+  <div class="calc-display" id="calcDisplay">0</div>
+  <div class="calc-grid">
+    <button type="button" data-calc="7">7</button><button type="button" data-calc="8">8</button><button type="button" data-calc="9">9</button><button type="button" class="calc-op" data-calc="÷">÷</button>
+    <button type="button" data-calc="4">4</button><button type="button" data-calc="5">5</button><button type="button" data-calc="6">6</button><button type="button" class="calc-op" data-calc="×">×</button>
+    <button type="button" data-calc="1">1</button><button type="button" data-calc="2">2</button><button type="button" data-calc="3">3</button><button type="button" class="calc-op" data-calc="−">−</button>
+    <button type="button" data-calc="0">0</button><button type="button" data-calc=",">,</button><button type="button" data-calc="back">⌫</button><button type="button" class="calc-op" data-calc="+">+</button>
+    <button type="button" data-calc="clear" class="calc-clear">C</button>
+    <button type="button" data-calc="confirm" class="calc-confirm">OK</button>
+  </div>
+</div>
 
 <script src="/charts.js"></script>
 <script src="/app.js"></script>
