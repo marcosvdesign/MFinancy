@@ -25,6 +25,7 @@ const state = {
   tags: [],
   settings: { display_name: "Você", prefs: {} },
   lancamentosGroup: "recebimento",
+  lancamentosAccountId: "",
   activeReport: { report: "despesas_receitas", side: null, label: "Despesas/Receitas" },
   activeConfig: "perfis",
   categoriesGroup: "recebimento",
@@ -112,8 +113,8 @@ function setProfileOptions(items) {
 }
 
 function closeCustomSelect() {
-  document.getElementById("profileSelectWrap").classList.remove("open");
-  document.getElementById("profileSelectMenu").classList.add("hidden");
+  document.querySelectorAll(".custom-select-menu").forEach((m) => m.classList.add("hidden"));
+  document.querySelectorAll(".custom-select.open").forEach((w) => w.classList.remove("open"));
 }
 
 document.getElementById("profileSelectTrigger").addEventListener("click", (e) => {
@@ -376,6 +377,68 @@ document.querySelectorAll("#lancamentosSubtabs .subtab").forEach((btn) => {
   });
 });
 
+// ---- Mini-dashboard + seletor de conta no topo de Lancamentos ----
+
+function setLancAccountOptions() {
+  const accounts = state.activeProfile === "all" ? state.accounts : state.accounts.filter((a) => a.profile_id === state.activeProfile);
+  const items = [{ value: "", label: "Todas as contas" }, ...accounts.map((a) => ({ value: a.id, label: accountLabel(a) }))];
+  if (!items.find((i) => i.value === state.lancamentosAccountId)) state.lancamentosAccountId = "";
+
+  const menu = document.getElementById("lancAccountSelectMenu");
+  menu.innerHTML = items.map((item) => `
+    <div class="custom-select-option ${item.value === state.lancamentosAccountId ? "selected" : ""}" data-value="${item.value}">
+      <span>${escapeHtml(item.label)}</span><span class="check">✓</span>
+    </div>`).join("");
+  menu.querySelectorAll(".custom-select-option").forEach((opt) => {
+    opt.addEventListener("click", () => {
+      state.lancamentosAccountId = opt.dataset.value;
+      document.getElementById("lancAccountSelectLabel").textContent = items.find((i) => i.value === opt.dataset.value)?.label || "";
+      document.getElementById("lancAccountSelectMenu").classList.add("hidden");
+      document.getElementById("lancAccountSelectWrap").classList.remove("open");
+      loadLancDashboard();
+      loadLancamentos();
+    });
+  });
+  const current = items.find((i) => i.value === state.lancamentosAccountId);
+  document.getElementById("lancAccountSelectLabel").textContent = current ? current.label : items[0].label;
+}
+document.getElementById("lancAccountSelectTrigger")?.addEventListener("click", (e) => {
+  e.stopPropagation();
+  const wrap = document.getElementById("lancAccountSelectWrap");
+  const menu = document.getElementById("lancAccountSelectMenu");
+  const willOpen = menu.classList.contains("hidden");
+  closeCustomSelect();
+  if (willOpen) { wrap.classList.add("open"); menu.classList.remove("hidden"); }
+});
+
+async function loadLancDashboard() {
+  const params = { profile_id: state.activeProfile, year: state.dashYear, month: state.dashMonth, account_id: state.lancamentosAccountId || undefined };
+  let data;
+  try { data = await api("GET", "/api/dashboard?" + qs(params)); } catch (e) { return showToast(e.message, true); }
+
+  const resultado = data.realizado_receitas - data.realizado_despesas;
+  const previstoResultado = data.previsto_total_receitas - data.previsto_total_despesas;
+  const resultadoEl = document.getElementById("lancResultado");
+  resultadoEl.textContent = formatCurrency(previstoResultado);
+  resultadoEl.className = "card-value " + (previstoResultado >= 0 ? "positive" : "negative");
+
+  document.getElementById("lancRecebido").textContent = formatCurrency(data.realizado_receitas);
+  document.getElementById("lancFaltaReceita").textContent = formatCurrency(data.falta_receitas);
+  document.getElementById("lancPrevistoReceita").textContent = formatCurrency(data.previsto_total_receitas);
+  document.getElementById("lancPago").textContent = formatCurrency(data.realizado_despesas);
+  document.getElementById("lancFaltaDespesa").textContent = formatCurrency(data.falta_despesas);
+  document.getElementById("lancPrevistoDespesa").textContent = formatCurrency(data.previsto_total_despesas);
+
+  drawGroupedBarChart(document.getElementById("lancChart"), data.comparativo_mensal);
+
+  const saldo = state.lancamentosAccountId
+    ? (data.saldo_por_conta.find((a) => a.id === state.lancamentosAccountId)?.balance ?? 0)
+    : data.saldo_atual;
+  const saldoEl = document.getElementById("lancSaldoConta");
+  saldoEl.textContent = formatCurrency(saldo);
+  saldoEl.className = "card-value " + (saldo < 0 ? "negative" : "");
+}
+
 document.getElementById("filterPeriodo").addEventListener("change", (e) => {
   const custom = e.target.value === "custom";
   document.getElementById("filterStart").classList.toggle("hidden", !custom);
@@ -398,6 +461,8 @@ function computePeriodRange(preset) {
 function loadLancamentos() {
   const active = document.querySelector("#lancamentosSubtabs .subtab.active");
   state.lancamentosGroup = active ? active.dataset.group : "recebimento";
+  setLancAccountOptions();
+  loadLancDashboard();
   if (state.lancamentosGroup === "transferencias") loadTransfers(); else loadTransactionsTable();
 }
 
@@ -405,6 +470,7 @@ async function loadTransactionsTable() {
   const period = computePeriodRange(document.getElementById("filterPeriodo").value);
   const params = {
     group: state.lancamentosGroup, profile_id: state.activeProfile,
+    account_id: state.lancamentosAccountId || undefined,
     start: period.start, end: period.end,
     status: document.getElementById("filterStatus").value,
     search: document.getElementById("filterSearch").value,
@@ -983,7 +1049,7 @@ async function loadTransfers() {
   catch (e) { return showToast(e.message, true); }
   const accById = Object.fromEntries(state.accounts.map((a) => [a.id, a]));
   const body = document.getElementById("transfersBody");
-  body.innerHTML = transfers.length ? transfers.map((tr) => `
+  const rowsHtml = transfers.map((tr) => `
     <tr>
       <td>${formatDateBR(tr.date)}</td>
       <td>${escapeHtml(accById[tr.from_account_id]?.name || "-")}</td>
@@ -991,7 +1057,9 @@ async function loadTransfers() {
       <td>${formatCurrency(tr.amount)}</td>
       <td>${escapeHtml(tr.notes || "-")}</td>
       <td><div class="row-actions"><button data-id="${tr.id}" class="btn-danger">Excluir</button></div></td>
-    </tr>`).join("") : `<tr><td colspan="6"><div class="empty-state">Nenhuma transferência registrada.</div></td></tr>`;
+    </tr>`).join("");
+  body.innerHTML = transferInlineRowHtml() + rowsHtml + (transfers.length ? "" : `<tr><td colspan="6"><div class="empty-state">Nenhuma transferência registrada ainda.</div></td></tr>`);
+  wireTransferInlineRow();
   body.querySelectorAll("button[data-id]").forEach((btn) => {
     btn.addEventListener("click", async () => {
       if (!confirm("Excluir esta transferência?")) return;
@@ -1001,48 +1069,59 @@ async function loadTransfers() {
   });
 }
 
-function openTransferModal() {
-  if (state.accounts.length < 2) return showToast("Cadastre ao menos duas contas para transferir entre elas.", true);
+function transferInlineRowHtml() {
+  return `<tr class="inline-add-trigger" id="transferAddTrigger"><td colspan="6">+ Nova transferência</td></tr>`;
+}
+
+function transferFormRowHtml() {
   const opts = state.accounts.map((a) => `<option value="${a.id}">${escapeHtml(accountLabel(a))}</option>`).join("");
-  openModal("Nova transferência", `
-    <div class="form-row-2">
-      <div class="form-row"><label>De</label><select id="f_from">${opts}</select></div>
-      <div class="form-row"><label>Para</label><select id="f_to">${opts}</select></div>
-    </div>
-    <div class="form-row-2">
-      <div class="form-row"><label>Valor (R$)</label>
+  return `
+    <tr class="inline-add-row" id="transferFormRow">
+      <td><input type="date" id="ti_date" value="${todayIso()}" /></td>
+      <td><select id="ti_from">${opts}</select></td>
+      <td><select id="ti_to">${opts}</select></td>
+      <td>
         <div class="value-input-wrap">
-          <input type="number" step="0.01" id="f_amount" />
-          <button type="button" class="calc-trigger" data-calc-target="f_amount">🖩</button>
+          <input type="number" step="0.01" id="ti_amount" placeholder="0,00" />
+          <button type="button" class="calc-trigger" data-calc-target="ti_amount">🖩</button>
         </div>
-      </div>
-      <div class="form-row"><label>Data</label><input type="date" id="f_date" value="${todayIso()}" /></div>
-    </div>
-    <div class="form-row"><label>Observações</label><input type="text" id="f_notes" /></div>
-    <div class="form-actions">
-      <button class="btn-secondary" id="btnCancelForm">Cancelar</button>
-      <button class="btn-primary" id="btnSaveTransfer">Salvar</button>
-    </div>
-  `);
-  document.getElementById("btnCancelForm").addEventListener("click", closeModal);
-  document.getElementById("btnSaveTransfer").addEventListener("click", async () => {
-    const payload = {
-      from_account_id: document.getElementById("f_from").value,
-      to_account_id: document.getElementById("f_to").value,
-      amount: parseFloat(document.getElementById("f_amount").value || "0"),
-      date: document.getElementById("f_date").value,
-      notes: document.getElementById("f_notes").value,
-    };
-    if (!payload.amount) return showToast("Informe um valor.", true);
-    try {
-      await api("POST", "/api/transfers", payload);
-      showToast("Transferência registrada.");
-      closeModal(); loadTransfers();
-      if (state.tab === "dashboard") loadDashboard();
-    } catch (e) { showToast(e.message, true); }
+      </td>
+      <td><input type="text" id="ti_notes" placeholder="Observações" /></td>
+      <td>
+        <div class="inline-add-actions">
+          <button type="button" class="inline-confirm" id="ti_confirm">✓</button>
+          <button type="button" class="inline-cancel" id="ti_cancel">✕</button>
+        </div>
+      </td>
+    </tr>`;
+}
+
+function wireTransferInlineRow() {
+  const trigger = document.getElementById("transferAddTrigger");
+  if (!trigger) return;
+  trigger.addEventListener("click", () => {
+    if (state.accounts.length < 2) return showToast("Cadastre ao menos duas contas para transferir entre elas.", true);
+    trigger.outerHTML = transferFormRowHtml();
+    document.getElementById("ti_cancel").addEventListener("click", () => loadTransfers());
+    document.getElementById("ti_confirm").addEventListener("click", async () => {
+      const payload = {
+        from_account_id: document.getElementById("ti_from").value,
+        to_account_id: document.getElementById("ti_to").value,
+        amount: parseFloat(document.getElementById("ti_amount").value || "0"),
+        date: document.getElementById("ti_date").value,
+        notes: document.getElementById("ti_notes").value,
+      };
+      if (!payload.amount) return showToast("Informe um valor.", true);
+      if (payload.from_account_id === payload.to_account_id) return showToast("Escolha contas diferentes.", true);
+      try {
+        await api("POST", "/api/transfers", payload);
+        showToast("Transferência registrada.");
+        loadTransfers();
+        if (state.tab === "dashboard") loadDashboard();
+      } catch (e) { showToast(e.message, true); }
+    });
   });
 }
-document.getElementById("btnNovaTransferencia").addEventListener("click", openTransferModal);
 
 // ---------------------------------------------------------------------
 // CONTATOS

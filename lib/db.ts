@@ -1037,12 +1037,15 @@ async function dre(start: string, end: string, accountIds: string[] | null) {
   };
 }
 
-export async function dashboardData(profileId?: string | null, year?: number, month?: number) {
+export async function dashboardData(profileId?: string | null, year?: number, month?: number, accountId?: string | null) {
   const now = new Date();
   const y = year || now.getUTCFullYear();
   const m = month || now.getUTCMonth() + 1;
   const [start, end] = monthBounds(y, m);
-  const accountIds = await profileAccountIds(profileId);
+  // Se um account_id especifico foi passado, ele tem prioridade sobre o
+  // perfil -- restringe todos os calculos so aquela conta (usado pelo
+  // seletor de conta na tela de Lancamentos).
+  const accountIds = accountId ? [accountId] : await profileAccountIds(profileId);
 
   const { rows: accountRows } = accountIds
     ? await sql.query(`SELECT * FROM accounts WHERE id = ANY($1::text[]) ORDER BY name`, [accountIds])

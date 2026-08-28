@@ -161,6 +161,43 @@
         <h1>Lançamentos</h1>
       </header>
 
+      <div class="lanc-dash-grid">
+        <div class="panel lanc-dash-resumo">
+          <div class="card-label">Resultado previsto para o mês</div>
+          <div class="card-value" id="lancResultado">R$ 0,00</div>
+          <div class="lanc-dash-cols">
+            <div>
+              <div class="lanc-dash-col-title positive">RECEBIMENTOS</div>
+              <div class="mini-row" style="padding:4px 0;"><span>Recebido</span><b id="lancRecebido">R$ 0,00</b></div>
+              <div class="mini-row" style="padding:4px 0;"><span>Falta</span><b id="lancFaltaReceita">R$ 0,00</b></div>
+              <div class="mini-row" style="padding:4px 0; border-bottom:none;"><span>Previsto</span><b id="lancPrevistoReceita">R$ 0,00</b></div>
+            </div>
+            <div>
+              <div class="lanc-dash-col-title negative">DESPESAS</div>
+              <div class="mini-row" style="padding:4px 0;"><span>Pago</span><b id="lancPago">R$ 0,00</b></div>
+              <div class="mini-row" style="padding:4px 0;"><span>Falta</span><b id="lancFaltaDespesa">R$ 0,00</b></div>
+              <div class="mini-row" style="padding:4px 0; border-bottom:none;"><span>Previsto</span><b id="lancPrevistoDespesa">R$ 0,00</b></div>
+            </div>
+          </div>
+        </div>
+        <div class="panel lanc-dash-chart">
+          <div class="card-label">Fluxo de caixa do semestre</div>
+          <canvas id="lancChart" height="150"></canvas>
+        </div>
+        <div class="panel lanc-dash-conta">
+          <div class="card-label">Conta</div>
+          <div class="custom-select" id="lancAccountSelectWrap">
+            <button type="button" class="custom-select-trigger light-trigger" id="lancAccountSelectTrigger">
+              <span id="lancAccountSelectLabel">Todas as contas</span>
+              <span class="chevron">▾</span>
+            </button>
+            <div class="custom-select-menu hidden light-menu" id="lancAccountSelectMenu"></div>
+          </div>
+          <div class="card-value" id="lancSaldoConta" style="margin-top:10px;">R$ 0,00</div>
+          <div class="card-sub">Saldo atual</div>
+        </div>
+      </div>
+
       <div class="subtabs" id="lancamentosSubtabs">
         <button class="subtab active" data-group="recebimento">Recebimentos</button>
         <button class="subtab" data-group="despesa_fixa">Despesas Fixas</button>
@@ -204,9 +241,6 @@
       </div>
 
       <div id="transfersPanel" class="hidden">
-        <div class="filters">
-          <button class="btn-secondary" id="btnNovaTransferencia" style="margin-left:auto;">+ Nova transferência</button>
-        </div>
         <table class="data-table">
           <thead><tr><th>Data</th><th>De</th><th>Para</th><th>Valor</th><th>Observações</th><th></th></tr></thead>
           <tbody id="transfersBody"></tbody>

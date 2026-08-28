@@ -8,6 +8,7 @@ export async function GET(request: NextRequest) {
     const profileId = sp.get("profile_id");
     const year = sp.get("year") ? Number(sp.get("year")) : undefined;
     const month = sp.get("month") ? Number(sp.get("month")) : undefined;
-    return NextResponse.json(await db.dashboardData(profileId, year, month));
+    const accountId = sp.get("account_id");
+    return NextResponse.json(await db.dashboardData(profileId, year, month, accountId));
   });
 }
