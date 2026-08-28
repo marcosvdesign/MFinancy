@@ -123,18 +123,20 @@
         </div>
       </div>
 
-      <div class="panel">
-        <h2>Fluxo de caixa</h2>
-        <canvas id="chartComparativo" height="240"></canvas>
-      </div>
-
-      <div class="panel">
-        <div class="page-header" style="margin-bottom:2px;">
-          <h2 style="margin:0;">Comparativo mês anterior</h2>
-          <span class="help-icon" title="Compara os totais do mês atual com os do mês anterior">?</span>
+      <div class="grid-2">
+        <div class="panel">
+          <h2>Fluxo de caixa</h2>
+          <canvas id="chartComparativo" height="200"></canvas>
         </div>
-        <div class="card-sub" id="comparativoSubtitle" style="margin-bottom:10px;">Todas as contas</div>
-        <div id="comparativoGrupos" class="mini-table"></div>
+
+        <div class="panel">
+          <div class="page-header" style="margin-bottom:2px;">
+            <h2 style="margin:0;">Comparativo mês anterior</h2>
+            <span class="help-icon" title="Compara os totais do mês atual com os do mês anterior">?</span>
+          </div>
+          <div class="card-sub" id="comparativoSubtitle" style="margin-bottom:10px;">Todas as contas</div>
+          <div id="comparativoGrupos" class="mini-table"></div>
+        </div>
       </div>
 
       <div class="grid-2">
@@ -169,18 +171,6 @@
         <h2>Demonstração de Resultados (DRE) — mês atual</h2>
         <div id="dreDashboard" class="dre-table"></div>
       </div>
-
-      <div class="panel">
-        <div class="page-header" style="margin-bottom:10px;">
-          <h2 style="margin:0;">Espaço de anexos</h2>
-          <span class="help-icon" title="Espaço usado por arquivos anexados aos lançamentos">?</span>
-        </div>
-        <div class="progress-bar"><div class="progress-fill" id="anexosProgress" style="width:0%; background:var(--primary);"></div></div>
-        <div class="card-sub" style="margin-top:8px; display:flex; justify-content:space-between;">
-          <span id="anexosPercent">0%</span>
-          <span>Total: <span id="anexosUsado">0GB</span> / Disponível: <span id="anexosTotal">15GB</span></span>
-        </div>
-      </div>
     </section>
 
     <!-- ============ LANCAMENTOS ============ -->
@@ -210,6 +200,10 @@
             </div>
           </div>
         </div>
+        <div class="panel lanc-dash-chart">
+          <div class="card-label">Fluxo de caixa</div>
+          <canvas id="lancChart" height="150"></canvas>
+        </div>
         <div class="panel lanc-dash-conta">
           <div class="card-label" id="lancContaLabel">Saldo - Todas as contas</div>
           <div class="card-value" id="lancSaldoConta">R$ 0,00</div>
@@ -224,11 +218,6 @@
             <div class="custom-select-menu hidden light-menu" id="lancAccountSelectMenu"></div>
           </div>
         </div>
-      </div>
-
-      <div class="panel lanc-dash-chart">
-        <div class="card-label">Fluxo de caixa</div>
-        <canvas id="lancChart" height="220"></canvas>
       </div>
 
       <div class="subtabs" id="lancamentosSubtabs">

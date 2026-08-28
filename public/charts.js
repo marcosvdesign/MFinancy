@@ -260,7 +260,9 @@ function drawHatchedFlowChart(canvas, data, hover, forcedNiceMax) {
   }
 
   const groupWidth = chartW / data.length;
-  const barWidth = Math.min(34, groupWidth * 0.48);
+  // Colunas (barras) mais largas dentro do mesmo bloco/canvas — o que deve
+  // crescer aqui e a "vela", nao o tamanho do painel ao redor dela.
+  const barWidth = Math.min(48, groupWidth * 0.62);
   const barRadius = Math.min(6, barWidth / 3);
 
   // Padrao hachurado (diagonal), reutilizado pra cima e pra baixo em cores diferentes.
