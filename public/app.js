@@ -421,24 +421,23 @@ async function loadTransactionsTable() {
   body.innerHTML = items.length ? items.map((t) => {
     const overdue = t.status === "pendente" && t.due_date < today;
     const groupTag = t.installment_total ? ` (${t.installment_number}/${t.installment_total})` : t.recurrence_group_id ? " 🔁" : "";
+    const groupId = t.recurrence_group_id || t.installment_group_id || "";
+    const openAttrs = `data-open-id="${t.id}" data-open-group="${groupId}"`;
     return `
       <tr>
-        <td>${formatDateBR(t.due_date)}${overdue ? ' <span class="badge badge-vencido">atrasado</span>' : ""}</td>
-        <td>${escapeHtml(t.description)}${groupTag}<div class="meta" style="color:var(--text-muted);font-size:11.5px;">${escapeHtml(accById[t.account_id]?.name || "")}</div></td>
-        <td>${escapeHtml(contactById[t.contact_id]?.name || "-")}</td>
-        <td>${escapeHtml(catById[t.category_id]?.name || "-")}</td>
-        <td class="${t.group === "recebimento" ? "positive" : "negative"}">${formatCurrency(t.amount)}</td>
+        <td class="clickable-cell" ${openAttrs}>${formatDateBR(t.due_date)}${overdue ? ' <span class="badge badge-vencido">atrasado</span>' : ""}</td>
+        <td class="clickable-cell" ${openAttrs}>${escapeHtml(t.description)}${groupTag}<div class="meta" style="color:var(--text-muted);font-size:11.5px;">${escapeHtml(accById[t.account_id]?.name || "")}</div></td>
+        <td class="clickable-cell" ${openAttrs}>${escapeHtml(contactById[t.contact_id]?.name || "-")}</td>
+        <td class="clickable-cell" ${openAttrs}>${escapeHtml(catById[t.category_id]?.name || "-")}</td>
+        <td class="clickable-cell ${t.group === "recebimento" ? "positive" : "negative"}" ${openAttrs}>${formatCurrency(t.amount)}</td>
         <td>
           <label class="toggle-switch">
             <input type="checkbox" data-id="${t.id}" ${t.status === "pago" ? "checked" : ""} />
             <span class="toggle-slider"></span>
           </label>
         </td>
-        <td>
-          <div class="row-actions">
-            <button data-action="edit" data-id="${t.id}" data-group="${t.recurrence_group_id || t.installment_group_id || ""}">Editar</button>
-            <button data-action="delete" data-id="${t.id}" data-group="${t.recurrence_group_id || t.installment_group_id || ""}" class="btn-danger">Excluir</button>
-          </div>
+        <td class="row-menu-cell">
+          <button type="button" class="row-menu-trigger" data-menu-id="${t.id}">⋮</button>
         </td>
       </tr>`;
   }).join("") : `<tr><td colspan="7"><div class="empty-state">Nenhum lançamento encontrado.</div></td></tr>`;
@@ -446,9 +445,64 @@ async function loadTransactionsTable() {
   body.querySelectorAll('input[type=checkbox][data-id]').forEach((chk) => {
     chk.addEventListener("change", () => handleTogglePago(chk, items));
   });
-  body.querySelectorAll("button[data-action]").forEach((btn) => {
-    btn.addEventListener("click", () => handleTransactionAction(btn.dataset.action, btn.dataset.id, items, btn.dataset.group));
+  body.querySelectorAll(".clickable-cell").forEach((cell) => {
+    cell.addEventListener("click", () => handleTransactionAction("edit", cell.dataset.openId, items, cell.dataset.openGroup));
   });
+  body.querySelectorAll(".row-menu-trigger").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const t = items.find((i) => i.id === btn.dataset.menuId);
+      openRowActionMenu(btn, t, () => loadTransactionsTable());
+    });
+  });
+}
+
+/** Menu flutuante "⋮" (editar/duplicar/excluir) de uma linha da tabela de
+ * lançamentos. Fica fora da tabela (position: fixed) para não ser cortado
+ * pelo overflow:hidden do container da tabela. */
+function openRowActionMenu(triggerEl, t, onChanged) {
+  const menu = document.getElementById("rowActionMenu");
+  const groupId = t.recurrence_group_id || t.installment_group_id || "";
+  menu.innerHTML = `
+    <button type="button" class="row-menu-item" data-menu-action="edit">Editar</button>
+    <button type="button" class="row-menu-item" data-menu-action="duplicate">Duplicar</button>
+    <button type="button" class="row-menu-item danger" data-menu-action="delete">Excluir</button>
+  `;
+  const rect = triggerEl.getBoundingClientRect();
+  menu.style.top = `${rect.bottom + 4}px`;
+  menu.style.right = `${Math.max(8, window.innerWidth - rect.right)}px`;
+  menu.style.left = "auto";
+  menu.classList.remove("hidden");
+
+  menu.querySelectorAll("[data-menu-action]").forEach((btn) => {
+    btn.onclick = (e) => {
+      e.stopPropagation();
+      closeRowActionMenu();
+      const action = btn.dataset.menuAction;
+      if (action === "edit") handleTransactionAction("edit", t.id, [t], groupId);
+      else if (action === "delete") handleTransactionAction("delete", t.id, [t], groupId);
+      else if (action === "duplicate") duplicateTransaction(t, onChanged);
+    };
+  });
+}
+function closeRowActionMenu() {
+  document.getElementById("rowActionMenu")?.classList.add("hidden");
+}
+document.addEventListener("click", closeRowActionMenu);
+document.addEventListener("scroll", closeRowActionMenu, true);
+
+async function duplicateTransaction(t, onChanged) {
+  const payload = {
+    description: t.description, amount: t.amount, group: t.group, due_date: t.due_date,
+    account_id: t.account_id, category_id: t.category_id, contact_id: t.contact_id,
+    cost_center_id: t.cost_center_id, tag_ids: t.tag_ids || [], status: "pendente", notes: t.notes,
+  };
+  try {
+    await api("POST", "/api/transactions", payload);
+    showToast("Lançamento duplicado.");
+    if (onChanged) onChanged();
+    if (state.tab === "dashboard") loadDashboard();
+  } catch (e) { showToast(e.message, true); }
 }
 
 async function handleTogglePago(checkbox, items) {
