@@ -41,6 +41,31 @@ const state = {
 function formatCurrency(v) {
   return (v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
+
+/** Mascara de valor monetario "vírgula travada": os dois ultimos digitos
+ * digitados sempre viram os centavos, como numa maquininha de cartao. */
+function toMaskedString(num) {
+  const cents = Math.max(0, Math.round((Number(num) || 0) * 100));
+  let digits = String(cents);
+  while (digits.length < 3) digits = "0" + digits;
+  const intPart = digits.slice(0, -2).replace(/^0+(?=\d)/, "") || "0";
+  const decPart = digits.slice(-2);
+  const withThousands = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  return `${withThousands},${decPart}`;
+}
+function parseMaskedCurrency(str) {
+  if (!str) return 0;
+  return parseFloat(String(str).replace(/\./g, "").replace(",", ".")) || 0;
+}
+function maskCurrencyInput(el) {
+  if (!el || el.dataset.masked) return;
+  el.dataset.masked = "1";
+  el.setAttribute("inputmode", "decimal");
+  el.addEventListener("input", () => {
+    const digitsOnly = el.value.replace(/\D/g, "");
+    el.value = digitsOnly ? toMaskedString(parseInt(digitsOnly, 10) / 100) : "";
+  });
+}
 function formatDateBR(iso) {
   if (!iso) return "-";
   const [y, m, d] = iso.split("-");
@@ -83,6 +108,7 @@ function qs(params) {
 
 function switchTab(tab) {
   state.tab = tab;
+  try { localStorage.setItem("activeTab", tab); } catch (e) {}
   document.querySelectorAll(".nav-item").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
   document.querySelectorAll(".tab").forEach((s) => s.classList.toggle("active", s.id === "tab-" + tab));
   if (tab === "dashboard") loadDashboard();
@@ -92,6 +118,21 @@ function switchTab(tab) {
   if (tab === "configuracoes") loadConfigPanel(state.activeConfig);
 }
 document.querySelectorAll(".nav-item").forEach((btn) => btn.addEventListener("click", () => switchTab(btn.dataset.tab)));
+
+/** Atualiza todos os dados visiveis da aba atual — chamado apos qualquer
+ * criacao/edicao/exclusao/pagamento, pra nunca deixar a tela desatualizada
+ * sem precisar recarregar a pagina manualmente. */
+function refreshCurrentView() {
+  if (state.tab === "dashboard") { loadDashboard(); return; }
+  if (state.tab === "lancamentos") {
+    loadLancDashboard();
+    if (state.lancamentosGroup === "transferencias") loadTransfers(); else loadTransactionsTable();
+    return;
+  }
+  if (state.tab === "contatos") { loadContatos(); return; }
+  if (state.tab === "relatorios") { loadReport(); return; }
+  if (state.tab === "configuracoes") { loadConfigPanel(state.activeConfig); return; }
+}
 
 // ---------------------------------------------------------------------
 // Dropdown customizado (usado no seletor de perfil da barra lateral)
@@ -128,6 +169,121 @@ document.getElementById("profileSelectTrigger").addEventListener("click", (e) =>
   if (willOpen) { wrap.classList.add("open"); document.getElementById("profileSelectMenu").classList.remove("hidden"); }
 });
 document.addEventListener("click", closeCustomSelect);
+
+/** Converte um <select> nativo num dropdown com a estilizacao do app,
+ * mantendo o <select> original (oculto) como fonte da verdade: o valor e
+ * os eventos "change" continuam funcionando normalmente pra quem ja
+ * escuta o elemento original. */
+function styleSelectAsCustomDropdown(selectId) {
+  const select = document.getElementById(selectId);
+  if (!select || select.dataset.styled) return;
+  select.dataset.styled = "1";
+
+  const wrap = document.createElement("div");
+  wrap.className = "custom-select native-select-wrap";
+  select.parentNode.insertBefore(wrap, select);
+  select.classList.add("native-select-hidden");
+  wrap.appendChild(select);
+
+  const trigger = document.createElement("button");
+  trigger.type = "button";
+  trigger.className = "custom-select-trigger light-trigger";
+  trigger.innerHTML = `<span class="select-label-text"></span><span class="chevron">▾</span>`;
+  const menu = document.createElement("div");
+  menu.className = "custom-select-menu hidden light-menu";
+  wrap.appendChild(trigger);
+  wrap.appendChild(menu);
+
+  function syncLabel() {
+    const opt = select.options[select.selectedIndex];
+    trigger.querySelector(".select-label-text").textContent = opt ? opt.textContent : "";
+  }
+  function renderMenu() {
+    menu.innerHTML = Array.from(select.options).filter((opt) => !opt.classList.contains("hidden")).map((opt) => `
+      <div class="custom-select-option ${opt.value === select.value ? "selected" : ""}" data-value="${opt.value}">
+        <span>${escapeHtml(opt.textContent)}</span><span class="check">✓</span>
+      </div>`).join("");
+    menu.querySelectorAll(".custom-select-option").forEach((el) => {
+      el.addEventListener("click", (e) => {
+        e.stopPropagation();
+        select.value = el.dataset.value;
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+        closeCustomSelect();
+        syncLabel();
+      });
+    });
+  }
+  trigger.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const willOpen = menu.classList.contains("hidden");
+    closeCustomSelect();
+    if (willOpen) { wrap.classList.add("open"); renderMenu(); menu.classList.remove("hidden"); }
+  });
+  select.addEventListener("change", syncLabel);
+  syncLabel();
+}
+
+// ---------------------------------------------------------------------
+// Dialogo de confirmacao/prompt (substitui confirm()/prompt() nativos do
+// navegador por um popup central com a estilizacao do app)
+// ---------------------------------------------------------------------
+
+function appConfirm(message, okLabel) {
+  return new Promise((resolve) => {
+    const overlay = document.getElementById("confirmDialogOverlay");
+    document.getElementById("confirmDialogMessage").textContent = message;
+    document.getElementById("confirmDialogPromptWrap").classList.add("hidden");
+    const okBtn = document.getElementById("confirmDialogOk");
+    const cancelBtn = document.getElementById("confirmDialogCancel");
+    okBtn.textContent = okLabel || "Confirmar";
+    overlay.classList.remove("hidden");
+    function cleanup(result) {
+      overlay.classList.add("hidden");
+      okBtn.removeEventListener("click", onOk);
+      cancelBtn.removeEventListener("click", onCancel);
+      overlay.removeEventListener("click", onOverlay);
+      resolve(result);
+    }
+    function onOk() { cleanup(true); }
+    function onCancel() { cleanup(false); }
+    function onOverlay(e) { if (e.target === overlay) cleanup(false); }
+    okBtn.addEventListener("click", onOk);
+    cancelBtn.addEventListener("click", onCancel);
+    overlay.addEventListener("click", onOverlay);
+  });
+}
+
+function appPrompt(message, defaultValue) {
+  return new Promise((resolve) => {
+    const overlay = document.getElementById("confirmDialogOverlay");
+    document.getElementById("confirmDialogMessage").textContent = message;
+    const wrap = document.getElementById("confirmDialogPromptWrap");
+    const input = document.getElementById("confirmDialogPromptInput");
+    wrap.classList.remove("hidden");
+    input.value = defaultValue || "";
+    const okBtn = document.getElementById("confirmDialogOk");
+    const cancelBtn = document.getElementById("confirmDialogCancel");
+    okBtn.textContent = "OK";
+    overlay.classList.remove("hidden");
+    setTimeout(() => { input.focus(); input.select(); }, 0);
+    function cleanup(result) {
+      overlay.classList.add("hidden");
+      okBtn.removeEventListener("click", onOk);
+      cancelBtn.removeEventListener("click", onCancel);
+      overlay.removeEventListener("click", onOverlay);
+      input.removeEventListener("keydown", onKey);
+      resolve(result);
+    }
+    function onOk() { cleanup(input.value); }
+    function onCancel() { cleanup(null); }
+    function onOverlay(e) { if (e.target === overlay) cleanup(null); }
+    function onKey(e) { if (e.key === "Enter") { e.preventDefault(); onOk(); } else if (e.key === "Escape") onCancel(); }
+    input.addEventListener("keydown", onKey);
+    okBtn.addEventListener("click", onOk);
+    cancelBtn.addEventListener("click", onCancel);
+    overlay.addEventListener("click", onOverlay);
+  });
+}
 
 // ---------------------------------------------------------------------
 // Modal generico
@@ -232,9 +388,10 @@ async function loadDashboard() {
   try {
     data = await api("GET", "/api/dashboard?" + qs({ profile_id: state.activeProfile, year: state.dashYear, month: state.dashMonth }));
   } catch (e) { return showToast(e.message, true); }
+  state.lastDashboardData = data;
 
-  drawDonut(document.getElementById("donutReceitas"), data.percent_receitas, "#2f9d55");
-  drawDonut(document.getElementById("donutDespesas"), data.percent_despesas, "#d64545");
+  drawDonut(document.getElementById("donutReceitas"), data.percent_receitas, themeColor("--green", "#2f9d55"));
+  drawDonut(document.getElementById("donutDespesas"), data.percent_despesas, themeColor("--red", "#d64545"));
   document.getElementById("dReceitaRealizado").textContent = formatCurrency(data.realizado_receitas);
   document.getElementById("dReceitaFalta").textContent = formatCurrency(data.falta_receitas);
   document.getElementById("dReceitaPrevisto").textContent = formatCurrency(data.previsto_total_receitas);
@@ -260,7 +417,8 @@ async function loadDashboard() {
         </div>`).join("")
     : `<div class="empty-state">Cadastre uma conta para começar.</div>`;
 
-  drawGroupedBarChart(document.getElementById("chartComparativo"), data.comparativo_mensal);
+  drawHatchedFlowChart(document.getElementById("chartComparativo"), data.comparativo_mensal);
+  attachChartTooltip(document.getElementById("chartComparativo"), data.comparativo_mensal);
 
   document.getElementById("comparativoGrupos").innerHTML = data.comparativo_grupos.map((g) => {
     const isReceita = g.group === "recebimento";
@@ -481,6 +639,7 @@ async function loadLancDashboard() {
   const params = { profile_id: state.activeProfile, year: state.dashYear, month: state.dashMonth, account_id: state.lancamentosAccountId || undefined };
   let data;
   try { data = await api("GET", "/api/dashboard?" + qs(params)); } catch (e) { return showToast(e.message, true); }
+  state.lastLancDashboardData = data;
 
   const previstoResultado = data.previsto_total_receitas - data.previsto_total_despesas;
   const resultadoEl = document.getElementById("lancResultado");
@@ -498,6 +657,7 @@ async function loadLancDashboard() {
   document.getElementById("lancProgressDespesa").style.width = Math.max(0, Math.min(100, data.percent_despesas)) + "%";
 
   drawHatchedFlowChart(document.getElementById("lancChart"), data.comparativo_mensal);
+  attachChartTooltip(document.getElementById("lancChart"), data.comparativo_mensal);
 
   const contaAtual = state.lancamentosAccountId ? data.saldo_por_conta.find((a) => a.id === state.lancamentosAccountId) : null;
   const saldo = contaAtual ? contaAtual.balance : data.saldo_atual;
@@ -541,7 +701,9 @@ function updateLancMonthLabel() {
 }
 function applyLancMonthFilter() {
   updateLancMonthLabel();
-  document.getElementById("filterPeriodo").value = "mes_especifico";
+  const sel = document.getElementById("filterPeriodo");
+  sel.value = "mes_especifico";
+  sel.dispatchEvent(new Event("change", { bubbles: true }));
   loadTransactionsTable();
 }
 document.getElementById("lancPrevMonth").addEventListener("click", () => {
@@ -638,7 +800,7 @@ async function loadTransactionsTable() {
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
       const t = items.find((i) => i.id === btn.dataset.menuId);
-      openRowActionMenu(btn, t, () => loadTransactionsTable());
+      openRowActionMenu(btn, t, refreshCurrentView);
     });
   });
 
@@ -718,14 +880,12 @@ document.getElementById("bulkClearBtn").addEventListener("click", () => {
 document.getElementById("bulkDeleteBtn").addEventListener("click", async () => {
   const ids = Array.from(state.selectedTransactionIds);
   if (!ids.length) return;
-  if (!confirm(`Excluir ${ids.length} lançamento(s) selecionado(s)?`)) return;
+  if (!(await appConfirm(`Excluir ${ids.length} lançamento(s) selecionado(s)?`))) return;
   try {
     await api("POST", "/api/transactions/bulk", { ids, action: "delete" });
     showToast("Lançamentos excluídos.");
     state.selectedTransactionIds.clear();
-    loadTransactionsTable();
-    loadLancDashboard();
-    if (state.tab === "dashboard") loadDashboard();
+    refreshCurrentView();
   } catch (e) { showToast(e.message, true); }
 });
 
@@ -768,7 +928,7 @@ function openBulkContextMenu(x, y, ids) {
       const action = btn.dataset.action;
       try {
         if (action === "delete") {
-          if (!confirm(`Excluir ${ids.length} lançamento(s)?`)) return;
+          if (!(await appConfirm(`Excluir ${ids.length} lançamento(s)?`))) return;
           await api("POST", "/api/transactions/bulk", { ids, action: "delete" });
           showToast("Lançamentos excluídos.");
         } else if (action === "mark_paid" || action === "mark_unpaid") {
@@ -782,9 +942,7 @@ function openBulkContextMenu(x, y, ids) {
           showToast("Lançamentos movidos.");
         }
         state.selectedTransactionIds.clear();
-        loadTransactionsTable();
-        loadLancDashboard();
-        if (state.tab === "dashboard") loadDashboard();
+        refreshCurrentView();
       } catch (err) { showToast(err.message, true); }
     });
   });
@@ -836,8 +994,7 @@ async function duplicateTransaction(t, onChanged) {
   try {
     await api("POST", "/api/transactions", payload);
     showToast("Lançamento duplicado.");
-    if (onChanged) onChanged();
-    if (state.tab === "dashboard") loadDashboard();
+    if (onChanged) onChanged(); else refreshCurrentView();
   } catch (e) { showToast(e.message, true); }
 }
 
@@ -860,8 +1017,7 @@ function commitTransactionField(t, field, value) {
     try {
       await api("PUT", `/api/transactions/${t.id}?scope=${scope}`, { [field]: value });
       showToast("Lançamento atualizado.");
-      loadTransactionsTable();
-      if (state.tab === "dashboard") loadDashboard();
+      refreshCurrentView();
     } catch (e) { showToast(e.message, true); }
   };
   if (groupId) openScopeModal("Alterar", doCommit);
@@ -895,8 +1051,9 @@ function startInlineTextEdit(cell, t, field) {
 function startInlineNumberEdit(cell, t) {
   if (!t || cell.querySelector("input")) return;
   const original = cell.innerHTML;
-  cell.innerHTML = `<input type="number" step="0.01" class="inline-cell-input" value="${t.amount}" />`;
+  cell.innerHTML = `<input type="text" class="inline-cell-input" value="${toMaskedString(t.amount)}" />`;
   const input = cell.querySelector("input");
+  maskCurrencyInput(input);
   input.addEventListener("click", (e) => e.stopPropagation());
   input.focus();
   input.select();
@@ -904,7 +1061,7 @@ function startInlineNumberEdit(cell, t) {
   const finish = (commit) => {
     if (done) return;
     done = true;
-    const val = parseFloat(input.value);
+    const val = parseMaskedCurrency(input.value);
     if (commit && Number.isFinite(val) && val > 0 && val !== t.amount) commitTransactionField(t, "amount", val);
     else cell.innerHTML = original;
   };
@@ -1056,14 +1213,13 @@ async function handleTogglePago(checkbox, items) {
   const willPay = checkbox.checked;
   let paidDate = null;
   if (willPay && t.due_date < todayIso() && state.settings.prefs.confirm_paid_date) {
-    paidDate = prompt("Confirme a data de pagamento (AAAA-MM-DD):", todayIso());
+    paidDate = await appPrompt("Confirme a data de pagamento (AAAA-MM-DD):", todayIso());
     if (paidDate === null) { checkbox.checked = false; return; }
   }
   try {
     await api("POST", `/api/transactions/${t.id}/pay`, { paid: willPay, paid_date: paidDate });
     showToast(willPay ? "Marcado como pago." : "Reaberto como pendente.");
-    loadTransactionsTable();
-    if (state.tab === "dashboard") loadDashboard();
+    refreshCurrentView();
   } catch (e) { showToast(e.message, true); checkbox.checked = !willPay; }
 }
 
@@ -1071,8 +1227,7 @@ async function deleteTransactionWithScope(id, scope) {
   try {
     await api("DELETE", `/api/transactions/${id}?scope=${scope}`);
     showToast("Lançamento excluído.");
-    loadTransactionsTable();
-    if (state.tab === "dashboard") loadDashboard();
+    refreshCurrentView();
   } catch (e) { showToast(e.message, true); }
 }
 
@@ -1085,7 +1240,7 @@ async function handleTransactionAction(action, id, items, groupId) {
     if (groupId) {
       openScopeModal("Excluir", (scope) => deleteTransactionWithScope(id, scope));
     } else {
-      if (!confirm("Excluir este lançamento?")) return;
+      if (!(await appConfirm("Excluir este lançamento?"))) return;
       deleteTransactionWithScope(id, "single");
     }
   }
@@ -1198,7 +1353,7 @@ function parcelasTableHtml(rows) {
     <tr>
       <td class="pnum">${r.number}/${rows.length}</td>
       <td><input type="date" class="prow-date" data-idx="${i}" value="${r.due_date}" /></td>
-      <td><input type="number" step="0.01" class="prow-amount" data-idx="${i}" value="${r.amount}" /></td>
+      <td><input type="text" class="prow-amount" data-idx="${i}" value="${toMaskedString(r.amount)}" /></td>
       <td style="text-align:center;">
         <label class="toggle-switch"><input type="checkbox" class="prow-status" data-idx="${i}" ${r.status === "pago" ? "checked" : ""}/><span class="toggle-slider"></span></label>
       </td>
@@ -1229,10 +1384,13 @@ function openParcelasPopup(defaults, existing, onSave) {
   function renderTable() {
     document.getElementById("pf_table_area").innerHTML = parcelasTableHtml(rows);
     document.querySelectorAll(".prow-date").forEach((inp) => inp.addEventListener("change", () => { rows[inp.dataset.idx].due_date = inp.value; }));
-    document.querySelectorAll(".prow-amount").forEach((inp) => inp.addEventListener("input", () => {
-      rows[inp.dataset.idx].amount = parseFloat(inp.value || "0");
-      document.getElementById("pf_total_value").textContent = formatCurrency(rows.reduce((s, r) => s + (Number(r.amount) || 0), 0));
-    }));
+    document.querySelectorAll(".prow-amount").forEach((inp) => {
+      maskCurrencyInput(inp);
+      inp.addEventListener("input", () => {
+        rows[inp.dataset.idx].amount = parseMaskedCurrency(inp.value);
+        document.getElementById("pf_total_value").textContent = formatCurrency(rows.reduce((s, r) => s + (Number(r.amount) || 0), 0));
+      });
+    });
     document.querySelectorAll(".prow-status").forEach((inp) => inp.addEventListener("change", () => { rows[inp.dataset.idx].status = inp.checked ? "pago" : "pendente"; }));
     document.querySelectorAll(".prow-remove").forEach((btn) => btn.addEventListener("click", () => {
       if (rows.length <= 1) return showToast("É preciso ao menos uma parcela.", true);
@@ -1254,7 +1412,7 @@ function openParcelasPopup(defaults, existing, onSave) {
       <div class="form-row">
         <label id="pf_valor_label">${pState.valorModo === "total" ? "Valor Total (R$)" : "Valor de cada parcela (R$)"}</label>
         <div class="value-input-wrap">
-          <input type="number" step="0.01" id="pf_valor" value="${pState.valorModo === "total" ? pState.valorTotal : pState.valorParcela}" />
+          <input type="text" id="pf_valor" value="${toMaskedString(pState.valorModo === "total" ? pState.valorTotal : pState.valorParcela)}" />
           <button type="button" class="calc-trigger" data-calc-target="pf_valor">🖩</button>
         </div>
       </div>
@@ -1288,13 +1446,14 @@ function openParcelasPopup(defaults, existing, onSave) {
     renderTable();
   }));
 
+  maskCurrencyInput(document.getElementById("pf_valor"));
   document.getElementById("pf_modo").addEventListener("change", (e) => {
     pState.valorModo = e.target.value;
     document.getElementById("pf_valor_label").textContent = pState.valorModo === "total" ? "Valor Total (R$)" : "Valor de cada parcela (R$)";
-    document.getElementById("pf_valor").value = pState.valorModo === "total" ? pState.valorTotal : pState.valorParcela;
+    document.getElementById("pf_valor").value = toMaskedString(pState.valorModo === "total" ? pState.valorTotal : pState.valorParcela);
   });
   document.getElementById("pf_gerar").addEventListener("click", () => {
-    const val = parseFloat(document.getElementById("pf_valor").value || "0");
+    const val = parseMaskedCurrency(document.getElementById("pf_valor").value);
     if (pState.valorModo === "total") pState.valorTotal = val; else pState.valorParcela = val;
     pState.numero = Math.max(1, parseInt(document.getElementById("pf_numero").value || "1"));
     pState.frequencia = document.getElementById("pf_frequencia").value;
@@ -1329,7 +1488,7 @@ function transactionFormHtml(t, presetGroup) {
       <div class="form-row">
         <label>Valor (R$)</label>
         <div class="value-input-wrap">
-          <input type="number" step="0.01" id="f_amount" value="${t?.amount ?? ""}" />
+          <input type="text" id="f_amount" value="${t ? toMaskedString(t.amount) : ""}" />
           <button type="button" class="calc-trigger" data-calc-target="f_amount">🖩</button>
         </div>
       </div>
@@ -1406,9 +1565,10 @@ function openTransactionModal(t, scope) {
   const scopeLabel = { future: " (esta e as próximas)", all: " (todas as ocorrências)" }[scope] || "";
   openModal(t ? "Editar lançamento" + scopeLabel : `Novo lançamento — ${GROUP_LABELS[group]}`, transactionFormHtml(t, group));
   document.getElementById("btnCancelForm").addEventListener("click", closeModal);
+  maskCurrencyInput(document.getElementById("f_amount"));
 
   document.getElementById("btnQuickContact").addEventListener("click", async () => {
-    const name = prompt("Nome do novo contato:");
+    const name = await appPrompt("Nome do novo contato:");
     if (!name) return;
     try {
       const contact = await api("POST", "/api/contacts", { name });
@@ -1450,7 +1610,7 @@ function openTransactionModal(t, scope) {
     document.getElementById("btnConfigRepeat")?.addEventListener("click", () => {
       const mode = document.querySelector('input[name="repeatMode"]:checked').value;
       const defaults = {
-        amount: parseFloat(document.getElementById("f_amount").value || "0"),
+        amount: parseMaskedCurrency(document.getElementById("f_amount").value),
         due_date: document.getElementById("f_due_date").value || todayIso(),
       };
       if (mode === "installments") {
@@ -1471,7 +1631,7 @@ function openTransactionModal(t, scope) {
 
   document.getElementById("btnCriarParcelas")?.addEventListener("click", () => {
     const defaults = {
-      amount: parseFloat(document.getElementById("f_amount").value || "0"),
+      amount: parseMaskedCurrency(document.getElementById("f_amount").value),
       due_date: document.getElementById("f_due_date").value || todayIso(),
     };
     openParcelasPopup(defaults, null, async (result) => {
@@ -1481,9 +1641,7 @@ function openTransactionModal(t, scope) {
         });
         showToast("Lançamento transformado em parcelado.");
         closeModal();
-        loadTransactionsTable();
-        loadLancDashboard();
-        if (state.tab === "dashboard") loadDashboard();
+        refreshCurrentView();
       } catch (e) { showToast(e.message, true); }
     });
   });
@@ -1502,7 +1660,7 @@ function openTransactionModal(t, scope) {
     const tagIds = Array.from(document.querySelectorAll('.tag-chip input:checked')).map((i) => i.value);
     const payload = {
       description: document.getElementById("f_description").value.trim(),
-      amount: parseFloat(document.getElementById("f_amount").value || "0"),
+      amount: parseMaskedCurrency(document.getElementById("f_amount").value),
       group: document.getElementById("f_group").value,
       due_date: document.getElementById("f_due_date").value,
       account_id: document.getElementById("f_account_id").value,
@@ -1536,8 +1694,7 @@ function openTransactionModal(t, scope) {
         showToast("Lançamento criado.");
       }
       closeModal();
-      loadTransactionsTable();
-      if (state.tab === "dashboard") loadDashboard();
+      refreshCurrentView();
     } catch (e) { showToast(e.message, true); }
   });
 }
@@ -1565,8 +1722,8 @@ async function loadTransfers() {
   wireTransferInlineRow();
   body.querySelectorAll("button[data-id]").forEach((btn) => {
     btn.addEventListener("click", async () => {
-      if (!confirm("Excluir esta transferência?")) return;
-      try { await api("DELETE", `/api/transfers/${btn.dataset.id}`); showToast("Transferência excluída."); loadTransfers(); if (state.tab === "dashboard") loadDashboard(); }
+      if (!(await appConfirm("Excluir esta transferência?"))) return;
+      try { await api("DELETE", `/api/transfers/${btn.dataset.id}`); showToast("Transferência excluída."); refreshCurrentView(); }
       catch (e) { showToast(e.message, true); }
     });
   });
@@ -1585,7 +1742,7 @@ function transferFormRowHtml() {
       <td><select id="ti_to">${opts}</select></td>
       <td>
         <div class="value-input-wrap">
-          <input type="number" step="0.01" id="ti_amount" placeholder="0,00" />
+          <input type="text" id="ti_amount" placeholder="0,00" />
           <button type="button" class="calc-trigger" data-calc-target="ti_amount">🖩</button>
         </div>
       </td>
@@ -1605,12 +1762,13 @@ function wireTransferInlineRow() {
   trigger.addEventListener("click", () => {
     if (state.accounts.length < 2) return showToast("Cadastre ao menos duas contas para transferir entre elas.", true);
     trigger.outerHTML = transferFormRowHtml();
+    maskCurrencyInput(document.getElementById("ti_amount"));
     document.getElementById("ti_cancel").addEventListener("click", () => loadTransfers());
     document.getElementById("ti_confirm").addEventListener("click", async () => {
       const payload = {
         from_account_id: document.getElementById("ti_from").value,
         to_account_id: document.getElementById("ti_to").value,
-        amount: parseFloat(document.getElementById("ti_amount").value || "0"),
+        amount: parseMaskedCurrency(document.getElementById("ti_amount").value),
         date: document.getElementById("ti_date").value,
         notes: document.getElementById("ti_notes").value,
       };
@@ -1619,8 +1777,7 @@ function wireTransferInlineRow() {
       try {
         await api("POST", "/api/transfers", payload);
         showToast("Transferência registrada.");
-        loadTransfers();
-        if (state.tab === "dashboard") loadDashboard();
+        refreshCurrentView();
       } catch (e) { showToast(e.message, true); }
     });
   });
@@ -1665,7 +1822,7 @@ async function loadContatos() {
     btn.addEventListener("click", async () => {
       const c = contacts.find((x) => x.id === btn.dataset.id);
       if (btn.dataset.action === "edit") return openContactModal(c);
-      if (!confirm(`Excluir o contato "${c.name}"?`)) return;
+      if (!(await appConfirm(`Excluir o contato "${c.name}"?`))) return;
       try { await api("DELETE", `/api/contacts/${c.id}`); showToast("Contato excluído."); loadContatos(); }
       catch (e) { showToast(e.message, true); }
     });
@@ -1872,7 +2029,7 @@ async function loadPerfis() {
     btn.addEventListener("click", async () => {
       const p = profiles.find((x) => x.id === btn.dataset.id);
       if (btn.dataset.action === "edit") return openProfileModal(p);
-      if (!confirm(`Excluir o perfil "${p.name}"?`)) return;
+      if (!(await appConfirm(`Excluir o perfil "${p.name}"?`))) return;
       try { await api("DELETE", `/api/profiles/${p.id}`); showToast("Perfil excluído."); await refreshLookups(); loadPerfis(); }
       catch (e) { showToast(e.message, true); }
     });
@@ -1898,7 +2055,7 @@ function accountFormHtml(a) {
       </div>
     </div>
     <div class="form-row-2">
-      <div class="form-row"><label>Saldo inicial (R$)</label><input type="number" step="0.01" id="f_initial_balance" value="${a?.initial_balance ?? 0}" ${a ? "disabled" : ""} /></div>
+      <div class="form-row"><label>Saldo inicial (R$)</label><input type="text" id="f_initial_balance" value="${toMaskedString(a?.initial_balance ?? 0)}" ${a ? "disabled" : ""} /></div>
       <div class="form-row"><label>Cor</label><input type="color" id="f_color" value="${a?.color || "#1565c0"}" /></div>
     </div>
     <div class="form-actions">
@@ -1910,6 +2067,7 @@ function openAccountModal(a) {
   if (!state.profiles.length) return showToast("Cadastre um perfil antes de criar uma conta.", true);
   openModal(a ? "Editar conta" : "Nova conta", accountFormHtml(a));
   document.getElementById("btnCancelForm").addEventListener("click", closeModal);
+  if (!a) maskCurrencyInput(document.getElementById("f_initial_balance"));
   document.getElementById("btnSaveAccount").addEventListener("click", async () => {
     const payload = {
       name: document.getElementById("f_name").value.trim(),
@@ -1917,7 +2075,7 @@ function openAccountModal(a) {
       color: document.getElementById("f_color").value,
       profile_id: document.getElementById("f_profile_id").value,
     };
-    if (!a) payload.initial_balance = parseFloat(document.getElementById("f_initial_balance").value || "0");
+    if (!a) payload.initial_balance = parseMaskedCurrency(document.getElementById("f_initial_balance").value);
     if (!payload.name) return showToast("Informe o nome da conta.", true);
     try {
       if (a) await api("PUT", `/api/accounts/${a.id}`, payload); else await api("POST", "/api/accounts", payload);
@@ -1954,7 +2112,7 @@ async function loadAccounts() {
         catch (e) { showToast(e.message, true); }
         return;
       }
-      if (!confirm(`Excluir a conta "${acc.name}"?`)) return;
+      if (!(await appConfirm(`Excluir a conta "${acc.name}"?`))) return;
       try { await api("DELETE", `/api/accounts/${acc.id}`); showToast("Conta excluída."); await refreshLookups(); loadAccounts(); }
       catch (e) { showToast(e.message, true); }
     });
@@ -2010,7 +2168,7 @@ async function loadCategoriesGrid() {
     btn.addEventListener("click", async () => {
       const cat = categories.find((x) => x.id === btn.dataset.id);
       if (btn.dataset.action === "edit") return openCategoryModal(cat);
-      if (!confirm(`Excluir a categoria "${cat.name}"?`)) return;
+      if (!(await appConfirm(`Excluir a categoria "${cat.name}"?`))) return;
       try { await api("DELETE", `/api/categories/${cat.id}`); showToast("Categoria excluída."); await refreshLookups(); loadCategoriesGrid(); }
       catch (e) { showToast(e.message, true); }
     });
@@ -2049,7 +2207,7 @@ async function loadCostCenters() {
     btn.addEventListener("click", async () => {
       const c = items.find((x) => x.id === btn.dataset.id);
       if (btn.dataset.action === "edit") return openCostCenterModal(c);
-      if (!confirm(`Excluir "${c.name}"?`)) return;
+      if (!(await appConfirm(`Excluir "${c.name}"?`))) return;
       try { await api("DELETE", `/api/cost-centers/${c.id}`); showToast("Excluído."); await refreshLookups(); loadCostCenters(); }
       catch (e) { showToast(e.message, true); }
     });
@@ -2089,7 +2247,7 @@ async function loadTagsGrid() {
     btn.addEventListener("click", async () => {
       const t = items.find((x) => x.id === btn.dataset.id);
       if (btn.dataset.action === "edit") return openTagModal(t);
-      if (!confirm(`Excluir a tag "${t.name}"?`)) return;
+      if (!(await appConfirm(`Excluir a tag "${t.name}"?`))) return;
       try { await api("DELETE", `/api/tags/${t.id}`); showToast("Excluída."); await refreshLookups(); loadTagsGrid(); }
       catch (e) { showToast(e.message, true); }
     });
@@ -2151,6 +2309,14 @@ document.getElementById("btnExportXlsx")?.addEventListener("click", () => {
 
 // ---- Importar planilha (.xlsx) ----
 
+document.getElementById("importXlsxTrigger")?.addEventListener("click", () => {
+  document.getElementById("importXlsxFile").click();
+});
+document.getElementById("importXlsxFile")?.addEventListener("change", (e) => {
+  const name = e.target.files && e.target.files[0] ? e.target.files[0].name : "Nenhum arquivo selecionado";
+  document.getElementById("importXlsxFileName").textContent = name;
+});
+
 document.getElementById("btnImportXlsx")?.addEventListener("click", async () => {
   const input = document.getElementById("importXlsxFile");
   const resultEl = document.getElementById("importXlsxResult");
@@ -2168,7 +2334,7 @@ document.getElementById("btnImportXlsx")?.addEventListener("click", async () => 
     resultEl.innerHTML = `<div class="card-sub" style="margin-top:10px;"><b class="positive">${data.imported} lançamento(s) importado(s).</b> ${data.errors.length} erro(s).</div>${errorsHtml}`;
     showToast(`Importação concluída: ${data.imported} lançamento(s).`);
     await refreshLookups();
-    if (state.tab === "dashboard") loadDashboard();
+    refreshCurrentView();
   } catch (e) {
     resultEl.innerHTML = "";
     showToast(e.message, true);
@@ -2186,7 +2352,7 @@ async function loadDataSummary() {
 document.getElementById("btnWipe").addEventListener("click", async () => {
   const confirmText = document.getElementById("wipeConfirm").value;
   if (confirmText !== "EXCLUIR") return showToast('Digite "EXCLUIR" para confirmar.', true);
-  if (!confirm("Tem certeza? Essa ação não pode ser desfeita.")) return;
+  if (!(await appConfirm("Tem certeza? Essa ação não pode ser desfeita."))) return;
   try {
     await api("POST", "/api/wipe", { confirm: confirmText });
     showToast("Todos os dados foram apagados.");
@@ -2215,11 +2381,46 @@ function applyTheme(theme) {
   applyTheme(current);
 })();
 
+/** Redesenha na hora os graficos em <canvas> (que nao reagem ao CSS sozinhos)
+ * usando os ultimos dados ja carregados, sem precisar buscar de novo no
+ * servidor — evita o atraso de contraste ao trocar de tema. */
+function redrawThemedCharts() {
+  const d1 = state.lastDashboardData;
+  if (d1) {
+    if (document.getElementById("donutReceitas")) drawDonut(document.getElementById("donutReceitas"), d1.percent_receitas, themeColor("--green", "#2f9d55"));
+    if (document.getElementById("donutDespesas")) drawDonut(document.getElementById("donutDespesas"), d1.percent_despesas, themeColor("--red", "#d64545"));
+    if (document.getElementById("chartComparativo")) drawHatchedFlowChart(document.getElementById("chartComparativo"), d1.comparativo_mensal);
+  }
+  const d2 = state.lastLancDashboardData;
+  if (d2 && document.getElementById("lancChart")) drawHatchedFlowChart(document.getElementById("lancChart"), d2.comparativo_mensal);
+}
+
 document.getElementById("btnToggleTheme")?.addEventListener("click", () => {
   const current = document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
   const next = current === "dark" ? "light" : "dark";
   applyTheme(next);
   try { localStorage.setItem("theme", next); } catch (e) {}
+  redrawThemedCharts();
+});
+
+// ---------------------------------------------------------------------
+// Ocultar valores (privacidade): borra os numeros da tela sob demanda
+// ---------------------------------------------------------------------
+
+function applyHideValues(hidden) {
+  document.body.classList.toggle("values-hidden", hidden);
+  const btn = document.getElementById("btnHideValues");
+  if (btn) { btn.textContent = hidden ? "🙈" : "👁️"; btn.title = hidden ? "Mostrar valores" : "Ocultar valores"; }
+}
+(function initHideValues() {
+  let hidden = false;
+  try { hidden = localStorage.getItem("valuesHidden") === "1"; } catch (e) {}
+  applyHideValues(hidden);
+})();
+document.getElementById("btnHideValues")?.addEventListener("click", () => {
+  const hidden = !document.body.classList.contains("values-hidden");
+  applyHideValues(hidden);
+  try { localStorage.setItem("valuesHidden", hidden ? "1" : "0"); } catch (e) {}
 });
 
 // ---------------------------------------------------------------------
@@ -2298,14 +2499,14 @@ function calcConfirm() {
   if (calcState.operator && !calcState.waitingForOperand) calcApplyOperator(calcState.operator);
   const finalValue = calcState.stored !== null ? calcState.stored : calcParseNumber(calcState.display);
   if (calcState.targetInput) {
-    calcState.targetInput.value = finalValue;
+    calcState.targetInput.value = toMaskedString(finalValue);
     calcState.targetInput.dispatchEvent(new Event("input", { bubbles: true }));
     calcState.targetInput.dispatchEvent(new Event("change", { bubbles: true }));
   }
   closeCalcPopup();
 }
 function openCalcPopup(triggerEl, targetInput) {
-  calcState.display = targetInput.value ? calcFormatNumber(Number(targetInput.value)) : "0";
+  calcState.display = targetInput.value ? calcFormatNumber(parseMaskedCurrency(targetInput.value)) : "0";
   calcState.stored = null; calcState.operator = null; calcState.waitingForOperand = false;
   calcState.targetInput = targetInput;
   calcRender();
@@ -2349,7 +2550,14 @@ document.getElementById("calcPopup")?.addEventListener("click", (e) => {
 // ---------------------------------------------------------------------
 
 (async function init() {
+  styleSelectAsCustomDropdown("filterPeriodo");
+  styleSelectAsCustomDropdown("filterStatus");
+  styleSelectAsCustomDropdown("repStatus");
   try { await refreshLookups(); }
   catch (e) { showToast("Não foi possível conectar ao servidor local: " + e.message, true); }
-  loadDashboard();
+  const validTabs = ["dashboard", "lancamentos", "contatos", "relatorios", "configuracoes"];
+  let savedTab = "dashboard";
+  try { savedTab = localStorage.getItem("activeTab") || "dashboard"; } catch (e) {}
+  if (!validTabs.includes(savedTab)) savedTab = "dashboard";
+  switchTab(savedTab);
 })();

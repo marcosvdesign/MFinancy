@@ -1260,7 +1260,7 @@ export async function dashboardData(profileId?: string | null, year?: number, mo
 
   const mesesPt = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
   const comparativoMensal = [];
-  for (let i = 5; i >= 0; i--) {
+  for (let i = 2; i >= 0; i--) {
     const ref = addMonthsYM(y, m, -i);
     const [mStart, mEnd] = monthBounds(ref.year, ref.month);
     const r = await sumRealizado("recebimento", mStart, mEnd, accountIds);

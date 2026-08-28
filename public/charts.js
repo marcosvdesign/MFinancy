@@ -204,7 +204,9 @@ function drawHatchedFlowChart(canvas, data) {
   }
   const greenHatch = hatchPattern(greenColor);
   const redHatch = hatchPattern(redColor);
+  const primaryColor = themeColor("--primary", "#5e8a2f");
 
+  const points = [];
   data.forEach((d, i) => {
     const groupX = padding.left + groupWidth * i + groupWidth / 2;
     const previstoRec = d.previstoReceitas != null ? d.previstoReceitas : d.receitas;
@@ -245,5 +247,55 @@ function drawHatchedFlowChart(canvas, data) {
     ctx.font = "11px Segoe UI, sans-serif";
     ctx.textAlign = "center";
     ctx.fillText(d.label, groupX, height - 6);
+
+    const saldo = realizadoRec - realizadoDesp;
+    const hSaldo = Math.max(-halfH, Math.min(halfH, (saldo / niceMax) * halfH));
+    points.push({ x: groupX, y: midY - hSaldo, label: d.label, saldo });
   });
+
+  // Linha de tendencia (saldo do periodo), com um ponto marcado por mes.
+  ctx.strokeStyle = primaryColor;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  points.forEach((p, i) => { if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y); });
+  ctx.stroke();
+  points.forEach((p) => {
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+    ctx.fillStyle = primaryColor;
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = themeColor("--surface", "#fff");
+    ctx.stroke();
+  });
+
+  // Metadados guardados no proprio canvas pra permitir tooltip por mouseover.
+  canvas._chartPoints = points;
+}
+
+/** Liga um tooltip (mostrando o saldo do mes) que segue o mouse sobre o
+ * grafico, usando os pontos calculados no ultimo desenho do canvas. */
+function attachChartTooltip(canvas) {
+  if (!canvas || canvas._tooltipAttached) return;
+  canvas._tooltipAttached = true;
+  const tooltip = document.getElementById("chartTooltip");
+  if (!tooltip) return;
+
+  canvas.addEventListener("mousemove", (e) => {
+    const points = canvas._chartPoints;
+    if (!points || !points.length) { tooltip.classList.add("hidden"); return; }
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    let nearest = points[0];
+    let bestDist = Math.abs(points[0].x - mouseX);
+    for (const p of points) {
+      const dist = Math.abs(p.x - mouseX);
+      if (dist < bestDist) { bestDist = dist; nearest = p; }
+    }
+    tooltip.textContent = `${nearest.label}: ${formatCurrency(nearest.saldo)}`;
+    tooltip.style.left = `${e.clientX + 12}px`;
+    tooltip.style.top = `${e.clientY + 12}px`;
+    tooltip.classList.remove("hidden");
+  });
+  canvas.addEventListener("mouseleave", () => tooltip.classList.add("hidden"));
 }

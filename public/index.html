@@ -3,12 +3,15 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-<title>Minhas Finanças</title>
+<title>MyFinance</title>
 <!-- Permite "Adicionar à Tela de Início" no iPad/iPhone com cara de app -->
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-<meta name="apple-mobile-web-app-title" content="Finanças" />
+<meta name="apple-mobile-web-app-title" content="MyFinance" />
 <meta name="theme-color" content="#141a2b" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="/style.css" />
 <script>
   (function () {
@@ -26,7 +29,7 @@
   <aside class="sidebar" id="sidebar">
     <div class="brand">
       <span class="brand-dot"></span>
-      <span class="brand-text">Minhas Finanças</span>
+      <span class="brand-text">MyFinance</span>
       <button type="button" id="btnToggleSidebar" class="sidebar-toggle-btn" title="Recolher/expandir menu">«</button>
     </div>
 
@@ -120,7 +123,7 @@
 
       <div class="grid-2">
         <div class="panel">
-          <h2>Fluxo de caixa do semestre</h2>
+          <h2>Fluxo de caixa</h2>
           <canvas id="chartComparativo" height="200"></canvas>
         </div>
         <div class="panel">
@@ -186,7 +189,7 @@
           </div>
         </div>
         <div class="panel lanc-dash-chart">
-          <div class="card-label">Fluxo de caixa do semestre</div>
+          <div class="card-label">Fluxo de caixa</div>
           <canvas id="lancChart" height="150"></canvas>
         </div>
         <div class="panel lanc-dash-conta">
@@ -449,7 +452,11 @@
                 já existente (ex: "Pessoal"). Contas bancárias e perfis nunca são criados/alterados
                 pela importação — só categorias, contatos, centros de custo e tags novos.
               </p>
-              <div class="form-row"><input type="file" id="importXlsxFile" accept=".xlsx" /></div>
+              <div class="form-row file-input-wrap">
+                <input type="file" id="importXlsxFile" accept=".xlsx" class="file-input-hidden" />
+                <button type="button" class="btn-secondary" id="importXlsxTrigger">Escolher arquivo</button>
+                <span id="importXlsxFileName" class="card-sub file-input-name">Nenhum arquivo selecionado</span>
+              </div>
               <div class="form-actions" style="justify-content:flex-start;">
                 <button class="btn-primary" id="btnImportXlsx">Importar</button>
               </div>
@@ -501,8 +508,27 @@
   </div>
 </div>
 
+<!-- Dialogo de confirmacao/prompt, substitui confirm()/prompt() nativos do navegador -->
+<div id="confirmDialogOverlay" class="modal-overlay confirm-dialog-overlay hidden">
+  <div class="modal confirm-dialog">
+    <div class="modal-body">
+      <p id="confirmDialogMessage" class="confirm-dialog-message"></p>
+      <div class="form-row hidden" id="confirmDialogPromptWrap">
+        <input type="text" id="confirmDialogPromptInput" />
+      </div>
+      <div class="form-actions">
+        <button class="btn-secondary" id="confirmDialogCancel">Cancelar</button>
+        <button class="btn-primary" id="confirmDialogOk">Confirmar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<button type="button" id="btnHideValues" class="hide-values-btn" title="Ocultar valores">👁️</button>
+
 <div id="toast" class="toast hidden"></div>
 <div id="rowActionMenu" class="row-menu-dropdown hidden"></div>
+<div id="chartTooltip" class="chart-tooltip hidden"></div>
 
 <div id="calcPopup" class="calc-popup hidden">
   <div class="calc-display" id="calcDisplay">0</div>
