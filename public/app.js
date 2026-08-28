@@ -1296,6 +1296,36 @@ document.getElementById("btnExportCsv").addEventListener("click", () => {
   const params = { start: document.getElementById("exportStart").value, end: document.getElementById("exportEnd").value, format: "csv" };
   window.location.href = "/api/export?" + qs(params);
 });
+document.getElementById("btnExportXlsx")?.addEventListener("click", () => {
+  const params = { start: document.getElementById("exportStart").value, end: document.getElementById("exportEnd").value };
+  window.location.href = "/api/export/xlsx?" + qs(params);
+});
+
+// ---- Importar planilha (.xlsx) ----
+
+document.getElementById("btnImportXlsx")?.addEventListener("click", async () => {
+  const input = document.getElementById("importXlsxFile");
+  const resultEl = document.getElementById("importXlsxResult");
+  if (!input.files || !input.files[0]) return showToast("Escolha um arquivo .xlsx primeiro.", true);
+  const formData = new FormData();
+  formData.append("file", input.files[0]);
+  resultEl.innerHTML = `<div class="card-sub" style="margin-top:10px;">Importando...</div>`;
+  try {
+    const res = await fetch("/api/import/xlsx", { method: "POST", body: formData });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Erro ao importar.");
+    const errorsHtml = data.errors && data.errors.length
+      ? `<div class="card-sub" style="margin-top:8px;">Linhas com problema:<br/>${data.errors.slice(0, 15).map((e) => `Linha ${e.row}: ${escapeHtml(e.reason)}`).join("<br/>")}${data.errors.length > 15 ? `<br/>… e mais ${data.errors.length - 15}.` : ""}</div>`
+      : "";
+    resultEl.innerHTML = `<div class="card-sub" style="margin-top:10px;"><b class="positive">${data.imported} lançamento(s) importado(s).</b> ${data.errors.length} erro(s).</div>${errorsHtml}`;
+    showToast(`Importação concluída: ${data.imported} lançamento(s).`);
+    await refreshLookups();
+    if (state.tab === "dashboard") loadDashboard();
+  } catch (e) {
+    resultEl.innerHTML = "";
+    showToast(e.message, true);
+  }
+});
 
 // ---- Excluir dados ----
 

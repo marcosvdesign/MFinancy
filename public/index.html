@@ -360,11 +360,28 @@
                 <div class="form-row"><label>Data inicial</label><input type="date" id="exportStart" /></div>
                 <div class="form-row"><label>Data final</label><input type="date" id="exportEnd" /></div>
               </div>
-              <div class="form-actions" style="justify-content:flex-start; gap:12px;">
+              <div class="form-actions" style="justify-content:flex-start; gap:12px; flex-wrap:wrap;">
                 <button class="btn-primary" id="btnExportJson">Exportar JSON</button>
                 <button class="btn-secondary" id="btnExportCsv">Exportar CSV</button>
+                <button class="btn-secondary" id="btnExportXlsx">Exportar Planilha (.xlsx)</button>
               </div>
               <p class="card-sub">Deixe as datas em branco para exportar tudo. O arquivo é salvo pelo seu navegador (pasta de Downloads).</p>
+            </div>
+
+            <div class="panel" style="max-width:480px; margin-top:16px;">
+              <h2>Importar planilha (.xlsx)</h2>
+              <p class="card-sub" style="margin-top:-6px;">
+                Aceita o layout de backup do Zenply (colunas: Tipo de Lançamento, Data Pagamento,
+                Data Competência, Descrição, Valor, Categoria, Recebido de/Pago a, Pago, Detalhes,
+                Conta, Centro de Custo, Tags). A coluna "Conta" deve ser o nome de um <b>perfil</b>
+                já existente (ex: "Pessoal"). Contas bancárias e perfis nunca são criados/alterados
+                pela importação — só categorias, contatos, centros de custo e tags novos.
+              </p>
+              <div class="form-row"><input type="file" id="importXlsxFile" accept=".xlsx" /></div>
+              <div class="form-actions" style="justify-content:flex-start;">
+                <button class="btn-primary" id="btnImportXlsx">Importar</button>
+              </div>
+              <div id="importXlsxResult"></div>
             </div>
           </div>
 

@@ -1483,3 +1483,252 @@ export async function exportCsv(filters: TransactionFilters): Promise<string> {
   }
   return "﻿" + lines.join("\r\n");
 }
+
+// ---------------------------------------------------------------------
+// Importar/Exportar planilha (layout compatível com backup do Zenply)
+// ---------------------------------------------------------------------
+//
+// Colunas esperadas (nomes exatos, sem acento, iguais ao export do
+// Zenply): Tipo de Lancamento, Data Pagamento, Data Competencia,
+// Descricao, Valor, Categoria, Recebido de/Pago a, Pago, Detalhes, Conta
+// (= nome do PERFIL, ex: "Pessoal"/"Profissional"), Numero do Documento,
+// Forma de Pagamento, Centro de Custo, Tags.
+//
+// "Conta" na planilha do Zenply corresponde ao nosso PERFIL, nao a uma
+// conta bancaria especifica (o Zenply nao tem esse nivel). Por isso a
+// importacao usa a conta bancaria JA EXISTENTE de cada perfil -- nunca
+// cria nem altera contas ou perfis.
+
+function normalizeText(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+const TIPO_TO_GROUP: Record<string, Group> = {
+  recebimentos: "recebimento",
+  recebimento: "recebimento",
+  "despesas fixas": "despesa_fixa",
+  "despesa fixa": "despesa_fixa",
+  "despesas variaveis": "despesa_variavel",
+  "despesa variavel": "despesa_variavel",
+  pessoas: "pessoas",
+  impostos: "impostos",
+};
+
+function mapTipoToGroup(tipo: string): Group | null {
+  return TIPO_TO_GROUP[normalizeText(tipo)] || null;
+}
+
+function excelDateToIso(d: Date): string {
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+}
+
+async function findOrCreateCategory(name: string, group: string): Promise<string> {
+  const trimmed = name.trim();
+  const { rows } = await sql.query(`SELECT id FROM categories WHERE lower(name) = lower($1) AND "group" = $2 LIMIT 1`, [trimmed, group]);
+  if (rows[0]) return rows[0].id;
+  const id = newId();
+  await sql.query(`INSERT INTO categories (id, name, "group", color) VALUES ($1,$2,$3,'#546e7a')`, [id, trimmed, group]);
+  return id;
+}
+
+async function findOrCreateContact(name: string): Promise<string> {
+  const trimmed = name.trim();
+  const { rows } = await sql.query(`SELECT id FROM contacts WHERE lower(name) = lower($1) LIMIT 1`, [trimmed]);
+  if (rows[0]) return rows[0].id;
+  const id = newId();
+  await sql.query(`INSERT INTO contacts (id, name, notes) VALUES ($1,$2,'')`, [id, trimmed]);
+  return id;
+}
+
+async function findOrCreateCostCenter(name: string): Promise<string> {
+  const trimmed = name.trim();
+  const { rows } = await sql.query(`SELECT id FROM cost_centers WHERE lower(name) = lower($1) LIMIT 1`, [trimmed]);
+  if (rows[0]) return rows[0].id;
+  const id = newId();
+  await sql.query(`INSERT INTO cost_centers (id, name) VALUES ($1,$2)`, [id, trimmed]);
+  return id;
+}
+
+async function findOrCreateTag(name: string): Promise<string> {
+  const trimmed = name.trim();
+  const { rows } = await sql.query(`SELECT id FROM tags WHERE lower(name) = lower($1) LIMIT 1`, [trimmed]);
+  if (rows[0]) return rows[0].id;
+  const id = newId();
+  await sql.query(`INSERT INTO tags (id, name, color) VALUES ($1,$2,'#78909c')`, [id, trimmed]);
+  return id;
+}
+
+export interface ZenplyImportRow {
+  "Tipo de Lancamento"?: string;
+  "Data Pagamento"?: string | number | Date;
+  "Data Competencia"?: string | number | Date;
+  Descricao?: string;
+  Valor?: number | string;
+  Categoria?: string;
+  "Recebido de/Pago a"?: string;
+  Pago?: string;
+  Detalhes?: string;
+  Conta?: string;
+  "Numero do Documento"?: string;
+  "Forma de Pagamento"?: string;
+  "Centro de Custo"?: string;
+  Tags?: string;
+}
+
+export interface ImportSummary {
+  imported: number;
+  skipped: number;
+  errors: { row: number; reason: string }[];
+}
+
+function toIsoDate(value: string | number | Date | undefined): string | null {
+  if (!value) return null;
+  if (value instanceof Date) return excelDateToIso(value);
+  const s = String(value).trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  // tenta DD/MM/AAAA
+  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (m) return `${m[3]}-${pad(Number(m[1]))}-${pad(Number(m[2]))}`;
+  return null;
+}
+
+/** Importa linhas ja parseadas de uma planilha no layout do Zenply.
+ * NUNCA cria ou altera perfis/contas -- so usa a conta bancaria ja
+ * existente de cada perfil. Cria categorias/contatos/centros de
+ * custo/tags que ainda nao existirem (por nome). */
+export async function importZenplyRows(rows: ZenplyImportRow[]): Promise<ImportSummary> {
+  const profiles = await listProfiles();
+  const profileByName: Record<string, string> = {};
+  for (const p of profiles) profileByName[normalizeText(p.name)] = p.id;
+
+  const accountByProfile: Record<string, string> = {};
+  for (const p of profiles) {
+    const { rows: accRows } = await sql.query(`SELECT id FROM accounts WHERE profile_id = $1 ORDER BY name LIMIT 1`, [p.id]);
+    if (accRows[0]) accountByProfile[p.id] = accRows[0].id;
+  }
+
+  let imported = 0;
+  const errors: { row: number; reason: string }[] = [];
+
+  for (let i = 0; i < rows.length; i++) {
+    const r = rows[i];
+    const rowNum = i + 2; // +1 cabecalho, +1 indice 1-based
+    try {
+      const descricao = (r.Descricao || "").toString().trim();
+      if (!descricao && (r.Valor === undefined || r.Valor === null || r.Valor === "")) continue; // linha vazia
+
+      const group = r["Tipo de Lancamento"] ? mapTipoToGroup(r["Tipo de Lancamento"]) : null;
+      if (!group) { errors.push({ row: rowNum, reason: `Tipo de lançamento não reconhecido: "${r["Tipo de Lancamento"] || ""}"` }); continue; }
+
+      const conta = (r.Conta || "").toString();
+      const profileId = profileByName[normalizeText(conta)];
+      if (!profileId) { errors.push({ row: rowNum, reason: `Perfil não encontrado para "Conta" = "${conta}"` }); continue; }
+      const accountId = accountByProfile[profileId];
+      if (!accountId) { errors.push({ row: rowNum, reason: `O perfil "${conta}" não tem nenhuma conta bancária cadastrada` }); continue; }
+
+      const dueDate = toIsoDate(r["Data Competencia"]) || toIsoDate(r["Data Pagamento"]);
+      if (!dueDate) { errors.push({ row: rowNum, reason: "Sem data de pagamento nem de competência" }); continue; }
+
+      const valor = round2(Number(r.Valor));
+      if (!Number.isFinite(valor)) { errors.push({ row: rowNum, reason: `Valor inválido: "${r.Valor}"` }); continue; }
+
+      const isPago = r.Pago ? normalizeText(r.Pago) === "sim" : false;
+      const paidDate = isPago ? toIsoDate(r["Data Pagamento"]) || dueDate : null;
+
+      const categoryId = r.Categoria ? await findOrCreateCategory(String(r.Categoria), group) : null;
+      const contactId = r["Recebido de/Pago a"] ? await findOrCreateContact(String(r["Recebido de/Pago a"])) : null;
+      const costCenterId = r["Centro de Custo"] ? await findOrCreateCostCenter(String(r["Centro de Custo"])) : null;
+      const tagIds: string[] = [];
+      if (r.Tags) {
+        for (const tagName of String(r.Tags).split(",").map((s) => s.trim()).filter(Boolean)) {
+          tagIds.push(await findOrCreateTag(tagName));
+        }
+      }
+
+      const notesParts = [
+        r.Detalhes ? String(r.Detalhes) : null,
+        r["Numero do Documento"] ? `Nº doc: ${r["Numero do Documento"]}` : null,
+        r["Forma de Pagamento"] ? `Pagamento: ${r["Forma de Pagamento"]}` : null,
+      ].filter(Boolean);
+
+      await insertTransactionRow({
+        id: newId(),
+        description: descricao || "(sem descrição)",
+        amount: valor,
+        group,
+        account_id: accountId,
+        category_id: categoryId,
+        contact_id: contactId,
+        cost_center_id: costCenterId,
+        tag_ids: tagIds,
+        notes: notesParts.join(" · "),
+        status: isPago ? "pago" : "pendente",
+        due_date: dueDate,
+        paid_date: paidDate,
+        installment_group_id: null,
+        installment_number: null,
+        installment_total: null,
+        recurrence_group_id: null,
+        recurrence_frequency: null,
+      });
+      imported++;
+    } catch (err: any) {
+      errors.push({ row: rowNum, reason: err?.message || "Erro desconhecido" });
+    }
+  }
+
+  await log("created", "transaction", `Importação de planilha: ${imported} lançamento(s) criado(s), ${errors.length} erro(s)`);
+  return { imported, skipped: rows.length - imported - errors.length, errors };
+}
+
+/** Gera as linhas (mesmo layout do backup do Zenply) para exportar como
+ * planilha. A montagem do arquivo .xlsx em si acontece na rota da API. */
+export async function buildZenplyExportRows(filters: TransactionFilters) {
+  const items = await listTransactions(filters);
+  const [categories, contacts, costCenters, tags, accounts, profiles] = await Promise.all([
+    listCategories(),
+    listContacts(),
+    listCostCenters(),
+    listTags(),
+    listAccountsBasic(),
+    listProfiles(),
+  ]);
+  const catById: Record<string, string> = Object.fromEntries(categories.map((c) => [c.id, c.name]));
+  const contactById: Record<string, string> = Object.fromEntries(contacts.map((c) => [c.id, c.name]));
+  const ccById: Record<string, string> = Object.fromEntries(costCenters.map((c) => [c.id, c.name]));
+  const tagById: Record<string, string> = Object.fromEntries(tags.map((t) => [t.id, t.name]));
+  const accById: Record<string, Account> = Object.fromEntries(accounts.map((a) => [a.id, a]));
+  const profileNameById: Record<string, string> = Object.fromEntries(profiles.map((p) => [p.id, p.name]));
+
+  const TIPO_LABEL: Record<string, string> = {
+    recebimento: "Recebimentos",
+    despesa_fixa: "Despesas fixas",
+    despesa_variavel: "Despesas variaveis",
+    pessoas: "Pessoas",
+    impostos: "Impostos",
+  };
+
+  return items.map((t) => {
+    const acc = accById[t.account_id];
+    return {
+      "Tipo de Lancamento": TIPO_LABEL[t.group] || t.group,
+      "Data Pagamento": t.paid_date || "",
+      "Data Competencia": t.due_date,
+      Descricao: t.description,
+      Valor: t.amount,
+      Categoria: t.category_id ? catById[t.category_id] || "" : "",
+      "Recebido de/Pago a": t.contact_id ? contactById[t.contact_id] || "" : "",
+      Pago: t.status === "pago" ? "Sim" : "Não",
+      Detalhes: t.notes || "",
+      Conta: acc ? profileNameById[acc.profile_id] || "" : "",
+      "Numero do Documento": "",
+      "Forma de Pagamento": "",
+      "Centro de Custo": t.cost_center_id ? ccById[t.cost_center_id] || "" : "",
+      Tags: (t.tag_ids || []).map((id) => tagById[id]).filter(Boolean).join(", "),
+    };
+  });
+}
