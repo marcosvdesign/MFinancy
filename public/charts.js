@@ -36,8 +36,8 @@ function drawDonut(canvas, percent, color) {
   ctx.clearRect(0, 0, width, height);
 
   const cx = width / 2, cy = height / 2;
-  const radius = Math.min(width, height) / 2 - 10;
-  const lineWidth = 14;
+  const radius = Math.min(width, height) / 2 - 8;
+  const lineWidth = 11;
   const pct = Math.max(0, Math.min(100, percent)) / 100;
 
   ctx.lineCap = "round";
@@ -57,7 +57,7 @@ function drawDonut(canvas, percent, color) {
   }
 
   ctx.fillStyle = themeColor("--text", "#1c2333");
-  ctx.font = "bold 20px Segoe UI, sans-serif";
+  ctx.font = "bold 16px Segoe UI, sans-serif";
   ctx.textAlign = "center";
   ctx.textBaseline = "middle";
   ctx.fillText(Math.round(percent) + "%", cx, cy);
@@ -129,7 +129,9 @@ function drawGroupedBarChart(canvas, data) {
  * acima de uma linha central R$0 e negativas (despesas) abaixo, com
  * hachura representando o total previsto e um preenchimento solido
  * proporcional ao quanto ja foi pago/recebido (realizado). */
-function drawHatchedFlowChart(canvas, data) {
+function drawHatchedFlowChart(canvas, data, hover) {
+  canvas._lastFlowData = data;
+  const barAlpha = hover && hover.active ? 0.28 : 1;
   const { ctx, width, height } = setupCanvasScale(canvas);
   ctx.clearRect(0, 0, width, height);
 
@@ -158,6 +160,9 @@ function drawHatchedFlowChart(canvas, data) {
   );
   const niceMax = maxVal * 1.15;
   const halfH = chartH / 2;
+
+  ctx.save();
+  ctx.globalAlpha = barAlpha;
 
   // Linhas de grade + linha central R$0
   ctx.strokeStyle = borderColor;
@@ -253,15 +258,29 @@ function drawHatchedFlowChart(canvas, data) {
     points.push({ x: groupX, y: midY - hSaldo, label: d.label, saldo });
   });
 
-  // Linha de tendencia (saldo do periodo), com um ponto marcado por mes.
+  ctx.restore(); // fecha o globalAlpha reduzido do hover — barras/hachuras/grade ficam esmaecidas, a linha de tendencia abaixo nao.
+
+  // Linha de tendencia (saldo do periodo), com um ponto marcado por mes —
+  // fica em enfase (mais grossa) quando o mouse esta sobre o grafico.
+  const hoverActive = hover && hover.active;
   ctx.strokeStyle = primaryColor;
-  ctx.lineWidth = 2;
+  ctx.lineWidth = hoverActive ? 3 : 2;
   ctx.beginPath();
   points.forEach((p, i) => { if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y); });
   ctx.stroke();
-  points.forEach((p) => {
+  points.forEach((p, i) => {
+    const isHovered = hoverActive && hover.pointIndex === i;
+    const radius = isHovered ? 7 : hoverActive ? 4.5 : 4;
+    if (isHovered) {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, radius + 5, 0, Math.PI * 2);
+      ctx.fillStyle = primaryColor;
+      ctx.globalAlpha = 0.22;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
     ctx.beginPath();
-    ctx.arc(p.x, p.y, 4, 0, Math.PI * 2);
+    ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
     ctx.fillStyle = primaryColor;
     ctx.fill();
     ctx.lineWidth = 2;
@@ -269,12 +288,13 @@ function drawHatchedFlowChart(canvas, data) {
     ctx.stroke();
   });
 
-  // Metadados guardados no proprio canvas pra permitir tooltip por mouseover.
+  // Metadados guardados no proprio canvas pra permitir tooltip/hover por mouseover.
   canvas._chartPoints = points;
 }
 
 /** Liga um tooltip (mostrando o saldo do mes) que segue o mouse sobre o
- * grafico, usando os pontos calculados no ultimo desenho do canvas. */
+ * grafico, e a animacao de enfase (esmaece as barras, destaca a linha de
+ * tendencia e o ponto mais proximo do cursor). */
 function attachChartTooltip(canvas) {
   if (!canvas || canvas._tooltipAttached) return;
   canvas._tooltipAttached = true;
@@ -286,16 +306,21 @@ function attachChartTooltip(canvas) {
     if (!points || !points.length) { tooltip.classList.add("hidden"); return; }
     const rect = canvas.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
-    let nearest = points[0];
+    let nearestIdx = 0;
     let bestDist = Math.abs(points[0].x - mouseX);
-    for (const p of points) {
+    points.forEach((p, i) => {
       const dist = Math.abs(p.x - mouseX);
-      if (dist < bestDist) { bestDist = dist; nearest = p; }
-    }
+      if (dist < bestDist) { bestDist = dist; nearestIdx = i; }
+    });
+    const nearest = points[nearestIdx];
     tooltip.textContent = `${nearest.label}: ${formatCurrency(nearest.saldo)}`;
     tooltip.style.left = `${e.clientX + 12}px`;
     tooltip.style.top = `${e.clientY + 12}px`;
     tooltip.classList.remove("hidden");
+    if (canvas._lastFlowData) drawHatchedFlowChart(canvas, canvas._lastFlowData, { active: true, pointIndex: nearestIdx });
   });
-  canvas.addEventListener("mouseleave", () => tooltip.classList.add("hidden"));
+  canvas.addEventListener("mouseleave", () => {
+    tooltip.classList.add("hidden");
+    if (canvas._lastFlowData) drawHatchedFlowChart(canvas, canvas._lastFlowData, null);
+  });
 }

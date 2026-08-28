@@ -166,6 +166,7 @@ document.getElementById("profileSelectTrigger").addEventListener("click", (e) =>
   const wrap = document.getElementById("profileSelectWrap");
   const willOpen = document.getElementById("profileSelectMenu").classList.contains("hidden");
   closeCustomSelect();
+  closeGlobalDropdown();
   if (willOpen) { wrap.classList.add("open"); document.getElementById("profileSelectMenu").classList.remove("hidden"); }
 });
 document.addEventListener("click", closeCustomSelect);
@@ -173,7 +174,10 @@ document.addEventListener("click", closeCustomSelect);
 /** Converte um <select> nativo num dropdown com a estilizacao do app,
  * mantendo o <select> original (oculto) como fonte da verdade: o valor e
  * os eventos "change" continuam funcionando normalmente pra quem ja
- * escuta o elemento original. */
+ * escuta o elemento original. A lista de opcoes e renderizada num
+ * container global fixo (fora de qualquer painel com glassmorphism), pra
+ * nunca ficar presa atras de outro elemento por causa de stacking context
+ * criado pelo backdrop-filter. */
 function styleSelectAsCustomDropdown(selectId) {
   const select = document.getElementById(selectId);
   if (!select || select.dataset.styled) return;
@@ -189,16 +193,14 @@ function styleSelectAsCustomDropdown(selectId) {
   trigger.type = "button";
   trigger.className = "custom-select-trigger light-trigger";
   trigger.innerHTML = `<span class="select-label-text"></span><span class="chevron">▾</span>`;
-  const menu = document.createElement("div");
-  menu.className = "custom-select-menu hidden light-menu";
   wrap.appendChild(trigger);
-  wrap.appendChild(menu);
 
   function syncLabel() {
     const opt = select.options[select.selectedIndex];
     trigger.querySelector(".select-label-text").textContent = opt ? opt.textContent : "";
   }
-  function renderMenu() {
+  function openMenu() {
+    const menu = document.getElementById("globalDropdownMenu");
     menu.innerHTML = Array.from(select.options).filter((opt) => !opt.classList.contains("hidden")).map((opt) => `
       <div class="custom-select-option ${opt.value === select.value ? "selected" : ""}" data-value="${opt.value}">
         <span>${escapeHtml(opt.textContent)}</span><span class="check">✓</span>
@@ -208,20 +210,48 @@ function styleSelectAsCustomDropdown(selectId) {
         e.stopPropagation();
         select.value = el.dataset.value;
         select.dispatchEvent(new Event("change", { bubbles: true }));
-        closeCustomSelect();
+        closeGlobalDropdown();
         syncLabel();
       });
     });
+    positionGlobalDropdown(trigger);
+    wrap.classList.add("open");
   }
   trigger.addEventListener("click", (e) => {
     e.stopPropagation();
-    const willOpen = menu.classList.contains("hidden");
+    const menu = document.getElementById("globalDropdownMenu");
+    const willOpen = menu.classList.contains("hidden") || menu._openedBy !== trigger;
+    closeGlobalDropdown();
     closeCustomSelect();
-    if (willOpen) { wrap.classList.add("open"); renderMenu(); menu.classList.remove("hidden"); }
+    if (willOpen) { menu._openedBy = trigger; openMenu(); }
   });
   select.addEventListener("change", syncLabel);
   syncLabel();
 }
+
+/** Container global de dropdown (position:fixed), usado por qualquer
+ * dropdown estilizado que precise escapar do stacking context de paineis
+ * com glassmorphism (backdrop-filter). */
+function positionGlobalDropdown(triggerEl) {
+  const menu = document.getElementById("globalDropdownMenu");
+  const rect = triggerEl.getBoundingClientRect();
+  const menuWidth = Math.max(rect.width, 170);
+  menu.style.minWidth = `${menuWidth}px`;
+  menu.style.top = `${rect.bottom + 6}px`;
+  let left = rect.left;
+  if (left + menuWidth > window.innerWidth - 8) left = window.innerWidth - menuWidth - 8;
+  menu.style.left = `${Math.max(8, left)}px`;
+  menu.classList.remove("hidden");
+}
+function closeGlobalDropdown() {
+  const menu = document.getElementById("globalDropdownMenu");
+  if (!menu) return;
+  menu.classList.add("hidden");
+  if (menu._openedBy) menu._openedBy.closest(".custom-select")?.classList.remove("open");
+  menu._openedBy = null;
+}
+document.addEventListener("click", closeGlobalDropdown);
+document.addEventListener("scroll", closeGlobalDropdown, true);
 
 // ---------------------------------------------------------------------
 // Dialogo de confirmacao/prompt (substitui confirm()/prompt() nativos do
@@ -279,6 +309,44 @@ function appPrompt(message, defaultValue) {
     function onOverlay(e) { if (e.target === overlay) cleanup(null); }
     function onKey(e) { if (e.key === "Enter") { e.preventDefault(); onOk(); } else if (e.key === "Escape") onCancel(); }
     input.addEventListener("keydown", onKey);
+    okBtn.addEventListener("click", onOk);
+    cancelBtn.addEventListener("click", onCancel);
+    overlay.addEventListener("click", onOverlay);
+  });
+}
+
+/** Variante do appPrompt que pede uma data, usando o calendario padrao do
+ * app em vez de um <input type="date"> nativo cru. */
+function appPromptDate(message, defaultValue) {
+  return new Promise((resolve) => {
+    const overlay = document.getElementById("confirmDialogOverlay");
+    document.getElementById("confirmDialogMessage").textContent = message;
+    const wrap = document.getElementById("confirmDialogPromptWrap");
+    const textInput = document.getElementById("confirmDialogPromptInput");
+    const dateInput = document.getElementById("confirmDialogPromptDate");
+    const dateWrap = dateInput.closest(".custom-date-wrap");
+    wrap.classList.remove("hidden");
+    textInput.classList.add("hidden");
+    if (dateWrap) dateWrap.classList.remove("hidden");
+    dateInput.value = defaultValue || "";
+    dateInput.dispatchEvent(new Event("change"));
+    const okBtn = document.getElementById("confirmDialogOk");
+    const cancelBtn = document.getElementById("confirmDialogCancel");
+    okBtn.textContent = "OK";
+    overlay.classList.remove("hidden");
+    function cleanup(result) {
+      overlay.classList.add("hidden");
+      wrap.classList.add("hidden");
+      textInput.classList.remove("hidden");
+      if (dateWrap) dateWrap.classList.add("hidden");
+      okBtn.removeEventListener("click", onOk);
+      cancelBtn.removeEventListener("click", onCancel);
+      overlay.removeEventListener("click", onOverlay);
+      resolve(result);
+    }
+    function onOk() { cleanup(dateInput.value || null); }
+    function onCancel() { cleanup(null); }
+    function onOverlay(e) { if (e.target === overlay) cleanup(null); }
     okBtn.addEventListener("click", onOk);
     cancelBtn.addEventListener("click", onCancel);
     overlay.addEventListener("click", onOverlay);
@@ -632,6 +700,7 @@ document.getElementById("lancAccountSelectTrigger")?.addEventListener("click", (
   const menu = document.getElementById("lancAccountSelectMenu");
   const willOpen = menu.classList.contains("hidden");
   closeCustomSelect();
+  closeGlobalDropdown();
   if (willOpen) { wrap.classList.add("open"); menu.classList.remove("hidden"); }
 });
 
@@ -656,8 +725,9 @@ async function loadLancDashboard() {
   document.getElementById("lancProgressReceita").style.width = Math.max(0, Math.min(100, data.percent_receitas)) + "%";
   document.getElementById("lancProgressDespesa").style.width = Math.max(0, Math.min(100, data.percent_despesas)) + "%";
 
-  drawHatchedFlowChart(document.getElementById("lancChart"), data.comparativo_mensal);
-  attachChartTooltip(document.getElementById("lancChart"), data.comparativo_mensal);
+  const lancChartData = (data.comparativo_mensal || []).slice(1, 4); // 2 meses atras + atual
+  drawHatchedFlowChart(document.getElementById("lancChart"), lancChartData);
+  attachChartTooltip(document.getElementById("lancChart"), lancChartData);
 
   const contaAtual = state.lancamentosAccountId ? data.saldo_por_conta.find((a) => a.id === state.lancamentosAccountId) : null;
   const saldo = contaAtual ? contaAtual.balance : data.saldo_atual;
@@ -674,11 +744,19 @@ async function loadLancDashboard() {
   setLancAccountOptions(data.saldo_por_conta);
 }
 
+/** Alterna a visibilidade de um campo de data (considerando que ele pode
+ * ter sido convertido pelo attachCustomDatePicker, e nesse caso quem
+ * precisa esconder/mostrar e o wrapper visivel, nao o <input> oculto). */
+function toggleDateFieldHidden(id, hidden) {
+  const el = document.getElementById(id);
+  (el.closest(".custom-date-wrap") || el).classList.toggle("hidden", hidden);
+}
+
 document.getElementById("filterPeriodo").addEventListener("change", (e) => {
   const custom = e.target.value === "custom";
-  document.getElementById("filterStart").classList.toggle("hidden", !custom);
+  toggleDateFieldHidden("filterStart", !custom);
   document.getElementById("filterAteLabel").classList.toggle("hidden", !custom);
-  document.getElementById("filterEnd").classList.toggle("hidden", !custom);
+  toggleDateFieldHidden("filterEnd", !custom);
 });
 
 function computePeriodRange(preset) {
@@ -782,7 +860,11 @@ async function loadTransactionsTable() {
     chk.addEventListener("change", () => handleTogglePago(chk, items));
   });
   body.querySelectorAll(".cell-date").forEach((cell) => {
-    cell.addEventListener("click", () => openDatePickerPopup(cell, items.find((i) => i.id === cell.dataset.id)));
+    cell.addEventListener("click", () => {
+      const t = items.find((i) => i.id === cell.dataset.id);
+      if (!t) return;
+      openDatePickerPopup(cell, t.due_date, (iso) => { if (iso !== t.due_date) commitTransactionField(t, "due_date", iso); });
+    });
   });
   body.querySelectorAll(".cell-desc").forEach((cell) => {
     cell.addEventListener("click", () => startInlineTextEdit(cell, items.find((i) => i.id === cell.dataset.id), "description"));
@@ -1099,22 +1181,31 @@ function buildPlainCalendarHtml(year, month, selectedDay) {
   return html;
 }
 
+/** Calendario padrao do app (usado em toda parte onde se escolhe uma data):
+ * cabecalho com mes e ano clicaveis (cada um abre um seletor proprio),
+ * setas de navegacao e grade de dias. */
 let datePickerState = null;
-function openDatePickerPopup(triggerEl, t) {
-  if (!t) return;
-  const [y, m] = t.due_date.split("-").map(Number);
-  datePickerState = { year: y, month: m, t, triggerEl };
+function openDatePickerPopup(triggerEl, isoValue, onSelect) {
+  const today = todayIso();
+  const [y, m, d] = (isoValue || today).split("-").map(Number);
+  datePickerState = { year: y, month: m, selectedIso: isoValue || null, triggerEl, onSelect };
   renderDatePicker();
 }
 function renderDatePicker() {
-  const { year, month, t, triggerEl } = datePickerState;
-  const [ty, tm, td] = t.due_date.split("-").map(Number);
-  const selectedDay = ty === year && tm === month ? td : null;
+  const { year, month, selectedIso, triggerEl } = datePickerState;
+  let selectedDay = null;
+  if (selectedIso) {
+    const [sy, sm, sd] = selectedIso.split("-").map(Number);
+    if (sy === year && sm === month) selectedDay = sd;
+  }
   const popup = document.getElementById("datePickerPopup");
   popup.innerHTML = `
     <div class="date-picker-header">
       <button type="button" data-dp="prev">‹</button>
-      <span>${MESES[month - 1]} ${year}</span>
+      <span class="cal-month-year-group">
+        <span class="cal-month-clickable" data-dp="month">${MESES[month - 1]}</span>
+        <span class="cal-year-clickable" data-dp="year">${year}</span>
+      </span>
       <button type="button" data-dp="next">›</button>
     </div>
     ${buildPlainCalendarHtml(year, month, selectedDay)}
@@ -1131,20 +1222,140 @@ function renderDatePicker() {
     datePickerState.month++; if (datePickerState.month > 12) { datePickerState.month = 1; datePickerState.year++; }
     renderDatePicker();
   });
+  popup.querySelector('[data-dp="month"]').addEventListener("click", (e) => {
+    e.stopPropagation();
+    openMonthOnlyPicker(e.currentTarget, datePickerState.month, (mo) => { datePickerState.month = mo; renderDatePicker(); });
+  });
+  popup.querySelector('[data-dp="year"]').addEventListener("click", (e) => {
+    e.stopPropagation();
+    openYearOnlyPicker(e.currentTarget, datePickerState.year, (yr) => { datePickerState.year = yr; renderDatePicker(); });
+  });
   popup.querySelectorAll("td[data-day]").forEach((cellEl) => {
     cellEl.addEventListener("click", (e) => {
       e.stopPropagation();
       const day = parseInt(cellEl.dataset.day);
       const iso = `${datePickerState.year}-${jsPad(datePickerState.month)}-${jsPad(day)}`;
       closeDatePickerPopup();
-      if (iso !== t.due_date) commitTransactionField(t, "due_date", iso);
+      datePickerState.onSelect(iso);
     });
   });
 }
 function closeDatePickerPopup() { document.getElementById("datePickerPopup")?.classList.add("hidden"); }
 document.addEventListener("click", (e) => {
-  if (!e.target.closest("#datePickerPopup") && !e.target.closest(".cell-date")) closeDatePickerPopup();
+  if (!e.target.closest("#datePickerPopup") && !e.target.closest(".cell-date") && !e.target.closest(".custom-date-display")
+    && !e.target.closest("#monthOnlyPickerPopup") && !e.target.closest("#yearOnlyPickerPopup")) closeDatePickerPopup();
 });
+
+/** Sub-seletor de mes (grade de 12 meses), aberto ao clicar no nome do mes
+ * no cabecalho do calendario padrao. */
+let monthOnlyState = null;
+function openMonthOnlyPicker(triggerEl, currentMonth, onSelect) {
+  monthOnlyState = { currentMonth, onSelect };
+  const popup = document.getElementById("monthOnlyPickerPopup");
+  popup.innerHTML = `
+    <div class="picker-list" style="display:grid; grid-template-columns:repeat(3,1fr); gap:6px; max-height:none; margin-bottom:0;">
+      ${MESES.map((label, i) => `<div class="picker-item ${i + 1 === currentMonth ? "selected" : ""}" style="justify-content:center; text-align:center;" data-month="${i + 1}">${label.slice(0, 3)}</div>`).join("")}
+    </div>
+  `;
+  positionPopupNear(popup, triggerEl);
+  popup.classList.remove("hidden");
+  popup.querySelectorAll("[data-month]").forEach((el) => {
+    el.addEventListener("click", (e) => {
+      e.stopPropagation();
+      closeMonthOnlyPicker();
+      monthOnlyState.onSelect(parseInt(el.dataset.month));
+    });
+  });
+}
+function closeMonthOnlyPicker() { document.getElementById("monthOnlyPickerPopup")?.classList.add("hidden"); }
+document.addEventListener("click", (e) => {
+  if (!e.target.closest("#monthOnlyPickerPopup") && !e.target.closest(".cal-month-clickable")) closeMonthOnlyPicker();
+});
+
+/** Sub-seletor de ano (grade deslizante de 12 anos por vez), aberto ao
+ * clicar no ano no cabecalho do calendario padrao. */
+let yearOnlyState = null;
+function openYearOnlyPicker(triggerEl, currentYear, onSelect) {
+  yearOnlyState = { rangeStart: currentYear - 5, currentYear, onSelect };
+  renderYearOnlyPicker(triggerEl);
+}
+function renderYearOnlyPicker(triggerEl) {
+  const { rangeStart, currentYear } = yearOnlyState;
+  const years = Array.from({ length: 12 }, (_, i) => rangeStart + i);
+  const popup = document.getElementById("yearOnlyPickerPopup");
+  popup.innerHTML = `
+    <div class="date-picker-header">
+      <button type="button" data-yp="prev">‹</button>
+      <span>${years[0]} – ${years[years.length - 1]}</span>
+      <button type="button" data-yp="next">›</button>
+    </div>
+    <div class="picker-list" style="display:grid; grid-template-columns:repeat(3,1fr); gap:6px; max-height:none; margin-bottom:0;">
+      ${years.map((y) => `<div class="picker-item ${y === currentYear ? "selected" : ""}" style="justify-content:center; text-align:center;" data-year="${y}">${y}</div>`).join("")}
+    </div>
+  `;
+  positionPopupNear(popup, triggerEl);
+  popup.classList.remove("hidden");
+  popup.querySelector('[data-yp="prev"]').addEventListener("click", (e) => { e.stopPropagation(); yearOnlyState.rangeStart -= 12; renderYearOnlyPicker(triggerEl); });
+  popup.querySelector('[data-yp="next"]').addEventListener("click", (e) => { e.stopPropagation(); yearOnlyState.rangeStart += 12; renderYearOnlyPicker(triggerEl); });
+  popup.querySelectorAll("[data-year]").forEach((el) => {
+    el.addEventListener("click", (e) => {
+      e.stopPropagation();
+      closeYearOnlyPicker();
+      yearOnlyState.onSelect(parseInt(el.dataset.year));
+    });
+  });
+}
+function closeYearOnlyPicker() { document.getElementById("yearOnlyPickerPopup")?.classList.add("hidden"); }
+document.addEventListener("click", (e) => {
+  if (!e.target.closest("#yearOnlyPickerPopup") && !e.target.closest(".cal-year-clickable")) closeYearOnlyPicker();
+});
+
+/** Converte um <input type="date"> nativo num campo de texto com a
+ * estilizacao do app: mostra dd/mm/aaaa, abre o calendario padrao ao
+ * clicar, e tambem aceita digitacao manual nesse formato. O <input>
+ * original fica oculto e continua sendo a fonte da verdade (valor ISO). */
+function attachCustomDatePicker(inputId) {
+  const nativeInput = document.getElementById(inputId);
+  if (!nativeInput || nativeInput.dataset.dpStyled) return;
+  nativeInput.dataset.dpStyled = "1";
+  const wasHidden = nativeInput.classList.contains("hidden");
+  nativeInput.classList.remove("hidden");
+  nativeInput.classList.add("native-select-hidden");
+  const wrap = document.createElement("div");
+  wrap.className = "custom-date-wrap" + (wasHidden ? " hidden" : "");
+  nativeInput.parentNode.insertBefore(wrap, nativeInput);
+  wrap.appendChild(nativeInput);
+  const display = document.createElement("input");
+  display.type = "text";
+  display.className = "custom-date-display";
+  display.placeholder = "dd/mm/aaaa";
+  display.autocomplete = "off";
+  wrap.appendChild(display);
+
+  function syncDisplay() { display.value = nativeInput.value ? formatDateBR(nativeInput.value) : ""; }
+  function commitTyped() {
+    const raw = display.value.trim();
+    const match = raw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (match) {
+      const iso = `${match[3]}-${jsPad(parseInt(match[2]))}-${jsPad(parseInt(match[1]))}`;
+      nativeInput.value = iso;
+      nativeInput.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    syncDisplay();
+  }
+  display.addEventListener("blur", commitTyped);
+  display.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); display.blur(); } });
+  display.addEventListener("click", (e) => {
+    e.stopPropagation();
+    openDatePickerPopup(display, nativeInput.value || null, (iso) => {
+      nativeInput.value = iso;
+      nativeInput.dispatchEvent(new Event("change", { bubbles: true }));
+      syncDisplay();
+    });
+  });
+  nativeInput.addEventListener("change", syncDisplay);
+  syncDisplay();
+}
 
 // ---- Popup de escolha (contato / categoria), com busca e "+ novo" ----
 
@@ -1213,7 +1424,7 @@ async function handleTogglePago(checkbox, items) {
   const willPay = checkbox.checked;
   let paidDate = null;
   if (willPay && t.due_date < todayIso() && state.settings.prefs.confirm_paid_date) {
-    paidDate = await appPrompt("Confirme a data de pagamento (AAAA-MM-DD):", todayIso());
+    paidDate = await appPromptDate("Confirme a data de pagamento:", todayIso());
     if (paidDate === null) { checkbox.checked = false; return; }
   }
   try {
@@ -1540,7 +1751,7 @@ function transactionFormHtml(t, presetGroup) {
     </div>
 
     ${isEdit ? "" : `
-    <div class="form-row radio-group">
+    <div class="form-row segmented-control">
       <label><input type="radio" name="repeatMode" value="none" checked/> Único</label>
       <label><input type="radio" name="repeatMode" value="installments"/> Parcelado</label>
       <label><input type="radio" name="repeatMode" value="recurrence"/> Repetir</label>
@@ -1600,9 +1811,15 @@ function openTransactionModal(t, scope) {
   }
 
   if (!t) {
-    document.querySelectorAll('input[name="repeatMode"]').forEach((radio) => {
+    const repeatRadios = document.querySelectorAll('input[name="repeatMode"]');
+    function syncRadioChecked() {
+      repeatRadios.forEach((r) => r.closest("label")?.classList.toggle("radio-checked", r.checked));
+    }
+    syncRadioChecked();
+    repeatRadios.forEach((radio) => {
       radio.addEventListener("change", () => {
         if (!radio.checked) return;
+        syncRadioChecked();
         if (radio.value === "none") repeatConfig = null;
         updateRepeatSummary(radio.value);
       });
@@ -2392,7 +2609,7 @@ function redrawThemedCharts() {
     if (document.getElementById("chartComparativo")) drawHatchedFlowChart(document.getElementById("chartComparativo"), d1.comparativo_mensal);
   }
   const d2 = state.lastLancDashboardData;
-  if (d2 && document.getElementById("lancChart")) drawHatchedFlowChart(document.getElementById("lancChart"), d2.comparativo_mensal);
+  if (d2 && document.getElementById("lancChart")) drawHatchedFlowChart(document.getElementById("lancChart"), (d2.comparativo_mensal || []).slice(1, 4));
 }
 
 document.getElementById("btnToggleTheme")?.addEventListener("click", () => {
@@ -2429,19 +2646,17 @@ document.getElementById("btnHideValues")?.addEventListener("click", () => {
 
 (function initSidebar() {
   const sidebar = document.getElementById("sidebar");
-  const btn = document.getElementById("btnToggleSidebar");
   let collapsed = false;
   try { collapsed = localStorage.getItem("sidebarCollapsed") === "1"; } catch (e) {}
   sidebar.classList.toggle("collapsed", collapsed);
-  if (btn) btn.textContent = collapsed ? "»" : "«";
 })();
 
 document.getElementById("btnToggleSidebar")?.addEventListener("click", (e) => {
+  e.preventDefault();
   e.stopPropagation();
   const sidebar = document.getElementById("sidebar");
   const isCollapsed = sidebar.classList.toggle("collapsed");
   try { localStorage.setItem("sidebarCollapsed", isCollapsed ? "1" : "0"); } catch (err) {}
-  document.getElementById("btnToggleSidebar").textContent = isCollapsed ? "»" : "«";
 });
 
 // ---------------------------------------------------------------------
@@ -2553,6 +2768,16 @@ document.getElementById("calcPopup")?.addEventListener("click", (e) => {
   styleSelectAsCustomDropdown("filterPeriodo");
   styleSelectAsCustomDropdown("filterStatus");
   styleSelectAsCustomDropdown("repStatus");
+  attachCustomDatePicker("confirmDialogPromptDate");
+  attachCustomDatePicker("filterStart");
+  attachCustomDatePicker("filterEnd");
+  attachCustomDatePicker("repStart");
+  attachCustomDatePicker("repEnd");
+  attachCustomDatePicker("exportStart");
+  attachCustomDatePicker("exportEnd");
+  attachCustomDatePicker("logStart");
+  attachCustomDatePicker("logEnd");
+  document.getElementById("confirmDialogPromptDate").closest(".custom-date-wrap")?.classList.add("hidden");
   try { await refreshLookups(); }
   catch (e) { showToast("Não foi possível conectar ao servidor local: " + e.message, true); }
   const validTabs = ["dashboard", "lancamentos", "contatos", "relatorios", "configuracoes"];

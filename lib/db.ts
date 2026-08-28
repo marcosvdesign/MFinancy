@@ -1260,8 +1260,11 @@ export async function dashboardData(profileId?: string | null, year?: number, mo
 
   const mesesPt = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
   const comparativoMensal = [];
-  for (let i = 2; i >= 0; i--) {
-    const ref = addMonthsYM(y, m, -i);
+  // Janela ampla (-3 a +2 = 6 meses) calculada uma unica vez; cada tela do
+  // frontend recorta o trecho que precisa (dashboard usa os 6, Lancamentos
+  // usa so os 3 do meio: 2 atras + atual).
+  for (let offset = -3; offset <= 2; offset++) {
+    const ref = addMonthsYM(y, m, offset);
     const [mStart, mEnd] = monthBounds(ref.year, ref.month);
     const r = await sumRealizado("recebimento", mStart, mEnd, accountIds);
     const d = await sumExpenseRealizado(mStart, mEnd, accountIds);

@@ -30,7 +30,7 @@
     <div class="brand">
       <span class="brand-dot"></span>
       <span class="brand-text">MyFinance</span>
-      <button type="button" id="btnToggleSidebar" class="sidebar-toggle-btn" title="Recolher/expandir menu">«</button>
+      <button type="button" id="btnToggleSidebar" class="sidebar-toggle-btn" title="Recolher/expandir menu"><span class="toggle-arrow">‹</span></button>
     </div>
 
     <div class="profile-switch">
@@ -86,7 +86,7 @@
           <h2>Previsto x Realizado</h2>
           <div class="donut-row">
             <div class="donut-block">
-              <canvas id="donutReceitas" width="140" height="140"></canvas>
+              <canvas id="donutReceitas" width="108" height="108"></canvas>
               <div class="donut-caption">RECEBIMENTOS</div>
               <div class="donut-lines">
                 <div><span>Realizado</span><b id="dReceitaRealizado">R$ 0,00</b></div>
@@ -95,7 +95,7 @@
               </div>
             </div>
             <div class="donut-block">
-              <canvas id="donutDespesas" width="140" height="140"></canvas>
+              <canvas id="donutDespesas" width="108" height="108"></canvas>
               <div class="donut-caption">DESPESAS</div>
               <div class="donut-lines">
                 <div><span>Realizado</span><b id="dDespesaRealizado">R$ 0,00</b></div>
@@ -515,6 +515,7 @@
       <p id="confirmDialogMessage" class="confirm-dialog-message"></p>
       <div class="form-row hidden" id="confirmDialogPromptWrap">
         <input type="text" id="confirmDialogPromptInput" />
+        <input type="date" id="confirmDialogPromptDate" />
       </div>
       <div class="form-actions">
         <button class="btn-secondary" id="confirmDialogCancel">Cancelar</button>
@@ -545,7 +546,10 @@
 <div id="datePickerPopup" class="date-picker-popup hidden"></div>
 <div id="pickerPopup" class="picker-popup hidden"></div>
 <div id="monthYearPickerPopup" class="date-picker-popup hidden"></div>
+<div id="monthOnlyPickerPopup" class="date-picker-popup hidden"></div>
+<div id="yearOnlyPickerPopup" class="date-picker-popup hidden"></div>
 <div id="bulkContextMenu" class="row-menu-dropdown bulk-context-menu hidden"></div>
+<div id="globalDropdownMenu" class="global-dropdown-menu light-menu hidden"></div>
 
 <script src="/charts.js"></script>
 <script src="/app.js"></script>
