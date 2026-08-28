@@ -11,6 +11,19 @@ const EXPENSE_GROUPS = ["despesa_fixa", "despesa_variavel", "pessoas", "impostos
 const MESES = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 const MESES_ABR = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 
+/* Familia de icones do app: estilo outline, linhas espessas, cantos
+ * arredondados (stroke-linecap/linejoin "round"). SVGs inline, sem
+ * biblioteca externa. */
+const ICONS = {
+  sun: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 2.5v2.5M12 19v2.5M4.2 4.2l1.8 1.8M18 18l1.8 1.8M2.5 12H5M19 12h2.5M4.2 19.8L6 18M18 6l1.8-1.8"/></svg>',
+  moon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8.5 8.5 0 1110.2 4a7 7 0 009.8 10.5z"/></svg>',
+  eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.8-7 10-7 10 7 10 7-3.8 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>',
+  eyeOff: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18"/><path d="M10.6 5.2A10.8 10.8 0 0112 5c6.2 0 10 7 10 7a17.9 17.9 0 01-3.4 4.3M6.5 6.6C4 8.3 2 12 2 12s3.8 7 10 7a10.4 10.4 0 004.2-.9"/><path d="M9.9 9.9a3 3 0 004.2 4.2"/></svg>',
+  starFilled: '<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M12 3l2.6 5.9 6.4.6-4.9 4.3 1.5 6.3L12 16.9 6.4 20.1l1.5-6.3-4.9-4.3 6.4-.6z"/></svg>',
+  starOutline: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"><path d="M12 3l2.6 5.9 6.4.6-4.9 4.3 1.5 6.3L12 16.9 6.4 20.1l1.5-6.3-4.9-4.3 6.4-.6z"/></svg>',
+  chevronDown: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>',
+};
+
 const state = {
   activeProfile: "all",
   tab: "dashboard",
@@ -57,6 +70,21 @@ function parseMaskedCurrency(str) {
   if (!str) return 0;
   return parseFloat(String(str).replace(/\./g, "").replace(",", ".")) || 0;
 }
+
+/** Mascara de data: insere as barras automaticamente conforme digita,
+ * no formato DD/MM/AAAA. */
+function maskDateInput(el) {
+  if (!el || el.dataset.dateMasked) return;
+  el.dataset.dateMasked = "1";
+  el.addEventListener("input", () => {
+    const digits = el.value.replace(/\D/g, "").slice(0, 8);
+    let out = digits;
+    if (digits.length > 4) out = `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+    else if (digits.length > 2) out = `${digits.slice(0, 2)}/${digits.slice(2)}`;
+    el.value = out;
+  });
+}
+
 function maskCurrencyInput(el) {
   if (!el || el.dataset.masked) return;
   el.dataset.masked = "1";
@@ -480,7 +508,7 @@ async function loadDashboard() {
     ? data.saldo_por_conta.map((a) => `
         <div class="account-balance-row">
           <span class="color-dot" style="background:${a.color || "#546e7a"}"></span>
-          <span class="name">${a.is_primary ? '<span class="account-dropdown-star">★</span>' : ""}${escapeHtml(a.name)}</span>
+          <span class="name">${a.is_primary ? `<span class="account-dropdown-star">${ICONS.starFilled}</span>` : ""}${escapeHtml(a.name)}</span>
           <span class="value ${a.balance < 0 ? "negative" : a.balance > 0 ? "positive" : ""}">${formatCurrency(a.balance)}</span>
         </div>`).join("")
     : `<div class="empty-state">Cadastre uma conta para começar.</div>`;
@@ -654,54 +682,61 @@ document.querySelectorAll("#lancamentosSubtabs .subtab").forEach((btn) => {
 
 // ---- Mini-dashboard + seletor de conta no topo de Lancamentos ----
 
+let lancAccountItems = [];
 function setLancAccountOptions(saldoPorConta) {
   const accounts = state.activeProfile === "all" ? state.accounts : state.accounts.filter((a) => a.profile_id === state.activeProfile);
   const balById = Object.fromEntries((saldoPorConta || []).map((a) => [a.id, a]));
-  const items = [
+  lancAccountItems = [
     { value: "", label: "Todas as contas" },
     ...accounts.map((a) => ({ value: a.id, label: accountLabel(a), balance: balById[a.id]?.balance, isPrimary: a.is_primary })),
   ];
-  if (!items.find((i) => i.value === state.lancamentosAccountId)) state.lancamentosAccountId = "";
+  if (!lancAccountItems.find((i) => i.value === state.lancamentosAccountId)) state.lancamentosAccountId = "";
+  const current = lancAccountItems.find((i) => i.value === state.lancamentosAccountId);
+  document.getElementById("lancAccountSelectLabel").textContent = current ? current.label : lancAccountItems[0].label;
+}
 
-  const menu = document.getElementById("lancAccountSelectMenu");
-  menu.innerHTML = items.map((item) => `
+/** Renderiza a lista de contas no container global de dropdown (fora do
+ * stacking context dos paineis com glassmorphism, pra nunca ficar presa
+ * atras de outro elemento). */
+function openLancAccountMenu() {
+  const menu = document.getElementById("globalDropdownMenu");
+  menu.innerHTML = lancAccountItems.map((item) => `
     <div class="custom-select-option ${item.value === state.lancamentosAccountId ? "selected" : ""}" data-value="${item.value}">
-      <span>${item.isPrimary ? '<span class="account-dropdown-star">★</span>' : ""}${escapeHtml(item.label)}</span>
+      <span>${item.isPrimary ? `<span class="account-dropdown-star">${ICONS.starFilled}</span>` : ""}${escapeHtml(item.label)}</span>
       ${item.balance !== undefined
         ? `<span class="${item.balance < 0 ? "negative" : item.balance > 0 ? "positive" : ""}">${formatCurrency(item.balance)}</span>`
         : '<span class="check">✓</span>'}
     </div>`).join("") + `<button type="button" class="account-select-manage" id="btnGerenciarContas">Gerenciar contas bancárias</button>`;
   menu.querySelectorAll(".custom-select-option").forEach((opt) => {
-    opt.addEventListener("click", () => {
+    opt.addEventListener("click", (e) => {
+      e.stopPropagation();
       state.lancamentosAccountId = opt.dataset.value;
-      document.getElementById("lancAccountSelectLabel").textContent = items.find((i) => i.value === opt.dataset.value)?.label || "";
-      document.getElementById("lancAccountSelectMenu").classList.add("hidden");
-      document.getElementById("lancAccountSelectWrap").classList.remove("open");
+      document.getElementById("lancAccountSelectLabel").textContent = lancAccountItems.find((i) => i.value === opt.dataset.value)?.label || "";
+      closeGlobalDropdown();
       loadLancDashboard();
       loadTransactionsTable();
     });
   });
   document.getElementById("btnGerenciarContas")?.addEventListener("click", (e) => {
     e.stopPropagation();
-    closeCustomSelect();
-    document.getElementById("lancAccountSelectMenu").classList.add("hidden");
-    document.getElementById("lancAccountSelectWrap").classList.remove("open");
+    closeGlobalDropdown();
     state.activeConfig = "contas";
     document.querySelectorAll(".config-link").forEach((b) => b.classList.toggle("active", b.dataset.config === "contas"));
     document.querySelectorAll(".config-panel").forEach((p) => p.classList.toggle("hidden", p.id !== "cfg-contas"));
     switchTab("configuracoes");
   });
-  const current = items.find((i) => i.value === state.lancamentosAccountId);
-  document.getElementById("lancAccountSelectLabel").textContent = current ? current.label : items[0].label;
+  positionGlobalDropdown(document.getElementById("lancAccountSelectTrigger"));
+  document.getElementById("lancAccountSelectWrap").classList.add("open");
+  menu._openedBy = document.getElementById("lancAccountSelectTrigger");
 }
 document.getElementById("lancAccountSelectTrigger")?.addEventListener("click", (e) => {
   e.stopPropagation();
-  const wrap = document.getElementById("lancAccountSelectWrap");
-  const menu = document.getElementById("lancAccountSelectMenu");
-  const willOpen = menu.classList.contains("hidden");
+  const trigger = document.getElementById("lancAccountSelectTrigger");
+  const menu = document.getElementById("globalDropdownMenu");
+  const willOpen = menu.classList.contains("hidden") || menu._openedBy !== trigger;
   closeCustomSelect();
   closeGlobalDropdown();
-  if (willOpen) { wrap.classList.add("open"); menu.classList.remove("hidden"); }
+  if (willOpen) openLancAccountMenu();
 });
 
 async function loadLancDashboard() {
@@ -1331,6 +1366,7 @@ function attachCustomDatePicker(inputId) {
   display.placeholder = "dd/mm/aaaa";
   display.autocomplete = "off";
   wrap.appendChild(display);
+  maskDateInput(display);
 
   function syncDisplay() { display.value = nativeInput.value ? formatDateBR(nativeInput.value) : ""; }
   function commitTyped() {
@@ -1356,6 +1392,64 @@ function attachCustomDatePicker(inputId) {
   nativeInput.addEventListener("change", syncDisplay);
   syncDisplay();
 }
+
+// ---- Seletor de cor customizado (substitui <input type="color"> cru) ----
+
+const COLOR_PRESETS = [
+  "#5e8a2f", "#2f6fed", "#1f9d55", "#d64545", "#e6a23c",
+  "#8e44ad", "#16a3b0", "#546e7a", "#e91e8c", "#8fbd4a",
+];
+
+function attachCustomColorPicker(inputId) {
+  const nativeInput = document.getElementById(inputId);
+  if (!nativeInput || nativeInput.dataset.colorStyled) return;
+  nativeInput.dataset.colorStyled = "1";
+  // Continua visivel/clicavel de verdade (so encolhido/transparente), pra
+  // que "nativeInput.click()" ainda consiga abrir o seletor nativo do SO —
+  // um display:none bloquearia essa interacao em varios navegadores.
+  nativeInput.classList.add("file-input-hidden");
+  const wrap = document.createElement("div");
+  wrap.className = "custom-color-wrap";
+  nativeInput.parentNode.insertBefore(wrap, nativeInput);
+  wrap.appendChild(nativeInput);
+  const swatchBtn = document.createElement("button");
+  swatchBtn.type = "button";
+  swatchBtn.className = "custom-color-swatch";
+  swatchBtn.style.background = nativeInput.value || "#5e8a2f";
+  wrap.appendChild(swatchBtn);
+
+  function openPicker() {
+    const popup = document.getElementById("colorPickerPopup");
+    popup.innerHTML = `
+      <div class="color-preset-grid">
+        ${COLOR_PRESETS.map((c) => `<button type="button" class="color-preset-swatch ${c.toLowerCase() === (nativeInput.value || "").toLowerCase() ? "selected" : ""}" data-color="${c}" style="background:${c}"></button>`).join("")}
+      </div>
+      <button type="button" class="btn-secondary color-picker-custom-btn" id="colorPickerCustomBtn">Escolher cor</button>
+    `;
+    positionPopupNear(popup, swatchBtn);
+    popup.classList.remove("hidden");
+    popup.querySelectorAll(".color-preset-swatch").forEach((el) => {
+      el.addEventListener("click", (e) => {
+        e.stopPropagation();
+        nativeInput.value = el.dataset.color;
+        nativeInput.dispatchEvent(new Event("change", { bubbles: true }));
+        swatchBtn.style.background = el.dataset.color;
+        closeColorPickerPopup();
+      });
+    });
+    document.getElementById("colorPickerCustomBtn").addEventListener("click", (e) => {
+      e.stopPropagation();
+      closeColorPickerPopup();
+      nativeInput.click();
+    });
+  }
+  swatchBtn.addEventListener("click", (e) => { e.stopPropagation(); openPicker(); });
+  nativeInput.addEventListener("change", () => { swatchBtn.style.background = nativeInput.value; });
+}
+function closeColorPickerPopup() { document.getElementById("colorPickerPopup")?.classList.add("hidden"); }
+document.addEventListener("click", (e) => {
+  if (!e.target.closest("#colorPickerPopup") && !e.target.closest(".custom-color-swatch")) closeColorPickerPopup();
+});
 
 // ---- Popup de escolha (contato / categoria), com busca e "+ novo" ----
 
@@ -2222,6 +2316,7 @@ function profileFormHtml(p) {
 }
 function openProfileModal(p) {
   openModal(p ? "Editar perfil" : "Novo perfil", profileFormHtml(p));
+  attachCustomColorPicker("f_color");
   document.getElementById("btnCancelForm").addEventListener("click", closeModal);
   document.getElementById("btnSaveProfile").addEventListener("click", async () => {
     const payload = { name: document.getElementById("f_name").value.trim(), color: document.getElementById("f_color").value };
@@ -2283,6 +2378,7 @@ function accountFormHtml(a) {
 function openAccountModal(a) {
   if (!state.profiles.length) return showToast("Cadastre um perfil antes de criar uma conta.", true);
   openModal(a ? "Editar conta" : "Nova conta", accountFormHtml(a));
+  attachCustomColorPicker("f_color");
   document.getElementById("btnCancelForm").addEventListener("click", closeModal);
   if (!a) maskCurrencyInput(document.getElementById("f_initial_balance"));
   document.getElementById("btnSaveAccount").addEventListener("click", async () => {
@@ -2312,7 +2408,7 @@ async function loadAccounts() {
       <div class="entity-card-head">
         <span class="color-dot" style="background:${a.color}"></span>
         <span class="entity-card-title">${escapeHtml(a.name)}</span>
-        <button type="button" class="primary-star-btn ${a.is_primary ? "is-primary" : ""}" data-action="star" data-id="${a.id}" title="${a.is_primary ? "Conta principal" : "Definir como conta principal"}">${a.is_primary ? "★" : "☆"}</button>
+        <button type="button" class="primary-star-btn ${a.is_primary ? "is-primary" : ""}" data-action="star" data-id="${a.id}" title="${a.is_primary ? "Conta principal" : "Definir como conta principal"}">${a.is_primary ? ICONS.starFilled : ICONS.starOutline}</button>
       </div>
       <div class="card-sub">${escapeHtml(a.type)} · ${escapeHtml(profile?.name || "-")}</div>
       <div class="entity-card-value ${a.balance < 0 ? "negative" : a.balance > 0 ? "positive" : ""}">${formatCurrency(a.balance)}</div>
@@ -2362,6 +2458,8 @@ function categoryFormHtml(c) {
 }
 function openCategoryModal(c) {
   openModal(c ? "Editar categoria" : "Nova categoria", categoryFormHtml(c));
+  attachCustomColorPicker("f_color");
+  styleSelectAsCustomDropdown("f_group");
   document.getElementById("btnCancelForm").addEventListener("click", closeModal);
   document.getElementById("btnSaveCategory").addEventListener("click", async () => {
     const payload = { name: document.getElementById("f_name").value.trim(), group: document.getElementById("f_group").value, color: document.getElementById("f_color").value };
@@ -2440,6 +2538,7 @@ function tagFormHtml(t) {
 }
 function openTagModal(t) {
   openModal(t ? "Editar tag" : "Nova tag", tagFormHtml(t));
+  attachCustomColorPicker("f_color");
   document.getElementById("btnCancelForm").addEventListener("click", closeModal);
   document.getElementById("btnSaveTag").addEventListener("click", async () => {
     const payload = { name: document.getElementById("f_name").value.trim(), color: document.getElementById("f_color").value };
@@ -2589,7 +2688,7 @@ function applyTheme(theme) {
   document.documentElement.setAttribute("data-theme", theme);
   const icon = document.getElementById("themeToggleIcon");
   const label = document.getElementById("themeToggleLabel");
-  if (icon) icon.textContent = theme === "dark" ? "☀️" : "🌙";
+  if (icon) icon.innerHTML = theme === "dark" ? ICONS.sun : ICONS.moon;
   if (label) label.textContent = theme === "dark" ? "Modo claro" : "Modo escuro";
 }
 
@@ -2602,15 +2701,26 @@ function applyTheme(theme) {
  * usando os ultimos dados ja carregados, sem precisar buscar de novo no
  * servidor — evita o atraso de contraste ao trocar de tema. */
 function redrawThemedCharts() {
+  const dashboardVisible = document.getElementById("tab-dashboard")?.classList.contains("active");
+  const lancVisible = document.getElementById("tab-lancamentos")?.classList.contains("active");
   const d1 = state.lastDashboardData;
-  if (d1) {
+  if (d1 && dashboardVisible) {
     if (document.getElementById("donutReceitas")) drawDonut(document.getElementById("donutReceitas"), d1.percent_receitas, themeColor("--green", "#2f9d55"));
     if (document.getElementById("donutDespesas")) drawDonut(document.getElementById("donutDespesas"), d1.percent_despesas, themeColor("--red", "#d64545"));
     if (document.getElementById("chartComparativo")) drawHatchedFlowChart(document.getElementById("chartComparativo"), d1.comparativo_mensal);
   }
   const d2 = state.lastLancDashboardData;
-  if (d2 && document.getElementById("lancChart")) drawHatchedFlowChart(document.getElementById("lancChart"), (d2.comparativo_mensal || []).slice(1, 4));
+  if (d2 && lancVisible && document.getElementById("lancChart")) drawHatchedFlowChart(document.getElementById("lancChart"), (d2.comparativo_mensal || []).slice(1, 4));
 }
+
+// Torna os graficos de fluxo de caixa responsivos horizontalmente: ao
+// redimensionar a janela, redesenha (com base nos ultimos dados) medindo
+// a largura disponivel de novo.
+let _chartResizeDebounce;
+window.addEventListener("resize", () => {
+  clearTimeout(_chartResizeDebounce);
+  _chartResizeDebounce = setTimeout(redrawThemedCharts, 150);
+});
 
 document.getElementById("btnToggleTheme")?.addEventListener("click", () => {
   const current = document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
@@ -2627,7 +2737,7 @@ document.getElementById("btnToggleTheme")?.addEventListener("click", () => {
 function applyHideValues(hidden) {
   document.body.classList.toggle("values-hidden", hidden);
   const btn = document.getElementById("btnHideValues");
-  if (btn) { btn.textContent = hidden ? "🙈" : "👁️"; btn.title = hidden ? "Mostrar valores" : "Ocultar valores"; }
+  if (btn) { btn.innerHTML = hidden ? ICONS.eyeOff : ICONS.eye; btn.title = hidden ? "Mostrar valores" : "Ocultar valores"; }
 }
 (function initHideValues() {
   let hidden = false;
@@ -2759,6 +2869,53 @@ document.getElementById("calcPopup")?.addEventListener("click", (e) => {
   else if (["+", "−", "×", "÷"].includes(key)) calcApplyOperator(key);
   else calcInputDigit(key);
 });
+
+// ---------------------------------------------------------------------
+// Blindagem de cliques: enquanto qualquer popup flutuante estiver aberto,
+// um "escudo" transparente cobre o resto da pagina — o primeiro clique
+// fora do popup so fecha ele (sem tambem acionar o botao que estava por
+// baixo), evitando abrir varios popups em cadeia sem querer.
+// ---------------------------------------------------------------------
+
+function closeAllFloatingPopups() {
+  closeCalcPopup();
+  closeDatePickerPopup();
+  closePickerPopup();
+  closeMonthYearPicker();
+  closeMonthOnlyPicker();
+  closeYearOnlyPicker();
+  closeRowActionMenu();
+  closeBulkContextMenu();
+  closeGlobalDropdown();
+  closeCustomSelect();
+  if (typeof closeColorPickerPopup === "function") closeColorPickerPopup();
+}
+
+(function setupPopupShield() {
+  const shield = document.getElementById("popupShield");
+  if (!shield) return;
+  const popupIds = [
+    "calcPopup", "datePickerPopup", "pickerPopup", "monthYearPickerPopup",
+    "monthOnlyPickerPopup", "yearOnlyPickerPopup", "rowActionMenu", "bulkContextMenu",
+    "globalDropdownMenu", "profileSelectMenu", "lancAccountSelectMenu", "colorPickerPopup",
+  ];
+  function anyOpen() {
+    return popupIds.some((id) => {
+      const el = document.getElementById(id);
+      return el && !el.classList.contains("hidden");
+    });
+  }
+  function sync() { shield.classList.toggle("hidden", !anyOpen()); }
+  const observer = new MutationObserver(sync);
+  popupIds.forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) observer.observe(el, { attributes: true, attributeFilter: ["class"] });
+  });
+  shield.addEventListener("click", (e) => {
+    e.stopPropagation();
+    closeAllFloatingPopups();
+  });
+})();
 
 // ---------------------------------------------------------------------
 // Boot

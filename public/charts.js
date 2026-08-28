@@ -3,10 +3,22 @@
  * (o app precisa funcionar 100% offline).
  */
 
-function setupCanvasScale(canvas, forcedHeight) {
+function setupCanvasScale(canvas, forcedHeight, reuseDims) {
+  // Redesenhos so de hover (reuseDims) reaproveitam o tamanho ja calculado,
+  // sem re-medir/redimensionar o canvas a cada movimento do mouse.
+  if (reuseDims && canvas._scaleDims) {
+    return { ctx: canvas.getContext("2d"), width: canvas._scaleDims.width, height: canvas._scaleDims.height };
+  }
   const rect = canvas.getBoundingClientRect();
+  if (rect.width === 0) {
+    // Canvas oculto (aba nao ativa no momento): nao redimensiona com um
+    // valor arbitrario (isso "esticava" o canvas quando ele era redesenhado
+    // enquanto escondido, por ex. ao trocar de tema numa aba diferente).
+    const prev = canvas._scaleDims || { width: 0, height: 0 };
+    return { ctx: canvas.getContext("2d"), width: prev.width, height: prev.height, hidden: true };
+  }
   const ratio = window.devicePixelRatio || 1;
-  const width = rect.width || canvas.clientWidth || 400;
+  const width = rect.width;
   const height = forcedHeight || (canvas.getAttribute("height") ? parseInt(canvas.getAttribute("height")) : 220);
   canvas.width = width * ratio;
   canvas.height = height * ratio;
@@ -14,6 +26,7 @@ function setupCanvasScale(canvas, forcedHeight) {
   canvas.style.height = height + "px";
   const ctx = canvas.getContext("2d");
   ctx.scale(ratio, ratio);
+  canvas._scaleDims = { width, height };
   return { ctx, width, height };
 }
 
@@ -32,7 +45,9 @@ function themeColor(varName, fallback) {
 /** Anel de progresso (Previsto x Realizado). */
 function drawDonut(canvas, percent, color) {
   const size = parseInt(canvas.getAttribute("width")) || 140;
-  const { ctx, width, height } = setupCanvasScale(canvas, size);
+  const scaled = setupCanvasScale(canvas, size);
+  if (scaled.hidden || !scaled.width) return;
+  const { ctx, width, height } = scaled;
   ctx.clearRect(0, 0, width, height);
 
   const cx = width / 2, cy = height / 2;
@@ -66,7 +81,9 @@ function drawDonut(canvas, percent, color) {
 /** Grafico de barras duplas (receitas x despesas) por periodo, usado no
  * fluxo de caixa do semestre e nos relatorios de performance. */
 function drawGroupedBarChart(canvas, data) {
-  const { ctx, width, height } = setupCanvasScale(canvas);
+  const scaled = setupCanvasScale(canvas);
+  if (scaled.hidden || !scaled.width) return;
+  const { ctx, width, height } = scaled;
   ctx.clearRect(0, 0, width, height);
 
   const borderColor = themeColor("--border", "#e3e7ee");
@@ -132,7 +149,12 @@ function drawGroupedBarChart(canvas, data) {
 function drawHatchedFlowChart(canvas, data, hover) {
   canvas._lastFlowData = data;
   const barAlpha = hover && hover.active ? 0.28 : 1;
-  const { ctx, width, height } = setupCanvasScale(canvas);
+  // Um redesenho disparado so pelo hover (hover !== undefined) reaproveita
+  // o tamanho ja calculado do canvas, sem re-medir/redimensionar a cada
+  // movimento do mouse — evita o bug de o grafico "crescer"/tremer no hover.
+  const scaled = setupCanvasScale(canvas, undefined, hover !== undefined);
+  if (scaled.hidden || !scaled.width) return;
+  const { ctx, width, height } = scaled;
   ctx.clearRect(0, 0, width, height);
 
   const borderColor = themeColor("--border", "#e3e7ee");
@@ -317,10 +339,16 @@ function attachChartTooltip(canvas) {
     tooltip.style.left = `${e.clientX + 12}px`;
     tooltip.style.top = `${e.clientY + 12}px`;
     tooltip.classList.remove("hidden");
-    if (canvas._lastFlowData) drawHatchedFlowChart(canvas, canvas._lastFlowData, { active: true, pointIndex: nearestIdx });
+    // So redesenha o grafico quando o ponto em destaque realmente muda —
+    // evita redesenhos redundantes a cada pixel de movimento do mouse.
+    if (canvas._lastHoverIdx !== nearestIdx) {
+      canvas._lastHoverIdx = nearestIdx;
+      if (canvas._lastFlowData) drawHatchedFlowChart(canvas, canvas._lastFlowData, { active: true, pointIndex: nearestIdx });
+    }
   });
   canvas.addEventListener("mouseleave", () => {
     tooltip.classList.add("hidden");
+    canvas._lastHoverIdx = undefined;
     if (canvas._lastFlowData) drawHatchedFlowChart(canvas, canvas._lastFlowData, null);
   });
 }

@@ -37,7 +37,7 @@
       <label class="profile-switch-label">Perfil</label>
       <div class="custom-select" id="profileSelectWrap">
         <button type="button" class="custom-select-trigger" id="profileSelectTrigger" title="Perfil">
-          <span class="nav-icon">👤</span>
+          <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4.4 3.6-8 8-8s8 3.6 8 8"/></svg></span>
           <span id="profileSelectLabel" class="nav-label select-label-text">Todos os perfis</span>
           <span class="chevron nav-label">▾</span>
         </button>
@@ -46,20 +46,20 @@
     </div>
 
     <nav>
-      <button class="nav-item active" data-tab="dashboard"><span class="nav-icon">📊</span><span class="nav-label">Dashboard</span></button>
-      <button class="nav-item" data-tab="lancamentos"><span class="nav-icon">🧾</span><span class="nav-label">Lançamentos</span></button>
-      <button class="nav-item" data-tab="contatos"><span class="nav-icon">👥</span><span class="nav-label">Contatos</span></button>
-      <button class="nav-item" data-tab="relatorios"><span class="nav-icon">📈</span><span class="nav-label">Relatórios</span></button>
-      <button class="nav-item" data-tab="configuracoes"><span class="nav-icon">⚙️</span><span class="nav-label">Configurações</span></button>
+      <button class="nav-item active" data-tab="dashboard"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/><rect x="13" y="13" width="8" height="8" rx="2"/></svg></span><span class="nav-label">Dashboard</span></button>
+      <button class="nav-item" data-tab="lancamentos"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3z"/><path d="M9 8h6M9 12h6M9 16h4"/></svg></span><span class="nav-label">Lançamentos</span></button>
+      <button class="nav-item" data-tab="contatos"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17" cy="8" r="2.5"/><path d="M15.5 14.2c2.6.4 4.5 2.6 4.5 5.3"/></svg></span><span class="nav-label">Contatos</span></button>
+      <button class="nav-item" data-tab="relatorios"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M3 17l5-5 4 4 8-9"/><path d="M15 6h5v5"/></svg></span><span class="nav-label">Relatórios</span></button>
+      <button class="nav-item" data-tab="configuracoes"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg></span><span class="nav-label">Configurações</span></button>
     </nav>
 
     <button type="button" id="btnToggleTheme" class="theme-toggle-row">
-      <span class="nav-icon" id="themeToggleIcon">🌙</span><span class="nav-label theme-toggle-label" id="themeToggleLabel">Modo escuro</span>
+      <span class="nav-icon" id="themeToggleIcon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8.5 8.5 0 1110.2 4a7 7 0 009.8 10.5z"/></svg></span><span class="nav-label theme-toggle-label" id="themeToggleLabel">Modo escuro</span>
     </button>
 
     <form method="POST" action="/api/logout" class="logout-form">
       <button type="submit" class="nav-item" style="width:100%;" title="Sair">
-        <span class="nav-icon">⏻</span><span class="nav-label">Sair</span>
+        <span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v8"/><path d="M6.3 6.3a8 8 0 1011.4 0"/></svg></span><span class="nav-label">Sair</span>
       </button>
     </form>
     <div class="sidebar-footer">Dados salvos na nuvem (Postgres)</div>
@@ -525,7 +525,11 @@
   </div>
 </div>
 
-<button type="button" id="btnHideValues" class="hide-values-btn" title="Ocultar valores">👁️</button>
+<button type="button" id="btnHideValues" class="hide-values-btn" title="Ocultar valores"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.8-7 10-7 10 7 10 7-3.8 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg></button>
+
+<!-- Blindeia cliques no resto da pagina enquanto qualquer popup flutuante
+     estiver aberto (calculadora, calendario, seletores, menus de linha) -->
+<div id="popupShield" class="popup-shield hidden"></div>
 
 <div id="toast" class="toast hidden"></div>
 <div id="rowActionMenu" class="row-menu-dropdown hidden"></div>
@@ -549,6 +553,7 @@
 <div id="monthOnlyPickerPopup" class="date-picker-popup hidden"></div>
 <div id="yearOnlyPickerPopup" class="date-picker-popup hidden"></div>
 <div id="bulkContextMenu" class="row-menu-dropdown bulk-context-menu hidden"></div>
+<div id="colorPickerPopup" class="date-picker-popup hidden" style="width:210px;"></div>
 <div id="globalDropdownMenu" class="global-dropdown-menu light-menu hidden"></div>
 
 <script src="/charts.js"></script>
