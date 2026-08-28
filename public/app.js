@@ -515,7 +515,7 @@ async function loadDashboard() {
         </div>`).join("")
     : `<div class="empty-state">Cadastre uma conta para começar.</div>`;
 
-  drawHatchedFlowChart(document.getElementById("chartComparativo"), data.comparativo_mensal);
+  animateHatchedFlowChart(document.getElementById("chartComparativo"), data.comparativo_mensal);
   attachChartTooltip(document.getElementById("chartComparativo"), data.comparativo_mensal);
 
   const activeProfileObj = state.profiles.find((p) => p.id === state.activeProfile);
@@ -785,7 +785,7 @@ async function loadLancDashboard() {
   document.getElementById("lancProgressDespesa").style.width = Math.max(0, Math.min(100, data.percent_despesas)) + "%";
 
   const lancChartData = (data.comparativo_mensal || []).slice(1, 4); // 2 meses atras + atual
-  drawHatchedFlowChart(document.getElementById("lancChart"), lancChartData);
+  animateHatchedFlowChart(document.getElementById("lancChart"), lancChartData);
   attachChartTooltip(document.getElementById("lancChart"), lancChartData);
 
   const contaAtual = state.lancamentosAccountId ? data.saldo_por_conta.find((a) => a.id === state.lancamentosAccountId) : null;
@@ -904,7 +904,7 @@ async function loadTransactionsTable() {
         <td class="clickable-cell cell-amount ${t.group === "recebimento" ? "positive" : "negative"}" data-id="${t.id}"><span class="cell-text">${formatCurrency(t.amount)}</span></td>
         <td>
           <label class="toggle-switch">
-            <input type="checkbox" data-id="${t.id}" ${t.status === "pago" ? "checked" : ""} />
+            <input type="checkbox" class="pago-toggle" data-id="${t.id}" ${t.status === "pago" ? "checked" : ""} />
             <span class="toggle-slider"></span>
           </label>
         </td>
@@ -915,7 +915,7 @@ async function loadTransactionsTable() {
       </tr>`;
   }).join("") : `<tr><td colspan="8"><div class="empty-state">Nenhum lançamento encontrado.</div></td></tr>`;
 
-  body.querySelectorAll('input[type=checkbox][data-id]').forEach((chk) => {
+  body.querySelectorAll('input.pago-toggle[data-id]').forEach((chk) => {
     chk.addEventListener("change", () => handleTogglePago(chk, items));
   });
   body.querySelectorAll(".cell-date").forEach((cell) => {

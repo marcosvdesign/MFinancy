@@ -691,6 +691,12 @@ interface BaseTransactionFields {
 }
 
 function buildBaseFields(payload: any): BaseTransactionFields {
+  const status = payload.status || "pendente";
+  // Se o status vem "pago" sem uma data de pagamento explicita (ex.: criado
+  // ou editado direto pelo formulario completo, em vez do botao "Pago?"),
+  // usa a data de hoje — sem isso o lancamento ficava marcado como pago mas
+  // nao entrava nos totais "realizado" (que exigem paid_date preenchida).
+  const paid_date = status === "pago" ? (payload.paid_date || todayStr()) : null;
   return {
     description: String(payload.description).trim(),
     amount: round2(Number(payload.amount)),
@@ -701,8 +707,8 @@ function buildBaseFields(payload: any): BaseTransactionFields {
     cost_center_id: payload.cost_center_id || null,
     tag_ids: payload.tag_ids || [],
     notes: payload.notes || "",
-    status: payload.status || "pendente",
-    paid_date: payload.paid_date || null,
+    status,
+    paid_date,
   };
 }
 
@@ -865,6 +871,18 @@ async function applyFieldsToTransaction(id: string, fields: string[], payload: a
 export async function updateTransaction(id: string, payload: any, scope: string = "single"): Promise<Transaction | null> {
   const existing = await getTransactionById(id);
   if (!existing) return null;
+
+  // Se o status esta mudando pra "pago" sem uma data de pagamento explicita
+  // no payload, usa a data de hoje (ou mantem a que ja existia, se o
+  // lancamento ja estava pago) — sem isso, editar o status direto pelo
+  // formulario completo (em vez do botao "Pago?") deixava o lancamento
+  // marcado como pago mas sem entrar nos totais "realizado". Da mesma
+  // forma, voltar pra "pendente" sem uma paid_date explicita limpa a data.
+  if (payload.status === "pago" && !payload.paid_date) {
+    payload = { ...payload, paid_date: existing.status === "pago" ? existing.paid_date : todayStr() };
+  } else if (payload.status === "pendente" && !("paid_date" in payload)) {
+    payload = { ...payload, paid_date: null };
+  }
 
   const originalDueDate = existing.due_date;
   const groupKey = existing.recurrence_group_id ? "recurrence_group_id" : existing.installment_group_id ? "installment_group_id" : null;

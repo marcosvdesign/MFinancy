@@ -123,25 +123,29 @@
         </div>
       </div>
 
-      <div class="grid-2">
-        <div class="panel">
-          <h2>Fluxo de caixa</h2>
-          <canvas id="chartComparativo" height="200"></canvas>
+      <div class="panel">
+        <h2>Fluxo de caixa</h2>
+        <canvas id="chartComparativo" height="240"></canvas>
+      </div>
+
+      <div class="panel">
+        <div class="page-header" style="margin-bottom:2px;">
+          <h2 style="margin:0;">Comparativo mês anterior</h2>
+          <span class="help-icon" title="Compara os totais do mês atual com os do mês anterior">?</span>
         </div>
-        <div class="panel">
-          <div class="page-header" style="margin-bottom:2px;">
-            <h2 style="margin:0;">Comparativo mês anterior</h2>
-            <span class="help-icon" title="Compara os totais do mês atual com os do mês anterior">?</span>
-          </div>
-          <div class="card-sub" id="comparativoSubtitle" style="margin-bottom:10px;">Todas as contas</div>
-          <div id="comparativoGrupos" class="mini-table"></div>
-        </div>
+        <div class="card-sub" id="comparativoSubtitle" style="margin-bottom:10px;">Todas as contas</div>
+        <div id="comparativoGrupos" class="mini-table"></div>
       </div>
 
       <div class="grid-2">
         <div class="panel">
           <h2>Agenda do mês</h2>
           <div id="calendarWrap"></div>
+          <div class="calendar-legend">
+            <span class="legend-item"><span class="dot dot-despesa"></span>Despesas</span>
+            <span class="legend-item"><span class="dot dot-receita"></span>Recebimentos</span>
+            <span class="legend-item"><span class="dot dot-transferencia"></span>Transferências</span>
+          </div>
         </div>
         <div class="panel">
           <h2 id="agendaDiaTitulo">Vencimentos do dia</h2>
@@ -206,10 +210,6 @@
             </div>
           </div>
         </div>
-        <div class="panel lanc-dash-chart">
-          <div class="card-label">Fluxo de caixa</div>
-          <canvas id="lancChart" height="150"></canvas>
-        </div>
         <div class="panel lanc-dash-conta">
           <div class="card-label" id="lancContaLabel">Saldo - Todas as contas</div>
           <div class="card-value" id="lancSaldoConta">R$ 0,00</div>
@@ -226,13 +226,18 @@
         </div>
       </div>
 
+      <div class="panel lanc-dash-chart">
+        <div class="card-label">Fluxo de caixa</div>
+        <canvas id="lancChart" height="220"></canvas>
+      </div>
+
       <div class="subtabs" id="lancamentosSubtabs">
         <button class="subtab active" data-group="recebimento">Recebimentos</button>
         <button class="subtab" data-group="despesa_fixa">Despesas Fixas</button>
         <button class="subtab" data-group="despesa_variavel">Despesas Variáveis</button>
         <button class="subtab" data-group="pessoas">Pessoas</button>
         <button class="subtab" data-group="impostos">Impostos</button>
-        <button class="subtab" data-group="transferencias">🔁 Transferências</button>
+        <button class="subtab subtab-transfer" data-group="transferencias"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h14l-3.5-3.5M20 17H6l3.5 3.5"/></svg> Transferências</button>
       </div>
 
       <div id="groupPanel">

@@ -31,8 +31,45 @@ function setupCanvasScale(canvas, forcedHeight, reuseDims) {
 }
 
 function formatCurrencyShort(v) {
-  if (Math.abs(v) >= 1000) return (v / 1000).toFixed(1) + "k";
-  return v.toFixed(0);
+  const rounded = Math.round(Math.abs(v));
+  return `R$ ${rounded.toLocaleString("pt-BR")}`;
+}
+
+/** Arredonda um valor pra um "numero bonito" (1, 2, 2.5, 5 ou 10 vezes uma
+ * potencia de 10) — o mesmo tipo de algoritmo usado por bibliotecas de
+ * grafico pra escolher o espacamento dos eixos (10, 50, 100, 250, 1000,
+ * 10000, ...). */
+function niceAxisNumber(value) {
+  if (value <= 0) return 1;
+  const exponent = Math.floor(Math.log10(value));
+  const fraction = value / Math.pow(10, exponent);
+  let niceFraction;
+  if (fraction <= 1) niceFraction = 1;
+  else if (fraction <= 2) niceFraction = 2;
+  else if (fraction <= 2.5) niceFraction = 2.5;
+  else if (fraction <= 5) niceFraction = 5;
+  else niceFraction = 10;
+  return niceFraction * Math.pow(10, exponent);
+}
+
+/** Retangulo com cantos arredondados (com fallback pra navegadores sem
+ * CanvasRenderingContext2D.roundRect). */
+function ctxRoundRect(ctx, x, y, w, h, r) {
+  const radius = Math.max(0, Math.min(r, Math.abs(w) / 2, Math.abs(h) / 2));
+  if (typeof ctx.roundRect === "function") {
+    ctx.beginPath();
+    ctx.roundRect(x, h >= 0 ? y : y + h, Math.abs(w), Math.abs(h), radius);
+    return;
+  }
+  const yy = h >= 0 ? y : y + h;
+  const hh = Math.abs(h);
+  ctx.beginPath();
+  ctx.moveTo(x + radius, yy);
+  ctx.arcTo(x + w, yy, x + w, yy + hh, radius);
+  ctx.arcTo(x + w, yy + hh, x, yy + hh, radius);
+  ctx.arcTo(x, yy + hh, x, yy, radius);
+  ctx.arcTo(x, yy, x + w, yy, radius);
+  ctx.closePath();
 }
 
 /** Le uma custom property do tema atual (claro/escuro), pra graficos em
@@ -146,7 +183,7 @@ function drawGroupedBarChart(canvas, data) {
  * acima de uma linha central R$0 e negativas (despesas) abaixo, com
  * hachura representando o total previsto e um preenchimento solido
  * proporcional ao quanto ja foi pago/recebido (realizado). */
-function drawHatchedFlowChart(canvas, data, hover) {
+function drawHatchedFlowChart(canvas, data, hover, forcedNiceMax) {
   canvas._lastFlowData = data;
   const barAlpha = hover && hover.active ? 0.28 : 1;
   // Um redesenho disparado so pelo hover (hover !== undefined) reaproveita
@@ -171,33 +208,40 @@ function drawHatchedFlowChart(canvas, data, hover) {
     return;
   }
 
-  const padding = { top: 20, right: 16, bottom: 26, left: 50 };
+  const padding = { top: 20, right: 16, bottom: 26, left: 66 };
   const chartW = width - padding.left - padding.right;
   const chartH = height - padding.top - padding.bottom;
   const midY = padding.top + chartH / 2;
+  const halfH = chartH / 2;
 
   const maxVal = Math.max(
     1,
     ...data.map((d) => Math.max(d.previstoReceitas || d.receitas || 0, d.previstoDespesas || d.despesas || 0))
   );
-  const niceMax = maxVal * 1.15;
-  const halfH = chartH / 2;
+  // Escala do eixo em numeros redondos (10, 50, 100, 250, 1000, 10000, ...),
+  // escolhendo um passo "bonito" e usando o menor multiplo dele que cubra o
+  // maior valor do grafico. Durante a animacao de transicao (ver
+  // animateHatchedFlowChart), forcedNiceMax fixa a escala pro quadro inteiro
+  // nao "pular" de escala no meio do movimento.
+  const step = niceAxisNumber((forcedNiceMax || maxVal) / 3);
+  const niceMax = forcedNiceMax || Math.ceil(maxVal / step) * step;
 
+  // Linhas de grade + numeros do eixo: as LINHAS esmaecem no hover (fazem
+  // parte do "grafico"), mas os NUMEROS ficam sempre na mesma opacidade.
   ctx.save();
   ctx.globalAlpha = barAlpha;
-
-  // Linhas de grade + linha central R$0
   ctx.strokeStyle = borderColor;
   ctx.lineWidth = 1;
-  [0, 0.5, 1].forEach((frac) => {
-    [-1, 1].forEach((sign) => {
-      const y = midY - sign * halfH * frac;
+  for (let v = step; v <= niceMax; v += step) {
+    const dy = (v / niceMax) * halfH;
+    [midY - dy, midY + dy].forEach((y) => {
       ctx.beginPath();
       ctx.moveTo(padding.left, y);
       ctx.lineTo(width - padding.right, y);
       ctx.stroke();
     });
-  });
+  }
+  ctx.restore();
   ctx.strokeStyle = textColor;
   ctx.lineWidth = 1.5;
   ctx.beginPath();
@@ -208,32 +252,38 @@ function drawHatchedFlowChart(canvas, data, hover) {
   ctx.fillStyle = mutedColor;
   ctx.font = "10.5px Segoe UI, sans-serif";
   ctx.textAlign = "right";
-  ctx.fillText(formatCurrencyShort(niceMax), padding.left - 8, padding.top + 4);
-  ctx.fillText("R$0", padding.left - 8, midY + 4);
-  ctx.fillText("-" + formatCurrencyShort(niceMax), padding.left - 8, padding.top + chartH + 2);
+  ctx.fillText("R$ 0", padding.left - 8, midY + 4);
+  for (let v = step; v <= niceMax; v += step) {
+    const dy = (v / niceMax) * halfH;
+    ctx.fillText(formatCurrencyShort(v), padding.left - 8, midY - dy + 4);
+    ctx.fillText("-" + formatCurrencyShort(v), padding.left - 8, midY + dy + 4);
+  }
 
   const groupWidth = chartW / data.length;
-  const barWidth = Math.min(30, groupWidth * 0.45);
+  const barWidth = Math.min(34, groupWidth * 0.48);
+  const barRadius = Math.min(6, barWidth / 3);
 
   // Padrao hachurado (diagonal), reutilizado pra cima e pra baixo em cores diferentes.
   function hatchPattern(color) {
     const tile = document.createElement("canvas");
-    tile.width = 8; tile.height = 8;
+    tile.width = 5; tile.height = 5;
     const tctx = tile.getContext("2d");
     tctx.strokeStyle = color;
-    tctx.lineWidth = 1.6;
+    tctx.lineWidth = 1;
     tctx.beginPath();
-    tctx.moveTo(0, 8); tctx.lineTo(8, 0);
-    tctx.moveTo(-2, 2); tctx.lineTo(2, -2);
-    tctx.moveTo(6, 10); tctx.lineTo(10, 6);
+    tctx.moveTo(0, 5); tctx.lineTo(5, 0);
+    tctx.moveTo(-1.5, 1.5); tctx.lineTo(1.5, -1.5);
+    tctx.moveTo(3.5, 6.5); tctx.lineTo(6.5, 3.5);
     tctx.stroke();
     return ctx.createPattern(tile, "repeat");
   }
   const greenHatch = hatchPattern(greenColor);
   const redHatch = hatchPattern(redColor);
-  const primaryColor = themeColor("--primary", "#5e8a2f");
+  const trendColor = themeColor("--text", "#1c2333");
 
   const points = [];
+  ctx.save();
+  ctx.globalAlpha = barAlpha;
   data.forEach((d, i) => {
     const groupX = padding.left + groupWidth * i + groupWidth / 2;
     const previstoRec = d.previstoReceitas != null ? d.previstoReceitas : d.receitas;
@@ -248,44 +298,64 @@ function drawHatchedFlowChart(canvas, data, hover) {
 
     const x = groupX - barWidth / 2;
 
-    // Recebimentos (acima da linha): contorno hachurado = previsto, preenchimento solido = realizado.
+    // Recebimentos (acima da linha): contorno hachurado = previsto, preenchimento
+    // solido = realizado — desenhados dentro de um clip com cantos arredondados
+    // pra nao gerar um segundo arredondado "flutuando" no meio da barra.
     if (hPrevRec > 0) {
+      ctx.save();
+      ctxRoundRect(ctx, x, midY, barWidth, -hPrevRec, barRadius);
+      ctx.clip();
       ctx.fillStyle = greenHatch;
       ctx.fillRect(x, midY - hPrevRec, barWidth, hPrevRec);
-      ctx.fillStyle = greenColor;
-      ctx.fillRect(x, midY - hRealRec, barWidth, hRealRec);
+      if (hRealRec > 0) {
+        ctx.fillStyle = greenColor;
+        ctx.fillRect(x, midY - hRealRec, barWidth, hRealRec);
+      }
+      ctx.restore();
+      ctxRoundRect(ctx, x + 0.5, midY, barWidth - 1, -hPrevRec + 1, barRadius);
       ctx.strokeStyle = greenColor;
       ctx.lineWidth = 1;
-      ctx.strokeRect(x + 0.5, midY - hPrevRec + 0.5, barWidth - 1, hPrevRec - 1);
+      ctx.stroke();
     }
 
     // Despesas (abaixo da linha): mesma logica, espelhada.
     if (hPrevDesp > 0) {
+      ctx.save();
+      ctxRoundRect(ctx, x, midY, barWidth, hPrevDesp, barRadius);
+      ctx.clip();
       ctx.fillStyle = redHatch;
       ctx.fillRect(x, midY, barWidth, hPrevDesp);
-      ctx.fillStyle = redColor;
-      ctx.fillRect(x, midY, barWidth, hRealDesp);
+      if (hRealDesp > 0) {
+        ctx.fillStyle = redColor;
+        ctx.fillRect(x, midY, barWidth, hRealDesp);
+      }
+      ctx.restore();
+      ctxRoundRect(ctx, x + 0.5, midY, barWidth - 1, hPrevDesp - 1, barRadius);
       ctx.strokeStyle = redColor;
       ctx.lineWidth = 1;
-      ctx.strokeRect(x + 0.5, midY + 0.5, barWidth - 1, hPrevDesp - 1);
+      ctx.stroke();
     }
-
-    ctx.fillStyle = mutedColor;
-    ctx.font = "11px Segoe UI, sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText(d.label, groupX, height - 6);
 
     const saldo = realizadoRec - realizadoDesp;
     const hSaldo = Math.max(-halfH, Math.min(halfH, (saldo / niceMax) * halfH));
     points.push({ x: groupX, y: midY - hSaldo, label: d.label, saldo });
   });
+  ctx.restore(); // fecha o globalAlpha reduzido do hover — so as barras/hachuras ficam esmaecidas.
 
-  ctx.restore(); // fecha o globalAlpha reduzido do hover — barras/hachuras/grade ficam esmaecidas, a linha de tendencia abaixo nao.
+  // Rotulos dos meses: sempre na mesma opacidade (nao esmaecem no hover).
+  ctx.fillStyle = mutedColor;
+  ctx.font = "11px Segoe UI, sans-serif";
+  ctx.textAlign = "center";
+  data.forEach((d, i) => {
+    const groupX = padding.left + groupWidth * i + groupWidth / 2;
+    ctx.fillText(d.label, groupX, height - 6);
+  });
 
-  // Linha de tendencia (saldo do periodo), com um ponto marcado por mes —
-  // fica em enfase (mais grossa) quando o mouse esta sobre o grafico.
+  // Linha de tendencia (saldo do periodo): branca no escuro / escura no
+  // claro, com um ponto marcado por mes — nunca esmaece, so o grafico ao
+  // redor. Fica em enfase (mais grossa) quando o mouse esta sobre o grafico.
   const hoverActive = hover && hover.active;
-  ctx.strokeStyle = primaryColor;
+  ctx.strokeStyle = trendColor;
   ctx.lineWidth = hoverActive ? 3 : 2;
   ctx.beginPath();
   points.forEach((p, i) => { if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y); });
@@ -296,14 +366,14 @@ function drawHatchedFlowChart(canvas, data, hover) {
     if (isHovered) {
       ctx.beginPath();
       ctx.arc(p.x, p.y, radius + 5, 0, Math.PI * 2);
-      ctx.fillStyle = primaryColor;
+      ctx.fillStyle = trendColor;
       ctx.globalAlpha = 0.22;
       ctx.fill();
       ctx.globalAlpha = 1;
     }
     ctx.beginPath();
     ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
-    ctx.fillStyle = primaryColor;
+    ctx.fillStyle = trendColor;
     ctx.fill();
     ctx.lineWidth = 2;
     ctx.strokeStyle = themeColor("--surface", "#fff");
@@ -312,6 +382,65 @@ function drawHatchedFlowChart(canvas, data, hover) {
 
   // Metadados guardados no proprio canvas pra permitir tooltip/hover por mouseover.
   canvas._chartPoints = points;
+}
+
+/** Anima a transicao do grafico de fluxo de caixa entre os dados que ja
+ * estavam desenhados e os novos (usado apos salvar/editar/pagar uma
+ * transacao) — as barras e a linha de tendencia sobem ou descem suavemente
+ * em vez de trocar de valor de uma vez. Cai de volta pro desenho direto
+ * (sem animacao) na primeira carga, ou se a estrutura dos dados mudou
+ * (numero de meses/rotulos diferente). */
+function animateHatchedFlowChart(canvas, newData) {
+  if (!canvas) return;
+  const oldData = canvas._lastFlowData;
+  const sameShape = oldData && oldData.length === newData.length &&
+    oldData.every((d, i) => d.label === newData[i].label);
+
+  if (canvas._flowAnimFrame) { cancelAnimationFrame(canvas._flowAnimFrame); canvas._flowAnimFrame = null; }
+  if (!sameShape) { drawHatchedFlowChart(canvas, newData); return; }
+
+  const fields = ["previstoReceitas", "previstoDespesas", "receitas", "despesas"];
+  // Mesmo fallback usado dentro de drawHatchedFlowChart: quando nao ha um
+  // valor "previsto" explicito, usa o realizado como previsto.
+  function valOf(d, f) {
+    if (!d) return 0;
+    if (d[f] != null) return d[f];
+    if (f === "previstoReceitas") return d.receitas || 0;
+    if (f === "previstoDespesas") return d.despesas || 0;
+    return 0;
+  }
+  const maxValOf = (arr) => Math.max(1, ...arr.map((d) => Math.max(valOf(d, "previstoReceitas"), valOf(d, "previstoDespesas"))));
+  // Escala fixa (maior entre o estado antigo e o novo) durante toda a
+  // animacao, pra o eixo nao "pular" de escala no meio do movimento.
+  const overallMax = Math.max(maxValOf(oldData), maxValOf(newData));
+  const pinnedStep = niceAxisNumber(overallMax / 3);
+  const pinnedNiceMax = Math.ceil(overallMax / pinnedStep) * pinnedStep;
+
+  const duration = 500;
+  const start = performance.now();
+  const easeOutCubic = (t) => 1 - Math.pow(1 - t, 3);
+
+  function frame(now) {
+    const t = Math.min(1, (now - start) / duration);
+    const e = easeOutCubic(t);
+    if (t >= 1) {
+      canvas._flowAnimFrame = null;
+      drawHatchedFlowChart(canvas, newData); // valor final exato, com a escala real (nao mais fixada)
+      return;
+    }
+    const interpolated = newData.map((d, i) => {
+      const row = Object.assign({}, d);
+      fields.forEach((f) => {
+        const from = valOf(oldData[i], f);
+        const to = valOf(d, f);
+        row[f] = from + (to - from) * e;
+      });
+      return row;
+    });
+    drawHatchedFlowChart(canvas, interpolated, null, pinnedNiceMax);
+    canvas._flowAnimFrame = requestAnimationFrame(frame);
+  }
+  canvas._flowAnimFrame = requestAnimationFrame(frame);
 }
 
 /** Liga um tooltip (mostrando o saldo do mes) que segue o mouse sobre o
