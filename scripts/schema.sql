@@ -19,7 +19,8 @@ CREATE TABLE IF NOT EXISTS accounts (
   name TEXT NOT NULL,
   type TEXT NOT NULL DEFAULT 'corrente',
   initial_balance NUMERIC(14,2) NOT NULL DEFAULT 0,
-  color TEXT NOT NULL DEFAULT '#1565c0'
+  color TEXT NOT NULL DEFAULT '#1565c0',
+  is_primary BOOLEAN NOT NULL DEFAULT false
 );
 
 CREATE TABLE IF NOT EXISTS categories (

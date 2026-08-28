@@ -195,6 +195,7 @@ export interface Account {
   type: string;
   initial_balance: number;
   color: string;
+  is_primary: boolean;
   balance?: number;
 }
 
@@ -206,6 +207,7 @@ function mapAccount(row: any): Account {
     type: row.type,
     initial_balance: Number(row.initial_balance),
     color: row.color,
+    is_primary: !!row.is_primary,
   };
 }
 
@@ -266,6 +268,12 @@ export async function updateAccount(id: string, payload: any): Promise<Account |
   if (payload.color !== undefined) { params.push(payload.color); sets.push(`color = $${params.length}`); }
   if (payload.profile_id !== undefined) { params.push(payload.profile_id); sets.push(`profile_id = $${params.length}`); }
   if (payload.initial_balance !== undefined) { params.push(round2(Number(payload.initial_balance || 0))); sets.push(`initial_balance = $${params.length}`); }
+  if (payload.is_primary !== undefined) { params.push(!!payload.is_primary); sets.push(`is_primary = $${params.length}`); }
+
+  // So pode haver uma conta principal por vez -- ao marcar esta, desmarca as demais.
+  if (payload.is_primary === true) {
+    await sql.query(`UPDATE accounts SET is_primary = false WHERE id != $1`, [id]);
+  }
 
   if (!sets.length) {
     const { rows } = await sql.query(`SELECT * FROM accounts WHERE id=$1`, [id]);
@@ -911,6 +919,138 @@ export async function deleteTransaction(id: string, scope: string = "single"): P
   return { ok: true };
 }
 
+/** Transforma um lancamento avulso (recem-criado ou nao) em uma serie
+ * parcelada: a propria transacao vira a parcela 1, e as demais linhas do
+ * cronograma sao criadas como novas transacoes do mesmo grupo. So funciona
+ * em lancamentos que ainda nao pertencem a nenhum grupo. */
+export async function convertToInstallments(transactionId: string, schedule: InstallmentScheduleEntry[]): Promise<Transaction[] | { error: string }> {
+  const existing = await getTransactionById(transactionId);
+  if (!existing) return { error: "Lançamento não encontrado." };
+  if (existing.installment_group_id || existing.recurrence_group_id) {
+    return { error: "Este lançamento já faz parte de um grupo." };
+  }
+  if (!Array.isArray(schedule) || schedule.length < 1) return { error: "Informe ao menos uma parcela." };
+
+  const groupId = newId();
+  const total = schedule.length;
+  const results: Transaction[] = [];
+
+  const first = schedule[0];
+  const firstStatus = first.status || "pendente";
+  const { rows } = await sql.query(
+    `UPDATE transactions SET due_date=$1, amount=$2, status=$3, paid_date=$4,
+       installment_group_id=$5, installment_number=1, installment_total=$6
+     WHERE id=$7 RETURNING *`,
+    [first.due_date, round2(Number(first.amount)), firstStatus, firstStatus === "pago" ? first.due_date : null, groupId, total, transactionId]
+  );
+  results.push(mapTransaction(rows[0]));
+
+  for (let i = 1; i < total; i++) {
+    const entry = schedule[i];
+    const status = entry.status || "pendente";
+    const row = await insertTransactionRow({
+      description: existing.description,
+      amount: round2(Number(entry.amount)),
+      group: existing.group,
+      account_id: existing.account_id,
+      category_id: existing.category_id,
+      contact_id: existing.contact_id,
+      cost_center_id: existing.cost_center_id,
+      tag_ids: existing.tag_ids || [],
+      notes: existing.notes,
+      status,
+      paid_date: status === "pago" ? entry.due_date : null,
+      id: newId(),
+      due_date: entry.due_date,
+      installment_group_id: groupId,
+      installment_number: i + 1,
+      installment_total: total,
+      recurrence_group_id: null,
+      recurrence_frequency: null,
+    });
+    results.push(row);
+  }
+
+  await log("updated", "transaction", `Lançamento "${existing.description}" transformado em parcelamento (${total}x)`);
+  return results;
+}
+
+// ---------------------------------------------------------------------
+// Acoes em massa (selecionar varios lancamentos e aplicar uma acao)
+// ---------------------------------------------------------------------
+
+export interface BulkActionResult {
+  affected: number;
+  errors: string[];
+}
+
+export async function bulkAction(ids: string[], action: string, params: any = {}): Promise<BulkActionResult> {
+  if (!Array.isArray(ids) || !ids.length) return { affected: 0, errors: ["Nenhum lançamento selecionado."] };
+  const errors: string[] = [];
+  let affected = 0;
+
+  if (action === "delete") {
+    for (const id of ids) {
+      const result = await deleteTransaction(id, "single");
+      if (result) affected++; else errors.push(`Lançamento ${id} não encontrado.`);
+    }
+    return { affected, errors };
+  }
+
+  if (action === "mark_paid" || action === "mark_unpaid") {
+    const paid = action === "mark_paid";
+    for (const id of ids) {
+      const result = await pay_transaction_safe(id, paid);
+      if (result) affected++; else errors.push(`Lançamento ${id} não encontrado.`);
+    }
+    return { affected, errors };
+  }
+
+  if (action === "move") {
+    const targetGroup = params.group;
+    if (!GROUPS.includes(targetGroup)) return { affected: 0, errors: ["Grupo de destino inválido."] };
+    for (const id of ids) {
+      // Mudar de grupo invalida a categoria antiga (e especifica de outro grupo).
+      const { rows } = await sql.query(`UPDATE transactions SET "group" = $1, category_id = NULL WHERE id = $2 RETURNING id`, [targetGroup, id]);
+      if (rows[0]) affected++; else errors.push(`Lançamento ${id} não encontrado.`);
+    }
+    await log("updated", "transaction", `${affected} lançamento(s) movido(s) para ${GROUP_LABELS[targetGroup as Group] || targetGroup}`);
+    return { affected, errors };
+  }
+
+  if (action === "duplicate") {
+    const targetMonth = params.target === "next" ? 1 : 0; // 0 = mes atual, 1 = proximo mes
+    const now = new Date();
+    const baseYear = now.getUTCFullYear();
+    const baseMonth = now.getUTCMonth() + 1;
+    const ref = addMonthsYM(baseYear, baseMonth, targetMonth);
+    for (const id of ids) {
+      const t = await getTransactionById(id);
+      if (!t) { errors.push(`Lançamento ${id} não encontrado.`); continue; }
+      const day = Number(t.due_date.slice(8, 10));
+      const daysInMonth = new Date(Date.UTC(ref.year, ref.month, 0)).getUTCDate();
+      const newDueDate = `${ref.year}-${pad(ref.month)}-${pad(Math.min(day, daysInMonth))}`;
+      await insertTransactionRow({
+        description: t.description, amount: t.amount, group: t.group, account_id: t.account_id,
+        category_id: t.category_id, contact_id: t.contact_id, cost_center_id: t.cost_center_id,
+        tag_ids: t.tag_ids || [], notes: t.notes, status: "pendente", paid_date: null,
+        id: newId(), due_date: newDueDate, installment_group_id: null, installment_number: null,
+        installment_total: null, recurrence_group_id: null, recurrence_frequency: null,
+      });
+      affected++;
+    }
+    await log("created", "transaction", `${affected} lançamento(s) duplicado(s)`);
+    return { affected, errors };
+  }
+
+  return { affected: 0, errors: [`Ação desconhecida: ${action}`] };
+}
+
+async function pay_transaction_safe(id: string, paid: boolean): Promise<boolean> {
+  const result = await payTransaction(id, null, paid);
+  return !!result;
+}
+
 // ---------------------------------------------------------------------
 // Transferencias
 // ---------------------------------------------------------------------
@@ -1056,7 +1196,7 @@ export async function dashboardData(profileId?: string | null, year?: number, mo
   for (const acc of accounts) {
     const bal = await accountBalance(acc.id);
     saldoAtual += bal;
-    saldoPorConta.push({ id: acc.id, name: acc.name, color: acc.color, balance: bal });
+    saldoPorConta.push({ id: acc.id, name: acc.name, color: acc.color, balance: bal, is_primary: acc.is_primary });
   }
   saldoAtual = round2(saldoAtual);
 
@@ -1125,7 +1265,13 @@ export async function dashboardData(profileId?: string | null, year?: number, mo
     const [mStart, mEnd] = monthBounds(ref.year, ref.month);
     const r = await sumRealizado("recebimento", mStart, mEnd, accountIds);
     const d = await sumExpenseRealizado(mStart, mEnd, accountIds);
-    comparativoMensal.push({ label: `${mesesPt[ref.month - 1]}/${String(ref.year).slice(2)}`, receitas: r, despesas: d });
+    const previstoR = round2(r + (await sumPrevisto("recebimento", mStart, mEnd, accountIds)));
+    const previstoD = round2(d + (await sumExpensePrevisto(mStart, mEnd, accountIds)));
+    comparativoMensal.push({
+      label: `${mesesPt[ref.month - 1]}/${String(ref.year).slice(2)}`,
+      receitas: r, despesas: d,
+      previstoReceitas: previstoR, previstoDespesas: previstoD,
+    });
   }
 
   const prevRef = addMonthsYM(y, m, -1);

@@ -31,11 +31,12 @@
     </div>
 
     <div class="profile-switch">
-      <label>Perfil</label>
+      <label class="profile-switch-label">Perfil</label>
       <div class="custom-select" id="profileSelectWrap">
-        <button type="button" class="custom-select-trigger" id="profileSelectTrigger">
-          <span id="profileSelectLabel">Todos os perfis</span>
-          <span class="chevron">▾</span>
+        <button type="button" class="custom-select-trigger" id="profileSelectTrigger" title="Perfil">
+          <span class="nav-icon">👤</span>
+          <span id="profileSelectLabel" class="nav-label select-label-text">Todos os perfis</span>
+          <span class="chevron nav-label">▾</span>
         </button>
         <div class="custom-select-menu hidden" id="profileSelectMenu"></div>
       </div>
@@ -53,8 +54,10 @@
       <span class="nav-icon" id="themeToggleIcon">🌙</span><span class="nav-label theme-toggle-label" id="themeToggleLabel">Modo escuro</span>
     </button>
 
-    <form method="POST" action="/api/logout" class="logout-form" style="padding: 0 8px;">
-      <button type="submit" class="btn-secondary" style="width:100%;">Sair</button>
+    <form method="POST" action="/api/logout" class="logout-form">
+      <button type="submit" class="nav-item" style="width:100%;" title="Sair">
+        <span class="nav-icon">⏻</span><span class="nav-label">Sair</span>
+      </button>
     </form>
     <div class="sidebar-footer">Dados salvos na nuvem (Postgres)</div>
   </aside>
@@ -70,7 +73,7 @@
         </div>
         <div class="month-switch">
           <button id="prevMonth">‹</button>
-          <span id="monthLabel">—</span>
+          <span id="monthLabel" class="month-label-clickable">—</span>
           <button id="nextMonth">›</button>
         </div>
       </header>
@@ -168,12 +171,14 @@
           <div class="lanc-dash-cols">
             <div>
               <div class="lanc-dash-col-title positive">RECEBIMENTOS</div>
+              <div class="progress-bar"><div class="progress-fill progress-fill-green" id="lancProgressReceita" style="width:0%;"></div></div>
               <div class="mini-row" style="padding:4px 0;"><span>Recebido</span><b id="lancRecebido">R$ 0,00</b></div>
               <div class="mini-row" style="padding:4px 0;"><span>Falta</span><b id="lancFaltaReceita">R$ 0,00</b></div>
               <div class="mini-row" style="padding:4px 0; border-bottom:none;"><span>Previsto</span><b id="lancPrevistoReceita">R$ 0,00</b></div>
             </div>
             <div>
               <div class="lanc-dash-col-title negative">DESPESAS</div>
+              <div class="progress-bar"><div class="progress-fill progress-fill-red" id="lancProgressDespesa" style="width:0%;"></div></div>
               <div class="mini-row" style="padding:4px 0;"><span>Pago</span><b id="lancPago">R$ 0,00</b></div>
               <div class="mini-row" style="padding:4px 0;"><span>Falta</span><b id="lancFaltaDespesa">R$ 0,00</b></div>
               <div class="mini-row" style="padding:4px 0; border-bottom:none;"><span>Previsto</span><b id="lancPrevistoDespesa">R$ 0,00</b></div>
@@ -185,7 +190,11 @@
           <canvas id="lancChart" height="150"></canvas>
         </div>
         <div class="panel lanc-dash-conta">
-          <div class="card-label">Conta</div>
+          <div class="card-label" id="lancContaLabel">Saldo - Todas as contas</div>
+          <div class="card-value" id="lancSaldoConta">R$ 0,00</div>
+          <div class="card-sub" style="margin:10px 0 2px 0;">Previsão de fechamento do mês</div>
+          <div class="card-value" id="lancPrevisaoFechamento" style="font-size:16px;">R$ 0,00</div>
+          <hr class="divider" />
           <div class="custom-select" id="lancAccountSelectWrap">
             <button type="button" class="custom-select-trigger light-trigger" id="lancAccountSelectTrigger">
               <span id="lancAccountSelectLabel">Todas as contas</span>
@@ -193,8 +202,6 @@
             </button>
             <div class="custom-select-menu hidden light-menu" id="lancAccountSelectMenu"></div>
           </div>
-          <div class="card-value" id="lancSaldoConta" style="margin-top:10px;">R$ 0,00</div>
-          <div class="card-sub">Saldo atual</div>
         </div>
       </div>
 
@@ -209,11 +216,17 @@
 
       <div id="groupPanel">
         <div class="filters">
+          <div class="month-switch" id="lancMonthSwitch">
+            <button type="button" id="lancPrevMonth">‹</button>
+            <span id="lancMonthLabel" class="month-label-clickable">—</span>
+            <button type="button" id="lancNextMonth">›</button>
+          </div>
           <select id="filterPeriodo">
             <option value="mes_atual">Este mês</option>
             <option value="mes_passado">Mês passado</option>
             <option value="ano_atual">Este ano</option>
             <option value="tudo">Tudo</option>
+            <option value="mes_especifico" class="hidden">Mês específico</option>
             <option value="custom">Personalizado</option>
           </select>
           <input type="date" id="filterStart" class="hidden" />
@@ -229,15 +242,25 @@
           <button class="btn-secondary" id="btnNovoLancamento" style="margin-left:auto;">+ Adicionar</button>
         </div>
 
+        <div class="bulk-toolbar hidden" id="bulkToolbar">
+          <button type="button" class="bulk-toolbar-delete" id="bulkDeleteBtn">Excluir</button>
+          <span id="bulkToolbarSummary">0 transações selecionadas - R$ 0,00</span>
+          <span class="bulk-toolbar-hint">clique com o botão direito para mais opções</span>
+          <button type="button" class="bulk-toolbar-close" id="bulkClearBtn">✕</button>
+        </div>
+
+        <div style="overflow-x:auto;">
         <table class="data-table">
           <thead>
             <tr>
+              <th style="width:34px;"><input type="checkbox" id="selectAllCheckbox" /></th>
               <th>Data</th><th>Descrição</th><th>Contato</th><th>Categoria</th>
               <th>Valor</th><th>Pago?</th><th></th>
             </tr>
           </thead>
           <tbody id="transactionsBody"></tbody>
         </table>
+        </div>
       </div>
 
       <div id="transfersPanel" class="hidden">
@@ -495,6 +518,8 @@
 
 <div id="datePickerPopup" class="date-picker-popup hidden"></div>
 <div id="pickerPopup" class="picker-popup hidden"></div>
+<div id="monthYearPickerPopup" class="date-picker-popup hidden"></div>
+<div id="bulkContextMenu" class="row-menu-dropdown bulk-context-menu hidden"></div>
 
 <script src="/charts.js"></script>
 <script src="/app.js"></script>

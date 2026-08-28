@@ -88,11 +88,12 @@ body {
 /* Dropdown customizado (substitui <select> nativo onde o visual importa) */
 .custom-select { position: relative; }
 .custom-select-trigger {
-  width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  width: 100%; display: flex; align-items: center; justify-content: flex-start; gap: 8px;
   padding: 8px 10px; border-radius: 7px; border: 1px solid rgba(255,255,255,0.14);
   background: rgba(255,255,255,0.06); color: #fff; font-size: 13px; cursor: pointer;
   font-family: inherit;
 }
+.select-label-text { flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .custom-select-trigger:hover { background: rgba(255,255,255,0.1); }
 .custom-select-trigger .chevron { color: #8a92a8; font-size: 10px; transition: transform 0.15s; }
 .custom-select.open .chevron { transform: rotate(180deg); }
@@ -134,7 +135,7 @@ nav { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
 
 /* ---------- Content ---------- */
 
-.content { flex: 1; padding: 28px 34px; max-width: 1320px; }
+.content { flex: 1; padding: 28px 34px; max-width: 1600px; }
 .tab { display: none; }
 .tab.active { display: block; }
 
@@ -149,6 +150,8 @@ nav { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
   border-radius: 999px; padding: 6px 14px; font-weight: 600; flex-shrink: 0;
 }
 .month-switch button { border: none; background: transparent; cursor: pointer; font-size: 16px; color: var(--primary); width: 22px; }
+.month-label-clickable { cursor: pointer; border-radius: 6px; padding: 2px 6px; }
+.month-label-clickable:hover { background: var(--hover-tint); color: var(--primary); }
 
 .btn-primary {
   background: var(--primary); color: #fff; border: none; padding: 10px 16px;
@@ -265,6 +268,57 @@ nav { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
 
 .clickable-cell { cursor: pointer; }
 .clickable-cell:hover { background: var(--hover-tint); }
+.cell-amount { font-weight: 700; }
+.data-table tr.row-selected td { background: var(--hover-tint); }
+
+/* ---------- Selecao em massa das linhas de lancamentos ---------- */
+
+.bulk-toolbar {
+  display: flex; align-items: center; gap: 14px; background: var(--sidebar-bg); color: #fff;
+  border-radius: var(--radius); padding: 12px 16px; margin-bottom: 10px; font-size: 13.5px;
+}
+.bulk-toolbar-delete {
+  border: none; background: rgba(255,255,255,0.12); color: #fff; border-radius: 7px;
+  padding: 7px 14px; cursor: pointer; font-size: 13px; font-weight: 600;
+}
+.bulk-toolbar-delete:hover { background: rgba(255,255,255,0.2); }
+.bulk-toolbar-hint { color: #8a92a8; font-size: 12px; margin-left: auto; }
+.bulk-toolbar-close { border: none; background: transparent; color: #8a92a8; cursor: pointer; font-size: 16px; }
+.bulk-toolbar-close:hover { color: #fff; }
+
+.bulk-context-menu { min-width: 190px; }
+.bulk-menu-item { position: relative; }
+.bulk-menu-item.has-submenu > .row-menu-item, .bulk-menu-item > .row-menu-item { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.submenu-arrow { color: var(--text-muted); font-size: 11px; }
+.bulk-submenu {
+  display: none; position: absolute; top: -5px; left: 100%; margin-left: 4px; z-index: 71;
+  background: var(--surface); border: 1px solid var(--border); border-radius: 9px;
+  box-shadow: 0 14px 34px rgba(0,0,0,0.16); min-width: 160px; padding: 5px;
+}
+.bulk-menu-item.has-submenu:hover > .bulk-submenu { display: block; }
+
+/* ---------- Barras de progresso (previsto x realizado) ---------- */
+
+.progress-bar { width: 100%; height: 6px; border-radius: 999px; background: var(--border); overflow: hidden; margin: 6px 0 8px 0; }
+.progress-fill { height: 100%; border-radius: 999px; transition: width 0.25s ease; }
+.progress-fill-green { background: var(--green); }
+.progress-fill-red { background: var(--red); }
+
+/* ---------- Conta principal (estrela) ---------- */
+
+.primary-star-btn {
+  border: none; background: transparent; cursor: pointer; font-size: 15px; padding: 4px 6px;
+  border-radius: 6px; color: var(--text-muted); line-height: 1;
+}
+.primary-star-btn:hover { background: var(--bg); }
+.primary-star-btn.is-primary { color: #e0a83a; }
+.account-dropdown-star { color: #e0a83a; margin-right: 4px; }
+.account-select-manage {
+  display: block; width: 100%; text-align: center; padding: 9px 6px; border-radius: 7px;
+  border-top: 1px solid var(--border); margin-top: 4px; font-size: 12.5px; color: var(--primary);
+  cursor: pointer; background: transparent; font-family: inherit;
+}
+.account-select-manage:hover { background: var(--hover-tint); }
 
 .row-menu-cell { text-align: right; }
 .row-menu-trigger {
@@ -349,6 +403,12 @@ nav { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
   .cards-row { grid-template-columns: repeat(2, 1fr); }
   .grid-2 { grid-template-columns: 1fr; }
 }
+@media (min-width: 1700px) {
+  .cards-row { grid-template-columns: repeat(4, 1fr); gap: 20px; }
+  .grid-2 { grid-template-columns: 1.5fr 1fr; gap: 20px; }
+  .lanc-dash-grid { grid-template-columns: 1.2fr 1.5fr 1fr; gap: 20px; }
+  .content { padding: 32px 44px; }
+}
 
 /* ---------- Sidebar retratil ---------- */
 
@@ -367,16 +427,16 @@ nav { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
 
 .sidebar.collapsed .brand-text,
 .sidebar.collapsed .nav-label,
-.sidebar.collapsed .profile-switch,
+.sidebar.collapsed .profile-switch-label,
 .sidebar.collapsed .sidebar-footer,
-.sidebar.collapsed .theme-toggle-label,
-.sidebar.collapsed .logout-form { display: none; }
+.sidebar.collapsed .theme-toggle-label { display: none; }
 .sidebar.collapsed:hover .brand-text,
 .sidebar.collapsed:hover .nav-label,
-.sidebar.collapsed:hover .profile-switch,
+.sidebar.collapsed:hover .profile-switch-label,
 .sidebar.collapsed:hover .sidebar-footer,
-.sidebar.collapsed:hover .theme-toggle-label,
-.sidebar.collapsed:hover .logout-form { display: revert; }
+.sidebar.collapsed:hover .theme-toggle-label { display: revert; }
+.sidebar.collapsed .profile-switch { padding-left: 0; padding-right: 0; }
+.sidebar.collapsed .logout-form { padding: 0; }
 
 .theme-toggle-row {
   display: flex; align-items: center; gap: 10px; padding: 11px 12px; border-radius: 8px;

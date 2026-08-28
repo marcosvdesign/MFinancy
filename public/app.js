@@ -26,6 +26,9 @@ const state = {
   settings: { display_name: "Você", prefs: {} },
   lancamentosGroup: "recebimento",
   lancamentosAccountId: "",
+  lancFilterYear: new Date().getFullYear(),
+  lancFilterMonth: new Date().getMonth() + 1,
+  selectedTransactionIds: new Set(),
   activeReport: { report: "despesas_receitas", side: null, label: "Despesas/Receitas" },
   activeConfig: "perfis",
   categoriesGroup: "recebimento",
@@ -240,19 +243,20 @@ async function loadDashboard() {
   document.getElementById("dDespesaPrevisto").textContent = formatCurrency(data.previsto_total_despesas);
 
   document.getElementById("saldoAtual").textContent = formatCurrency(data.saldo_atual);
+  document.getElementById("saldoAtual").className = "card-value " + (data.saldo_atual > 0 ? "positive" : data.saldo_atual < 0 ? "negative" : "");
   document.getElementById("saldoPorPerfil").innerHTML = data.saldo_por_perfil.map((p) => `
     <div class="account-balance-row">
       <span class="color-dot" style="background:${p.color}"></span>
       <span class="name">${escapeHtml(p.name)}</span>
-      <span class="value ${p.balance < 0 ? "negative" : ""}">${formatCurrency(p.balance)}</span>
+      <span class="value ${p.balance < 0 ? "negative" : p.balance > 0 ? "positive" : ""}">${formatCurrency(p.balance)}</span>
     </div>`).join("") || `<div class="empty-state">Nenhum perfil.</div>`;
 
   document.getElementById("saldoPorConta").innerHTML = data.saldo_por_conta.length
     ? data.saldo_por_conta.map((a) => `
         <div class="account-balance-row">
           <span class="color-dot" style="background:${a.color || "#546e7a"}"></span>
-          <span class="name">${escapeHtml(a.name)}</span>
-          <span class="value ${a.balance < 0 ? "negative" : ""}">${formatCurrency(a.balance)}</span>
+          <span class="name">${a.is_primary ? '<span class="account-dropdown-star">★</span>' : ""}${escapeHtml(a.name)}</span>
+          <span class="value ${a.balance < 0 ? "negative" : a.balance > 0 ? "positive" : ""}">${formatCurrency(a.balance)}</span>
         </div>`).join("")
     : `<div class="empty-state">Cadastre uma conta para começar.</div>`;
 
@@ -316,7 +320,7 @@ function renderDreHtml(dre) {
   const row = (label, value, opTotal) => `
     <div class="dre-row ${opTotal ? "total" : ""}">
       <span>${label}</span>
-      <span class="${value < 0 ? "negative" : ""}">${formatCurrency(value)}</span>
+      <span class="${value < 0 ? "negative" : value > 0 ? "positive" : ""}">${formatCurrency(value)}</span>
     </div>`;
   return (
     row("Receita Bruta", dre.receita_bruta) +
@@ -357,6 +361,51 @@ document.getElementById("nextMonth").addEventListener("click", () => {
   state.dashMonth += 1; if (state.dashMonth > 12) { state.dashMonth = 1; state.dashYear += 1; }
   state.selectedDay = null; loadDashboard();
 });
+document.getElementById("monthLabel").addEventListener("click", (e) => {
+  openMonthYearPicker(e.currentTarget, state.dashYear, state.dashMonth, (y, m) => {
+    state.dashYear = y; state.dashMonth = m; state.selectedDay = null; loadDashboard();
+  });
+});
+
+// ---- Popup de escolha de mes/ano (usado no navegador do Dashboard e nos filtros de Lancamentos) ----
+
+let monthYearPickerState = null;
+function openMonthYearPicker(triggerEl, year, month, onSelect) {
+  monthYearPickerState = { year, month, onSelect };
+  renderMonthYearPicker(triggerEl);
+}
+function renderMonthYearPicker(triggerEl) {
+  const { year, month } = monthYearPickerState;
+  const popup = document.getElementById("monthYearPickerPopup");
+  popup.innerHTML = `
+    <div class="date-picker-header">
+      <button type="button" data-myp="prev">‹</button>
+      <span>${year}</span>
+      <button type="button" data-myp="next">›</button>
+    </div>
+    <div class="picker-list" style="display:grid; grid-template-columns:repeat(3,1fr); gap:6px; max-height:none;">
+      ${MESES.map((label, i) => `<div class="picker-item ${i + 1 === month ? "selected" : ""}" style="justify-content:center; text-align:center;" data-month="${i + 1}">${label.slice(0, 3)}</div>`).join("")}
+    </div>
+  `;
+  if (triggerEl) positionPopupNear(popup, triggerEl);
+  popup.classList.remove("hidden");
+  popup.querySelector('[data-myp="prev"]').addEventListener("click", (e) => { e.stopPropagation(); monthYearPickerState.year--; renderMonthYearPicker(triggerEl); });
+  popup.querySelector('[data-myp="next"]').addEventListener("click", (e) => { e.stopPropagation(); monthYearPickerState.year++; renderMonthYearPicker(triggerEl); });
+  popup.querySelectorAll("[data-month]").forEach((el) => {
+    el.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const m = parseInt(el.dataset.month);
+      const y = monthYearPickerState.year;
+      const onSelect = monthYearPickerState.onSelect;
+      closeMonthYearPicker();
+      onSelect(y, m);
+    });
+  });
+}
+function closeMonthYearPicker() { document.getElementById("monthYearPickerPopup")?.classList.add("hidden"); }
+document.addEventListener("click", (e) => {
+  if (!e.target.closest("#monthYearPickerPopup") && !e.target.closest(".month-label-clickable")) closeMonthYearPicker();
+});
 document.getElementById("btnToggleSaldoPerfil").addEventListener("click", () => {
   document.getElementById("saldoPorPerfil").classList.toggle("hidden");
 });
@@ -379,16 +428,23 @@ document.querySelectorAll("#lancamentosSubtabs .subtab").forEach((btn) => {
 
 // ---- Mini-dashboard + seletor de conta no topo de Lancamentos ----
 
-function setLancAccountOptions() {
+function setLancAccountOptions(saldoPorConta) {
   const accounts = state.activeProfile === "all" ? state.accounts : state.accounts.filter((a) => a.profile_id === state.activeProfile);
-  const items = [{ value: "", label: "Todas as contas" }, ...accounts.map((a) => ({ value: a.id, label: accountLabel(a) }))];
+  const balById = Object.fromEntries((saldoPorConta || []).map((a) => [a.id, a]));
+  const items = [
+    { value: "", label: "Todas as contas" },
+    ...accounts.map((a) => ({ value: a.id, label: accountLabel(a), balance: balById[a.id]?.balance, isPrimary: a.is_primary })),
+  ];
   if (!items.find((i) => i.value === state.lancamentosAccountId)) state.lancamentosAccountId = "";
 
   const menu = document.getElementById("lancAccountSelectMenu");
   menu.innerHTML = items.map((item) => `
     <div class="custom-select-option ${item.value === state.lancamentosAccountId ? "selected" : ""}" data-value="${item.value}">
-      <span>${escapeHtml(item.label)}</span><span class="check">✓</span>
-    </div>`).join("");
+      <span>${item.isPrimary ? '<span class="account-dropdown-star">★</span>' : ""}${escapeHtml(item.label)}</span>
+      ${item.balance !== undefined
+        ? `<span class="${item.balance < 0 ? "negative" : item.balance > 0 ? "positive" : ""}">${formatCurrency(item.balance)}</span>`
+        : '<span class="check">✓</span>'}
+    </div>`).join("") + `<button type="button" class="account-select-manage" id="btnGerenciarContas">Gerenciar contas bancárias</button>`;
   menu.querySelectorAll(".custom-select-option").forEach((opt) => {
     opt.addEventListener("click", () => {
       state.lancamentosAccountId = opt.dataset.value;
@@ -396,8 +452,18 @@ function setLancAccountOptions() {
       document.getElementById("lancAccountSelectMenu").classList.add("hidden");
       document.getElementById("lancAccountSelectWrap").classList.remove("open");
       loadLancDashboard();
-      loadLancamentos();
+      loadTransactionsTable();
     });
+  });
+  document.getElementById("btnGerenciarContas")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    closeCustomSelect();
+    document.getElementById("lancAccountSelectMenu").classList.add("hidden");
+    document.getElementById("lancAccountSelectWrap").classList.remove("open");
+    state.activeConfig = "contas";
+    document.querySelectorAll(".config-link").forEach((b) => b.classList.toggle("active", b.dataset.config === "contas"));
+    document.querySelectorAll(".config-panel").forEach((p) => p.classList.toggle("hidden", p.id !== "cfg-contas"));
+    switchTab("configuracoes");
   });
   const current = items.find((i) => i.value === state.lancamentosAccountId);
   document.getElementById("lancAccountSelectLabel").textContent = current ? current.label : items[0].label;
@@ -416,11 +482,10 @@ async function loadLancDashboard() {
   let data;
   try { data = await api("GET", "/api/dashboard?" + qs(params)); } catch (e) { return showToast(e.message, true); }
 
-  const resultado = data.realizado_receitas - data.realizado_despesas;
   const previstoResultado = data.previsto_total_receitas - data.previsto_total_despesas;
   const resultadoEl = document.getElementById("lancResultado");
   resultadoEl.textContent = formatCurrency(previstoResultado);
-  resultadoEl.className = "card-value " + (previstoResultado >= 0 ? "positive" : "negative");
+  resultadoEl.className = "card-value " + (previstoResultado > 0 ? "positive" : previstoResultado < 0 ? "negative" : "");
 
   document.getElementById("lancRecebido").textContent = formatCurrency(data.realizado_receitas);
   document.getElementById("lancFaltaReceita").textContent = formatCurrency(data.falta_receitas);
@@ -429,14 +494,24 @@ async function loadLancDashboard() {
   document.getElementById("lancFaltaDespesa").textContent = formatCurrency(data.falta_despesas);
   document.getElementById("lancPrevistoDespesa").textContent = formatCurrency(data.previsto_total_despesas);
 
-  drawGroupedBarChart(document.getElementById("lancChart"), data.comparativo_mensal);
+  document.getElementById("lancProgressReceita").style.width = Math.max(0, Math.min(100, data.percent_receitas)) + "%";
+  document.getElementById("lancProgressDespesa").style.width = Math.max(0, Math.min(100, data.percent_despesas)) + "%";
 
-  const saldo = state.lancamentosAccountId
-    ? (data.saldo_por_conta.find((a) => a.id === state.lancamentosAccountId)?.balance ?? 0)
-    : data.saldo_atual;
+  drawHatchedFlowChart(document.getElementById("lancChart"), data.comparativo_mensal);
+
+  const contaAtual = state.lancamentosAccountId ? data.saldo_por_conta.find((a) => a.id === state.lancamentosAccountId) : null;
+  const saldo = contaAtual ? contaAtual.balance : data.saldo_atual;
+  const previsaoFechamento = saldo + data.falta_receitas - data.falta_despesas;
+
+  document.getElementById("lancContaLabel").textContent = "Saldo - " + (contaAtual ? contaAtual.name : "Todas as contas");
   const saldoEl = document.getElementById("lancSaldoConta");
   saldoEl.textContent = formatCurrency(saldo);
-  saldoEl.className = "card-value " + (saldo < 0 ? "negative" : "");
+  saldoEl.className = "card-value " + (saldo > 0 ? "positive" : saldo < 0 ? "negative" : "");
+  const previsaoEl = document.getElementById("lancPrevisaoFechamento");
+  previsaoEl.textContent = formatCurrency(previsaoFechamento);
+  previsaoEl.className = "card-value " + (previsaoFechamento > 0 ? "positive" : previsaoFechamento < 0 ? "negative" : "");
+
+  setLancAccountOptions(data.saldo_por_conta);
 }
 
 document.getElementById("filterPeriodo").addEventListener("change", (e) => {
@@ -455,12 +530,39 @@ function computePeriodRange(preset) {
   if (preset === "mes_passado") return { start: iso(new Date(y, m - 1, 1)), end: iso(new Date(y, m, 0)) };
   if (preset === "ano_atual") return { start: `${y}-01-01`, end: `${y}-12-31` };
   if (preset === "tudo") return { start: null, end: null };
+  if (preset === "mes_especifico") return { start: iso(new Date(state.lancFilterYear, state.lancFilterMonth - 1, 1)), end: iso(new Date(state.lancFilterYear, state.lancFilterMonth, 0)) };
   return { start: document.getElementById("filterStart").value || null, end: document.getElementById("filterEnd").value || null };
 }
+
+// ---- Widget "‹ Mês Ano ›" dos filtros de Lancamentos ----
+
+function updateLancMonthLabel() {
+  document.getElementById("lancMonthLabel").textContent = `${MESES[state.lancFilterMonth - 1]} ${state.lancFilterYear}`;
+}
+function applyLancMonthFilter() {
+  updateLancMonthLabel();
+  document.getElementById("filterPeriodo").value = "mes_especifico";
+  loadTransactionsTable();
+}
+document.getElementById("lancPrevMonth").addEventListener("click", () => {
+  state.lancFilterMonth -= 1; if (state.lancFilterMonth < 1) { state.lancFilterMonth = 12; state.lancFilterYear -= 1; }
+  applyLancMonthFilter();
+});
+document.getElementById("lancNextMonth").addEventListener("click", () => {
+  state.lancFilterMonth += 1; if (state.lancFilterMonth > 12) { state.lancFilterMonth = 1; state.lancFilterYear += 1; }
+  applyLancMonthFilter();
+});
+document.getElementById("lancMonthLabel").addEventListener("click", (e) => {
+  openMonthYearPicker(e.currentTarget, state.lancFilterYear, state.lancFilterMonth, (y, m) => {
+    state.lancFilterYear = y; state.lancFilterMonth = m; applyLancMonthFilter();
+  });
+});
 
 function loadLancamentos() {
   const active = document.querySelector("#lancamentosSubtabs .subtab.active");
   state.lancamentosGroup = active ? active.dataset.group : "recebimento";
+  state.selectedTransactionIds.clear();
+  updateLancMonthLabel();
   setLancAccountOptions();
   loadLancDashboard();
   if (state.lancamentosGroup === "transferencias") loadTransfers(); else loadTransactionsTable();
@@ -477,6 +579,10 @@ async function loadTransactionsTable() {
   };
   let items;
   try { items = await api("GET", "/api/transactions?" + qs(params)); } catch (e) { return showToast(e.message, true); }
+  state.lastTransactionItems = items;
+
+  const visibleIds = new Set(items.map((t) => t.id));
+  Array.from(state.selectedTransactionIds).forEach((id) => { if (!visibleIds.has(id)) state.selectedTransactionIds.delete(id); });
 
   const accById = Object.fromEntries(state.accounts.map((a) => [a.id, a]));
   const catById = Object.fromEntries(state.categories.map((c) => [c.id, c]));
@@ -488,8 +594,10 @@ async function loadTransactionsTable() {
     const overdue = t.status === "pendente" && t.due_date < today;
     const groupTag = t.installment_total ? ` (${t.installment_number}/${t.installment_total})` : t.recurrence_group_id ? " 🔁" : "";
     const groupId = t.recurrence_group_id || t.installment_group_id || "";
+    const checked = state.selectedTransactionIds.has(t.id);
     return `
-      <tr>
+      <tr data-row-id="${t.id}" class="${checked ? "row-selected" : ""}">
+        <td><input type="checkbox" class="row-select-checkbox" data-id="${t.id}" ${checked ? "checked" : ""} /></td>
         <td class="clickable-cell cell-date" data-id="${t.id}">${formatDateBR(t.due_date)}${overdue ? ' <span class="badge badge-vencido">atrasado</span>' : ""}</td>
         <td class="clickable-cell cell-desc" data-id="${t.id}"><span class="cell-text">${escapeHtml(t.description)}</span>${groupTag}<div class="meta" style="color:var(--text-muted);font-size:11.5px;">${escapeHtml(accById[t.account_id]?.name || "")}</div></td>
         <td class="clickable-cell cell-contact" data-id="${t.id}"><span class="cell-text">${escapeHtml(contactById[t.contact_id]?.name || "-")}</span></td>
@@ -503,9 +611,10 @@ async function loadTransactionsTable() {
         </td>
         <td class="row-menu-cell">
           <button type="button" class="row-menu-trigger" data-menu-id="${t.id}">⋮</button>
+          <button type="button" class="row-menu-trigger" data-bulk-menu-id="${t.id}" title="Mais opções">▾</button>
         </td>
       </tr>`;
-  }).join("") : `<tr><td colspan="7"><div class="empty-state">Nenhum lançamento encontrado.</div></td></tr>`;
+  }).join("") : `<tr><td colspan="8"><div class="empty-state">Nenhum lançamento encontrado.</div></td></tr>`;
 
   body.querySelectorAll('input[type=checkbox][data-id]').forEach((chk) => {
     chk.addEventListener("change", () => handleTogglePago(chk, items));
@@ -525,14 +634,164 @@ async function loadTransactionsTable() {
   body.querySelectorAll(".cell-amount").forEach((cell) => {
     cell.addEventListener("click", () => startInlineNumberEdit(cell, items.find((i) => i.id === cell.dataset.id)));
   });
-  body.querySelectorAll(".row-menu-trigger").forEach((btn) => {
+  body.querySelectorAll(".row-menu-trigger[data-menu-id]").forEach((btn) => {
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
       const t = items.find((i) => i.id === btn.dataset.menuId);
       openRowActionMenu(btn, t, () => loadTransactionsTable());
     });
   });
+
+  body.querySelectorAll(".row-select-checkbox").forEach((chk) => {
+    chk.addEventListener("click", (e) => e.stopPropagation());
+    chk.addEventListener("change", () => {
+      if (chk.checked) state.selectedTransactionIds.add(chk.dataset.id);
+      else state.selectedTransactionIds.delete(chk.dataset.id);
+      chk.closest("tr").classList.toggle("row-selected", chk.checked);
+      updateBulkToolbar();
+      updateSelectAllCheckbox();
+    });
+  });
+  body.querySelectorAll("[data-bulk-menu-id]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const id = btn.dataset.bulkMenuId;
+      const ids = state.selectedTransactionIds.has(id) && state.selectedTransactionIds.size > 1
+        ? Array.from(state.selectedTransactionIds) : [id];
+      const rect = btn.getBoundingClientRect();
+      openBulkContextMenu(rect.left, rect.bottom + 4, ids);
+    });
+  });
+  body.querySelectorAll("tr[data-row-id]").forEach((tr) => {
+    tr.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      const id = tr.dataset.rowId;
+      if (!state.selectedTransactionIds.has(id)) {
+        state.selectedTransactionIds.clear();
+        state.selectedTransactionIds.add(id);
+        body.querySelectorAll(".row-select-checkbox").forEach((c) => { c.checked = state.selectedTransactionIds.has(c.dataset.id); });
+        body.querySelectorAll("tr[data-row-id]").forEach((r) => r.classList.toggle("row-selected", state.selectedTransactionIds.has(r.dataset.rowId)));
+        updateBulkToolbar();
+        updateSelectAllCheckbox();
+      }
+      openBulkContextMenu(e.clientX, e.clientY, Array.from(state.selectedTransactionIds));
+    });
+  });
+
+  updateBulkToolbar();
+  updateSelectAllCheckbox();
 }
+
+// ---------------------------------------------------------------------
+// Selecao em massa (checkboxes, barra de acoes, menu de contexto)
+// ---------------------------------------------------------------------
+
+function updateBulkToolbar() {
+  const toolbar = document.getElementById("bulkToolbar");
+  const n = state.selectedTransactionIds.size;
+  if (!n) { toolbar.classList.add("hidden"); return; }
+  toolbar.classList.remove("hidden");
+  const items = state.lastTransactionItems || [];
+  const total = items.filter((t) => state.selectedTransactionIds.has(t.id)).reduce((s, t) => s + Number(t.amount || 0), 0);
+  document.getElementById("bulkToolbarSummary").textContent = `${n} ${n === 1 ? "transação selecionada" : "transações selecionadas"} - ${formatCurrency(total)}`;
+}
+function updateSelectAllCheckbox() {
+  const all = document.getElementById("selectAllCheckbox");
+  const items = state.lastTransactionItems || [];
+  if (!items.length) { all.checked = false; all.indeterminate = false; return; }
+  const selectedCount = items.filter((t) => state.selectedTransactionIds.has(t.id)).length;
+  all.checked = selectedCount === items.length;
+  all.indeterminate = selectedCount > 0 && selectedCount < items.length;
+}
+document.getElementById("selectAllCheckbox").addEventListener("change", (e) => {
+  const checked = e.target.checked;
+  const items = state.lastTransactionItems || [];
+  items.forEach((t) => { if (checked) state.selectedTransactionIds.add(t.id); else state.selectedTransactionIds.delete(t.id); });
+  document.querySelectorAll("#transactionsBody .row-select-checkbox").forEach((c) => { c.checked = checked; });
+  document.querySelectorAll("#transactionsBody tr[data-row-id]").forEach((r) => r.classList.toggle("row-selected", checked));
+  updateBulkToolbar();
+});
+document.getElementById("bulkClearBtn").addEventListener("click", () => {
+  state.selectedTransactionIds.clear();
+  loadTransactionsTable();
+});
+document.getElementById("bulkDeleteBtn").addEventListener("click", async () => {
+  const ids = Array.from(state.selectedTransactionIds);
+  if (!ids.length) return;
+  if (!confirm(`Excluir ${ids.length} lançamento(s) selecionado(s)?`)) return;
+  try {
+    await api("POST", "/api/transactions/bulk", { ids, action: "delete" });
+    showToast("Lançamentos excluídos.");
+    state.selectedTransactionIds.clear();
+    loadTransactionsTable();
+    loadLancDashboard();
+    if (state.tab === "dashboard") loadDashboard();
+  } catch (e) { showToast(e.message, true); }
+});
+
+function openBulkContextMenu(x, y, ids) {
+  if (!ids.length) return;
+  const menu = document.getElementById("bulkContextMenu");
+  const currentGroup = state.lancamentosGroup;
+  const moveOptions = Object.entries(GROUP_LABELS).filter(([g]) => g !== currentGroup)
+    .map(([g, label]) => `<button type="button" class="row-menu-item" data-action="move" data-target="${g}">${label}</button>`).join("");
+
+  menu.innerHTML = `
+    <div class="bulk-menu-item has-submenu">
+      <span class="row-menu-item">Duplicar itens <span class="submenu-arrow">▸</span></span>
+      <div class="bulk-submenu">
+        <button type="button" class="row-menu-item" data-action="duplicate" data-target="current">no mês atual</button>
+        <button type="button" class="row-menu-item" data-action="duplicate" data-target="next">no próximo mês</button>
+      </div>
+    </div>
+    <div class="bulk-menu-item has-submenu">
+      <span class="row-menu-item">Marcar itens como <span class="submenu-arrow">▸</span></span>
+      <div class="bulk-submenu">
+        <button type="button" class="row-menu-item" data-action="mark_paid">Pago</button>
+        <button type="button" class="row-menu-item" data-action="mark_unpaid">Não pago</button>
+      </div>
+    </div>
+    <div class="bulk-menu-item has-submenu">
+      <span class="row-menu-item">Mover itens para <span class="submenu-arrow">▸</span></span>
+      <div class="bulk-submenu">${moveOptions}</div>
+    </div>
+    <button type="button" class="row-menu-item danger" data-action="delete">Excluir itens</button>
+  `;
+  menu.style.top = `${y}px`;
+  menu.style.left = `${Math.max(8, Math.min(x, window.innerWidth - 210))}px`;
+  menu.classList.remove("hidden");
+
+  menu.querySelectorAll("[data-action]").forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      closeBulkContextMenu();
+      const action = btn.dataset.action;
+      try {
+        if (action === "delete") {
+          if (!confirm(`Excluir ${ids.length} lançamento(s)?`)) return;
+          await api("POST", "/api/transactions/bulk", { ids, action: "delete" });
+          showToast("Lançamentos excluídos.");
+        } else if (action === "mark_paid" || action === "mark_unpaid") {
+          await api("POST", "/api/transactions/bulk", { ids, action });
+          showToast("Status atualizado.");
+        } else if (action === "duplicate") {
+          await api("POST", "/api/transactions/bulk", { ids, action: "duplicate", params: { target: btn.dataset.target } });
+          showToast("Lançamentos duplicados.");
+        } else if (action === "move") {
+          await api("POST", "/api/transactions/bulk", { ids, action: "move", params: { group: btn.dataset.target } });
+          showToast("Lançamentos movidos.");
+        }
+        state.selectedTransactionIds.clear();
+        loadTransactionsTable();
+        loadLancDashboard();
+        if (state.tab === "dashboard") loadDashboard();
+      } catch (err) { showToast(err.message, true); }
+    });
+  });
+}
+function closeBulkContextMenu() { document.getElementById("bulkContextMenu")?.classList.add("hidden"); }
+document.addEventListener("click", closeBulkContextMenu);
+document.addEventListener("scroll", closeBulkContextMenu, true);
 
 /** Menu flutuante "⋮" (editar/duplicar/excluir) de uma linha da tabela de
  * lançamentos. Fica fora da tabela (position: fixed) para não ser cortado
@@ -1100,6 +1359,10 @@ function transactionFormHtml(t, presetGroup) {
       </div>
     </div>
     ${isEdit && t.installment_group_id ? `<div class="card-sub" id="installmentInfoBox" style="margin-bottom:14px;">Carregando informações do parcelamento...</div>` : ""}
+    ${isEdit && !t.installment_group_id && !t.recurrence_group_id ? `
+    <div class="form-row">
+      <button type="button" class="btn-secondary" id="btnCriarParcelas">Criar parcelas</button>
+    </div>` : ""}
 
     <div class="form-row" id="statusFieldRow">
       <label>Status</label>
@@ -1205,6 +1468,25 @@ function openTransactionModal(t, scope) {
       }
     });
   }
+
+  document.getElementById("btnCriarParcelas")?.addEventListener("click", () => {
+    const defaults = {
+      amount: parseFloat(document.getElementById("f_amount").value || "0"),
+      due_date: document.getElementById("f_due_date").value || todayIso(),
+    };
+    openParcelasPopup(defaults, null, async (result) => {
+      try {
+        await api("POST", `/api/transactions/${t.id}/installments`, {
+          schedule: result.rows.map((r) => ({ due_date: r.due_date, amount: r.amount, status: r.status })),
+        });
+        showToast("Lançamento transformado em parcelado.");
+        closeModal();
+        loadTransactionsTable();
+        loadLancDashboard();
+        if (state.tab === "dashboard") loadDashboard();
+      } catch (e) { showToast(e.message, true); }
+    });
+  });
 
   if (t && t.installment_group_id) {
     api("GET", "/api/transactions?" + qs({ installment_group_id: t.installment_group_id }))
@@ -1486,7 +1768,7 @@ function renderSaldos(data) {
   return `<table class="data-table"><thead><tr><th>Conta</th><th>Perfil</th><th>Saldo</th></tr></thead><tbody>
     ${data.accounts.map((a) => {
       const profile = state.profiles.find((p) => p.id === a.profile_id);
-      return `<tr><td>${escapeHtml(a.name)}</td><td>${escapeHtml(profile?.name || "-")}</td><td class="${a.balance < 0 ? "negative" : ""}">${formatCurrency(a.balance)}</td></tr>`;
+      return `<tr><td>${escapeHtml(a.name)}</td><td>${escapeHtml(profile?.name || "-")}</td><td class="${a.balance < 0 ? "negative" : a.balance > 0 ? "positive" : ""}">${formatCurrency(a.balance)}</td></tr>`;
     }).join("")}
     <tr><td colspan="2"><b>Total</b></td><td><b>${formatCurrency(data.total)}</b></td></tr>
   </tbody></table>`;
@@ -1652,9 +1934,13 @@ async function loadAccounts() {
     const profile = state.profiles.find((p) => p.id === a.profile_id);
     return `
     <div class="entity-card">
-      <div class="entity-card-head"><span class="color-dot" style="background:${a.color}"></span><span class="entity-card-title">${escapeHtml(a.name)}</span></div>
+      <div class="entity-card-head">
+        <span class="color-dot" style="background:${a.color}"></span>
+        <span class="entity-card-title">${escapeHtml(a.name)}</span>
+        <button type="button" class="primary-star-btn ${a.is_primary ? "is-primary" : ""}" data-action="star" data-id="${a.id}" title="${a.is_primary ? "Conta principal" : "Definir como conta principal"}">${a.is_primary ? "★" : "☆"}</button>
+      </div>
       <div class="card-sub">${escapeHtml(a.type)} · ${escapeHtml(profile?.name || "-")}</div>
-      <div class="entity-card-value ${a.balance < 0 ? "negative" : ""}">${formatCurrency(a.balance)}</div>
+      <div class="entity-card-value ${a.balance < 0 ? "negative" : a.balance > 0 ? "positive" : ""}">${formatCurrency(a.balance)}</div>
       <div class="entity-card-actions"><button data-action="edit" data-id="${a.id}">Editar</button><button data-action="delete" data-id="${a.id}" class="btn-danger">Excluir</button></div>
     </div>`;
   }).join("") : `<div class="empty-state">Nenhuma conta cadastrada ainda.</div>`;
@@ -1663,6 +1949,11 @@ async function loadAccounts() {
     btn.addEventListener("click", async () => {
       const acc = accounts.find((x) => x.id === btn.dataset.id);
       if (btn.dataset.action === "edit") return openAccountModal(acc);
+      if (btn.dataset.action === "star") {
+        try { await api("PUT", `/api/accounts/${acc.id}`, { is_primary: !acc.is_primary }); await refreshLookups(); loadAccounts(); }
+        catch (e) { showToast(e.message, true); }
+        return;
+      }
       if (!confirm(`Excluir a conta "${acc.name}"?`)) return;
       try { await api("DELETE", `/api/accounts/${acc.id}`); showToast("Conta excluída."); await refreshLookups(); loadAccounts(); }
       catch (e) { showToast(e.message, true); }
