@@ -191,7 +191,7 @@ nav { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
   border-radius: 999px; padding: 6px 14px; font-weight: 600; flex-shrink: 0;
 }
 .month-switch button { border: none; background: transparent; cursor: pointer; font-size: 16px; color: var(--primary); width: 22px; }
-.month-label-clickable { cursor: pointer; border-radius: 6px; padding: 2px 6px; }
+.month-label-clickable { cursor: pointer; border-radius: 6px; padding: 2px 6px; display: inline-block; min-width: 118px; text-align: center; }
 .month-label-clickable:hover { background: var(--hover-tint); color: var(--primary); }
 
 .btn-primary {
@@ -239,6 +239,7 @@ nav { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
   border: 1px solid var(--glass-border); border-radius: var(--radius); padding: 18px;
 }
 .panel h2 { margin: 0 0 14px 0; font-size: 15px; }
+.panel canvas { max-width: 100%; display: block; }
 
 .divider { border: none; border-top: 1px solid var(--border); margin: 14px 0; }
 
@@ -268,10 +269,21 @@ nav { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
 .mini-row .meta { color: var(--text-muted); font-size: 12px; }
 .empty-state { color: var(--text-muted); font-size: 13px; padding: 14px 0; text-align: center; }
 
-.compare-row { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 13.5px; }
-.compare-row:last-child { border-bottom: none; }
+.compare-item { padding: 9px 0; border-bottom: 1px solid var(--border); }
+.compare-item:last-child { border-bottom: none; }
+.compare-item.compare-sub { padding: 6px 0 6px 18px; }
+.compare-item.compare-sub .compare-row { font-size: 12.5px; color: var(--text-muted); }
+.compare-item .progress-bar { margin: 6px 0 0 0; height: 5px; }
+.compare-item.compare-sub .progress-bar { height: 4px; }
+.compare-row { display: flex; justify-content: space-between; align-items: center; font-size: 13.5px; }
 .compare-row .arrow-up { color: var(--red); }
 .compare-row .arrow-down { color: var(--green); }
+
+.help-icon {
+  display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px;
+  border-radius: 50%; border: 1px solid var(--border); color: var(--text-muted); font-size: 11px;
+  cursor: help; flex-shrink: 0;
+}
 
 /* ---------- DRE ---------- */
 
@@ -720,6 +732,8 @@ nav { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
 .hide-values-btn svg { width: 19px; height: 19px; }
 .hide-values-btn:hover { border-color: var(--primary); color: var(--primary); }
 
+body.values-hidden .positive,
+body.values-hidden .negative,
 body.values-hidden .card-value,
 body.values-hidden .entity-card-value,
 body.values-hidden .account-balance-row .value,
@@ -731,8 +745,6 @@ body.values-hidden .dre-row span:last-child,
 body.values-hidden .compare-row span:last-child,
 body.values-hidden .donut-lines b,
 body.values-hidden .bulk-toolbar span,
-body.values-hidden .data-table td.positive,
-body.values-hidden .data-table td.negative,
 body.values-hidden .account-dropdown-star + *,
 body.values-hidden .custom-select-option span.positive,
 body.values-hidden .custom-select-option span.negative {

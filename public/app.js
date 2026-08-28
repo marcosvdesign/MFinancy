@@ -488,6 +488,8 @@ async function loadDashboard() {
 
   drawDonut(document.getElementById("donutReceitas"), data.percent_receitas, themeColor("--green", "#2f9d55"));
   drawDonut(document.getElementById("donutDespesas"), data.percent_despesas, themeColor("--red", "#d64545"));
+  document.getElementById("dProgressReceita").style.width = Math.max(0, Math.min(100, data.percent_receitas)) + "%";
+  document.getElementById("dProgressDespesa").style.width = Math.max(0, Math.min(100, data.percent_despesas)) + "%";
   document.getElementById("dReceitaRealizado").textContent = formatCurrency(data.realizado_receitas);
   document.getElementById("dReceitaFalta").textContent = formatCurrency(data.falta_receitas);
   document.getElementById("dReceitaPrevisto").textContent = formatCurrency(data.previsto_total_receitas);
@@ -516,16 +518,18 @@ async function loadDashboard() {
   drawHatchedFlowChart(document.getElementById("chartComparativo"), data.comparativo_mensal);
   attachChartTooltip(document.getElementById("chartComparativo"), data.comparativo_mensal);
 
-  document.getElementById("comparativoGrupos").innerHTML = data.comparativo_grupos.map((g) => {
-    const isReceita = g.group === "recebimento";
-    let arrowHtml = `<span class="card-sub">Sem alteração</span>`;
-    if (g.atual !== g.anterior) {
-      const up = g.atual > g.anterior;
-      const cls = (isReceita && up) || (!isReceita && !up) ? "positive" : "negative";
-      arrowHtml = `<span class="${cls}">${up ? "▲" : "▼"} ${formatCurrency(Math.abs(g.atual - g.anterior))}</span>`;
-    }
-    return `<div class="compare-row"><span>${g.label}</span><span style="text-align:right;">${formatCurrency(g.atual)}<br/>${arrowHtml}</span></div>`;
-  }).join("");
+  const activeProfileObj = state.profiles.find((p) => p.id === state.activeProfile);
+  document.getElementById("comparativoSubtitle").textContent = state.activeProfile === "all" ? "Todas as contas" : (activeProfileObj?.name || "");
+
+  const receitaGroup = data.comparativo_grupos.find((g) => g.group === "recebimento");
+  const despesaSubGroups = data.comparativo_grupos.filter((g) => g.group !== "recebimento");
+  const despesaAtual = despesaSubGroups.reduce((s, g) => s + g.atual, 0);
+  const despesaAnterior = despesaSubGroups.reduce((s, g) => s + g.anterior, 0);
+
+  document.getElementById("comparativoGrupos").innerHTML =
+    renderComparativoRow(receitaGroup.label, receitaGroup.atual, receitaGroup.anterior, true, false) +
+    renderComparativoRow("Despesas", despesaAtual, despesaAnterior, false, false) +
+    despesaSubGroups.map((g) => renderComparativoRow(g.label, g.atual, g.anterior, false, true)).join("");
 
   document.getElementById("qtdVencidasBadge").textContent = data.vencidas.length;
   document.getElementById("totalVencidas").textContent = formatCurrency(Math.abs(data.total_vencidas));
@@ -568,6 +572,26 @@ async function loadDashboard() {
     ? new Date().getDate() : 1;
   state.selectedDay = initialDay;
   loadAgendaDia(`${state.dashYear}-${String(state.dashMonth).padStart(2, "0")}-${String(initialDay).padStart(2, "0")}`);
+}
+
+/** Uma linha do "Comparativo mês anterior": valor atual + variação (seta,
+ * valor, %) + barra de progresso mostrando a intensidade da variação. */
+function renderComparativoRow(label, atual, anterior, isReceita, sub) {
+  let changeHtml = `<span class="card-sub">Sem alteração</span>`;
+  let pct = 0;
+  let barClass = "";
+  if (atual !== anterior) {
+    const up = atual > anterior;
+    const favoravel = (isReceita && up) || (!isReceita && !up);
+    barClass = favoravel ? "progress-fill-green" : "progress-fill-red";
+    pct = anterior !== 0 ? Math.min(100, Math.abs(((atual - anterior) / anterior) * 100)) : 100;
+    changeHtml = `<span class="${favoravel ? "positive" : "negative"}">${up ? "▲" : "▼"} ${formatCurrency(Math.abs(atual - anterior))} · ${pct.toFixed(0)}%</span>`;
+  }
+  return `
+    <div class="compare-item ${sub ? "compare-sub" : ""}">
+      <div class="compare-row"><span>${escapeHtml(label)}</span><span style="text-align:right;">${formatCurrency(atual)}<br/>${changeHtml}</span></div>
+      <div class="progress-bar"><div class="progress-fill ${barClass}" style="width:${pct}%;"></div></div>
+    </div>`;
 }
 
 function renderDreHtml(dre) {
@@ -898,7 +922,7 @@ async function loadTransactionsTable() {
     cell.addEventListener("click", () => {
       const t = items.find((i) => i.id === cell.dataset.id);
       if (!t) return;
-      openDatePickerPopup(cell, t.due_date, (iso) => { if (iso !== t.due_date) commitTransactionField(t, "due_date", iso); });
+      openDatePickerPopup(cell, t.due_date, (iso) => { if (iso !== t.due_date) commitTransactionField(t, "due_date", iso); }, { disableMonthYearClick: true });
     });
   });
   body.querySelectorAll(".cell-desc").forEach((cell) => {
@@ -1220,27 +1244,30 @@ function buildPlainCalendarHtml(year, month, selectedDay) {
  * cabecalho com mes e ano clicaveis (cada um abre um seletor proprio),
  * setas de navegacao e grade de dias. */
 let datePickerState = null;
-function openDatePickerPopup(triggerEl, isoValue, onSelect) {
+function openDatePickerPopup(triggerEl, isoValue, onSelect, options) {
   const today = todayIso();
   const [y, m, d] = (isoValue || today).split("-").map(Number);
-  datePickerState = { year: y, month: m, selectedIso: isoValue || null, triggerEl, onSelect };
+  datePickerState = { year: y, month: m, selectedIso: isoValue || null, triggerEl, onSelect, disableMonthYearClick: !!(options && options.disableMonthYearClick) };
   renderDatePicker();
 }
 function renderDatePicker() {
-  const { year, month, selectedIso, triggerEl } = datePickerState;
+  const { year, month, selectedIso, triggerEl, disableMonthYearClick } = datePickerState;
   let selectedDay = null;
   if (selectedIso) {
     const [sy, sm, sd] = selectedIso.split("-").map(Number);
     if (sy === year && sm === month) selectedDay = sd;
   }
   const popup = document.getElementById("datePickerPopup");
+  const monthYearHtml = disableMonthYearClick
+    ? `<span class="cal-month-year-group"><span>${MESES[month - 1]}</span><span>${year}</span></span>`
+    : `<span class="cal-month-year-group">
+        <span class="cal-month-clickable" data-dp="month">${MESES[month - 1]}</span>
+        <span class="cal-year-clickable" data-dp="year">${year}</span>
+      </span>`;
   popup.innerHTML = `
     <div class="date-picker-header">
       <button type="button" data-dp="prev">‹</button>
-      <span class="cal-month-year-group">
-        <span class="cal-month-clickable" data-dp="month">${MESES[month - 1]}</span>
-        <span class="cal-year-clickable" data-dp="year">${year}</span>
-      </span>
+      ${monthYearHtml}
       <button type="button" data-dp="next">›</button>
     </div>
     ${buildPlainCalendarHtml(year, month, selectedDay)}
@@ -1257,14 +1284,16 @@ function renderDatePicker() {
     datePickerState.month++; if (datePickerState.month > 12) { datePickerState.month = 1; datePickerState.year++; }
     renderDatePicker();
   });
-  popup.querySelector('[data-dp="month"]').addEventListener("click", (e) => {
-    e.stopPropagation();
-    openMonthOnlyPicker(e.currentTarget, datePickerState.month, (mo) => { datePickerState.month = mo; renderDatePicker(); });
-  });
-  popup.querySelector('[data-dp="year"]').addEventListener("click", (e) => {
-    e.stopPropagation();
-    openYearOnlyPicker(e.currentTarget, datePickerState.year, (yr) => { datePickerState.year = yr; renderDatePicker(); });
-  });
+  if (!disableMonthYearClick) {
+    popup.querySelector('[data-dp="month"]').addEventListener("click", (e) => {
+      e.stopPropagation();
+      openMonthOnlyPicker(e.currentTarget, datePickerState.month, (mo) => { datePickerState.month = mo; renderDatePicker(); });
+    });
+    popup.querySelector('[data-dp="year"]').addEventListener("click", (e) => {
+      e.stopPropagation();
+      openYearOnlyPicker(e.currentTarget, datePickerState.year, (yr) => { datePickerState.year = yr; renderDatePicker(); });
+    });
+  }
   popup.querySelectorAll("td[data-day]").forEach((cellEl) => {
     cellEl.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -1349,8 +1378,8 @@ document.addEventListener("click", (e) => {
  * estilizacao do app: mostra dd/mm/aaaa, abre o calendario padrao ao
  * clicar, e tambem aceita digitacao manual nesse formato. O <input>
  * original fica oculto e continua sendo a fonte da verdade (valor ISO). */
-function attachCustomDatePicker(inputId) {
-  const nativeInput = document.getElementById(inputId);
+function attachCustomDatePicker(inputOrId) {
+  const nativeInput = typeof inputOrId === "string" ? document.getElementById(inputOrId) : inputOrId;
   if (!nativeInput || nativeInput.dataset.dpStyled) return;
   nativeInput.dataset.dpStyled = "1";
   const wasHidden = nativeInput.classList.contains("hidden");
@@ -1688,7 +1717,10 @@ function openParcelasPopup(defaults, existing, onSave) {
 
   function renderTable() {
     document.getElementById("pf_table_area").innerHTML = parcelasTableHtml(rows);
-    document.querySelectorAll(".prow-date").forEach((inp) => inp.addEventListener("change", () => { rows[inp.dataset.idx].due_date = inp.value; }));
+    document.querySelectorAll(".prow-date").forEach((inp) => {
+      attachCustomDatePicker(inp);
+      inp.addEventListener("change", () => { rows[inp.dataset.idx].due_date = inp.value; });
+    });
     document.querySelectorAll(".prow-amount").forEach((inp) => {
       maskCurrencyInput(inp);
       inp.addEventListener("input", () => {
@@ -1731,27 +1763,17 @@ function openParcelasPopup(defaults, existing, onSave) {
       </div>
     </div>
     <button type="button" class="btn-secondary" id="pf_gerar">Gerar parcelas</button>
-    <div id="pf_table_area">${parcelasTableHtml(rows)}</div>
+    <div id="pf_table_area"></div>
     <div class="form-actions">
       <button class="btn-secondary" id="pf_cancel">Cancelar</button>
       <button class="btn-primary" id="pf_save">Salvar</button>
     </div>
   `);
-
-  document.querySelectorAll(".prow-date").forEach((inp) => inp.addEventListener("change", () => { rows[inp.dataset.idx].due_date = inp.value; }));
-  document.querySelectorAll(".prow-amount").forEach((inp) => inp.addEventListener("input", () => {
-    rows[inp.dataset.idx].amount = parseFloat(inp.value || "0");
-    document.getElementById("pf_total_value").textContent = formatCurrency(rows.reduce((s, r) => s + (Number(r.amount) || 0), 0));
-  }));
-  document.querySelectorAll(".prow-status").forEach((inp) => inp.addEventListener("change", () => { rows[inp.dataset.idx].status = inp.checked ? "pago" : "pendente"; }));
-  document.querySelectorAll(".prow-remove").forEach((btn) => btn.addEventListener("click", () => {
-    if (rows.length <= 1) return showToast("É preciso ao menos uma parcela.", true);
-    rows.splice(parseInt(btn.dataset.idx), 1);
-    rows.forEach((r, i) => { r.number = i + 1; });
-    renderTable();
-  }));
+  renderTable();
 
   maskCurrencyInput(document.getElementById("pf_valor"));
+  styleSelectAsCustomDropdown("pf_modo");
+  styleSelectAsCustomDropdown("pf_frequencia");
   document.getElementById("pf_modo").addEventListener("change", (e) => {
     pState.valorModo = e.target.value;
     document.getElementById("pf_valor_label").textContent = pState.valorModo === "total" ? "Valor Total (R$)" : "Valor de cada parcela (R$)";
@@ -1871,6 +1893,12 @@ function openTransactionModal(t, scope) {
   openModal(t ? "Editar lançamento" + scopeLabel : `Novo lançamento — ${GROUP_LABELS[group]}`, transactionFormHtml(t, group));
   document.getElementById("btnCancelForm").addEventListener("click", closeModal);
   maskCurrencyInput(document.getElementById("f_amount"));
+  attachCustomDatePicker("f_due_date");
+  styleSelectAsCustomDropdown("f_account_id");
+  styleSelectAsCustomDropdown("f_category_id");
+  styleSelectAsCustomDropdown("f_contact_id");
+  styleSelectAsCustomDropdown("f_cost_center_id");
+  styleSelectAsCustomDropdown("f_status");
 
   document.getElementById("btnQuickContact").addEventListener("click", async () => {
     const name = await appPrompt("Nome do novo contato:");
@@ -1882,6 +1910,7 @@ function openTransactionModal(t, scope) {
       const opt = document.createElement("option");
       opt.value = contact.id; opt.textContent = contact.name; opt.selected = true;
       sel.appendChild(opt);
+      sel.dispatchEvent(new Event("change", { bubbles: true }));
     } catch (e) { showToast(e.message, true); }
   });
 
@@ -2222,7 +2251,7 @@ function renderExtrato(data) {
   html += data.rows.length ? data.rows.map((r) => `
     <tr><td>${formatDateBR(r.paid_date)}</td><td>${escapeHtml(r.description)}</td>
       <td class="${r.delta >= 0 ? "positive" : "negative"}">${formatCurrency(r.delta)}</td>
-      <td>${formatCurrency(r.running_balance)}</td></tr>`).join("") : `<tr><td colspan="4"><div class="empty-state">Nada pago no período.</div></td></tr>`;
+      <td class="${r.running_balance < 0 ? "negative" : "positive"}">${formatCurrency(r.running_balance)}</td></tr>`).join("") : `<tr><td colspan="4"><div class="empty-state">Nada pago no período.</div></td></tr>`;
   html += `</tbody></table>`;
   if (data.transfers.length) {
     html += `<h3 style="margin-top:18px;">Transferências no período</h3><table class="data-table"><thead><tr><th>Data</th><th>De</th><th>Para</th><th>Valor</th></tr></thead><tbody>
@@ -2266,12 +2295,14 @@ async function loadReport() {
 
   if (data.kind === "grouped") { el.innerHTML = summary + renderGroupedTable(data.rows, r.side, r.report); return; }
   if (data.kind === "list") { el.innerHTML = summary + renderListTable(data.items); return; }
-  if (data.kind === "extrato") { el.innerHTML = `<div class="card-sub" style="margin-bottom:12px;">Saldo final do período: <b>${formatCurrency(data.saldo_final)}</b></div>` + renderExtrato(data); return; }
+  if (data.kind === "extrato") { el.innerHTML = `<div class="card-sub" style="margin-bottom:12px;">Saldo final do período: <b class="${data.saldo_final < 0 ? "negative" : "positive"}">${formatCurrency(data.saldo_final)}</b></div>` + renderExtrato(data); return; }
   if (data.kind === "dre") { el.innerHTML = `<div class="panel" style="max-width:480px;">${renderDreHtml(data.dre)}</div>`; return; }
   if (data.kind === "saldos") { el.innerHTML = renderSaldos(data); return; }
   if (data.kind === "performance") {
     el.innerHTML = `<div class="panel"><canvas id="perfChart" height="260"></canvas></div>`;
-    drawGroupedBarChart(document.getElementById("perfChart"), data.rows);
+    const canvas = document.getElementById("perfChart");
+    drawHatchedFlowChart(canvas, data.rows);
+    attachChartTooltip(canvas);
     return;
   }
   el.innerHTML = `<div class="empty-state">Sem dados.</div>`;

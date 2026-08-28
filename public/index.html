@@ -88,6 +88,7 @@
             <div class="donut-block">
               <canvas id="donutReceitas" width="108" height="108"></canvas>
               <div class="donut-caption">RECEBIMENTOS</div>
+              <div class="progress-bar"><div class="progress-fill progress-fill-green" id="dProgressReceita" style="width:0%;"></div></div>
               <div class="donut-lines">
                 <div><span>Realizado</span><b id="dReceitaRealizado">R$ 0,00</b></div>
                 <div><span>Falta</span><b id="dReceitaFalta">R$ 0,00</b></div>
@@ -97,6 +98,7 @@
             <div class="donut-block">
               <canvas id="donutDespesas" width="108" height="108"></canvas>
               <div class="donut-caption">DESPESAS</div>
+              <div class="progress-bar"><div class="progress-fill progress-fill-red" id="dProgressDespesa" style="width:0%;"></div></div>
               <div class="donut-lines">
                 <div><span>Realizado</span><b id="dDespesaRealizado">R$ 0,00</b></div>
                 <div><span>Falta</span><b id="dDespesaFalta">R$ 0,00</b></div>
@@ -127,7 +129,11 @@
           <canvas id="chartComparativo" height="200"></canvas>
         </div>
         <div class="panel">
-          <h2>Comparativo com mês anterior</h2>
+          <div class="page-header" style="margin-bottom:2px;">
+            <h2 style="margin:0;">Comparativo mês anterior</h2>
+            <span class="help-icon" title="Compara os totais do mês atual com os do mês anterior">?</span>
+          </div>
+          <div class="card-sub" id="comparativoSubtitle" style="margin-bottom:10px;">Todas as contas</div>
           <div id="comparativoGrupos" class="mini-table"></div>
         </div>
       </div>
@@ -158,6 +164,18 @@
       <div class="panel">
         <h2>Demonstração de Resultados (DRE) — mês atual</h2>
         <div id="dreDashboard" class="dre-table"></div>
+      </div>
+
+      <div class="panel">
+        <div class="page-header" style="margin-bottom:10px;">
+          <h2 style="margin:0;">Espaço de anexos</h2>
+          <span class="help-icon" title="Espaço usado por arquivos anexados aos lançamentos">?</span>
+        </div>
+        <div class="progress-bar"><div class="progress-fill" id="anexosProgress" style="width:0%; background:var(--primary);"></div></div>
+        <div class="card-sub" style="margin-top:8px; display:flex; justify-content:space-between;">
+          <span id="anexosPercent">0%</span>
+          <span>Total: <span id="anexosUsado">0GB</span> / Disponível: <span id="anexosTotal">15GB</span></span>
+        </div>
       </div>
     </section>
 
