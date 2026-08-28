@@ -488,14 +488,13 @@ async function loadTransactionsTable() {
     const overdue = t.status === "pendente" && t.due_date < today;
     const groupTag = t.installment_total ? ` (${t.installment_number}/${t.installment_total})` : t.recurrence_group_id ? " 🔁" : "";
     const groupId = t.recurrence_group_id || t.installment_group_id || "";
-    const openAttrs = `data-open-id="${t.id}" data-open-group="${groupId}"`;
     return `
       <tr>
-        <td class="clickable-cell" ${openAttrs}>${formatDateBR(t.due_date)}${overdue ? ' <span class="badge badge-vencido">atrasado</span>' : ""}</td>
-        <td class="clickable-cell" ${openAttrs}>${escapeHtml(t.description)}${groupTag}<div class="meta" style="color:var(--text-muted);font-size:11.5px;">${escapeHtml(accById[t.account_id]?.name || "")}</div></td>
-        <td class="clickable-cell" ${openAttrs}>${escapeHtml(contactById[t.contact_id]?.name || "-")}</td>
-        <td class="clickable-cell" ${openAttrs}>${escapeHtml(catById[t.category_id]?.name || "-")}</td>
-        <td class="clickable-cell ${t.group === "recebimento" ? "positive" : "negative"}" ${openAttrs}>${formatCurrency(t.amount)}</td>
+        <td class="clickable-cell cell-date" data-id="${t.id}">${formatDateBR(t.due_date)}${overdue ? ' <span class="badge badge-vencido">atrasado</span>' : ""}</td>
+        <td class="clickable-cell cell-desc" data-id="${t.id}"><span class="cell-text">${escapeHtml(t.description)}</span>${groupTag}<div class="meta" style="color:var(--text-muted);font-size:11.5px;">${escapeHtml(accById[t.account_id]?.name || "")}</div></td>
+        <td class="clickable-cell cell-contact" data-id="${t.id}"><span class="cell-text">${escapeHtml(contactById[t.contact_id]?.name || "-")}</span></td>
+        <td class="clickable-cell cell-category" data-id="${t.id}"><span class="cell-text">${escapeHtml(catById[t.category_id]?.name || "-")}</span></td>
+        <td class="clickable-cell cell-amount ${t.group === "recebimento" ? "positive" : "negative"}" data-id="${t.id}"><span class="cell-text">${formatCurrency(t.amount)}</span></td>
         <td>
           <label class="toggle-switch">
             <input type="checkbox" data-id="${t.id}" ${t.status === "pago" ? "checked" : ""} />
@@ -511,8 +510,20 @@ async function loadTransactionsTable() {
   body.querySelectorAll('input[type=checkbox][data-id]').forEach((chk) => {
     chk.addEventListener("change", () => handleTogglePago(chk, items));
   });
-  body.querySelectorAll(".clickable-cell").forEach((cell) => {
-    cell.addEventListener("click", () => handleTransactionAction("edit", cell.dataset.openId, items, cell.dataset.openGroup));
+  body.querySelectorAll(".cell-date").forEach((cell) => {
+    cell.addEventListener("click", () => openDatePickerPopup(cell, items.find((i) => i.id === cell.dataset.id)));
+  });
+  body.querySelectorAll(".cell-desc").forEach((cell) => {
+    cell.addEventListener("click", () => startInlineTextEdit(cell, items.find((i) => i.id === cell.dataset.id), "description"));
+  });
+  body.querySelectorAll(".cell-contact").forEach((cell) => {
+    cell.addEventListener("click", () => openPickerPopup(cell, items.find((i) => i.id === cell.dataset.id), "contact"));
+  });
+  body.querySelectorAll(".cell-category").forEach((cell) => {
+    cell.addEventListener("click", () => openPickerPopup(cell, items.find((i) => i.id === cell.dataset.id), "category"));
+  });
+  body.querySelectorAll(".cell-amount").forEach((cell) => {
+    cell.addEventListener("click", () => startInlineNumberEdit(cell, items.find((i) => i.id === cell.dataset.id)));
   });
   body.querySelectorAll(".row-menu-trigger").forEach((btn) => {
     btn.addEventListener("click", (e) => {
@@ -570,6 +581,216 @@ async function duplicateTransaction(t, onChanged) {
     if (state.tab === "dashboard") loadDashboard();
   } catch (e) { showToast(e.message, true); }
 }
+
+// ---------------------------------------------------------------------
+// Edicao por celula (data / descricao / contato / categoria / valor)
+// ---------------------------------------------------------------------
+
+const POPUP_WIDTH = 260;
+function positionPopupNear(popup, triggerEl) {
+  const rect = triggerEl.getBoundingClientRect();
+  popup.style.top = `${rect.bottom + 4}px`;
+  popup.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - POPUP_WIDTH - 8))}px`;
+}
+
+/** Aplica a alteracao de um unico campo, perguntando o escopo antes se o
+ * lancamento fizer parte de uma recorrencia/parcelamento. */
+function commitTransactionField(t, field, value) {
+  const groupId = t.recurrence_group_id || t.installment_group_id;
+  const doCommit = async (scope) => {
+    try {
+      await api("PUT", `/api/transactions/${t.id}?scope=${scope}`, { [field]: value });
+      showToast("Lançamento atualizado.");
+      loadTransactionsTable();
+      if (state.tab === "dashboard") loadDashboard();
+    } catch (e) { showToast(e.message, true); }
+  };
+  if (groupId) openScopeModal("Alterar", doCommit);
+  else doCommit("single");
+}
+
+function startInlineTextEdit(cell, t, field) {
+  if (!t || cell.querySelector("input")) return;
+  const original = cell.innerHTML;
+  const currentValue = t[field] || "";
+  cell.innerHTML = `<input type="text" class="inline-cell-input" value="${escapeHtml(currentValue)}" />`;
+  const input = cell.querySelector("input");
+  input.addEventListener("click", (e) => e.stopPropagation());
+  input.focus();
+  input.select();
+  let done = false;
+  const finish = (commit) => {
+    if (done) return;
+    done = true;
+    const newVal = input.value.trim();
+    if (commit && newVal && newVal !== currentValue) commitTransactionField(t, field, newVal);
+    else cell.innerHTML = original;
+  };
+  input.addEventListener("blur", () => finish(true));
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); input.blur(); }
+    else if (e.key === "Escape") { done = true; cell.innerHTML = original; }
+  });
+}
+
+function startInlineNumberEdit(cell, t) {
+  if (!t || cell.querySelector("input")) return;
+  const original = cell.innerHTML;
+  cell.innerHTML = `<input type="number" step="0.01" class="inline-cell-input" value="${t.amount}" />`;
+  const input = cell.querySelector("input");
+  input.addEventListener("click", (e) => e.stopPropagation());
+  input.focus();
+  input.select();
+  let done = false;
+  const finish = (commit) => {
+    if (done) return;
+    done = true;
+    const val = parseFloat(input.value);
+    if (commit && Number.isFinite(val) && val > 0 && val !== t.amount) commitTransactionField(t, "amount", val);
+    else cell.innerHTML = original;
+  };
+  input.addEventListener("blur", () => finish(true));
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); input.blur(); }
+    else if (e.key === "Escape") { done = true; cell.innerHTML = original; }
+  });
+}
+
+// ---- Calendario flutuante (editar data de vencimento) ----
+
+function buildPlainCalendarHtml(year, month, selectedDay) {
+  const firstWeekday = new Date(year, month - 1, 1).getDay();
+  const daysInMonth = new Date(year, month, 0).getDate();
+  const todayD = new Date();
+  const isCurrentMonth = todayD.getFullYear() === year && todayD.getMonth() + 1 === month;
+  const cells = [];
+  for (let i = 0; i < firstWeekday; i++) cells.push(null);
+  for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+  while (cells.length % 7 !== 0) cells.push(null);
+  let html = `<table class="calendar mini-date-picker"><thead><tr>${MESES_ABR.map((m) => `<th>${m}</th>`).join("")}</tr></thead><tbody>`;
+  for (let w = 0; w < cells.length / 7; w++) {
+    html += "<tr>";
+    for (let d = 0; d < 7; d++) {
+      const day = cells[w * 7 + d];
+      if (!day) { html += `<td class="empty"></td>`; continue; }
+      const isToday = isCurrentMonth && todayD.getDate() === day;
+      const classes = ["", isToday ? "today" : "", selectedDay === day ? "selected" : ""].join(" ");
+      html += `<td class="${classes}" data-day="${day}"><span class="day-num">${day}</span></td>`;
+    }
+    html += "</tr>";
+  }
+  html += "</tbody></table>";
+  return html;
+}
+
+let datePickerState = null;
+function openDatePickerPopup(triggerEl, t) {
+  if (!t) return;
+  const [y, m] = t.due_date.split("-").map(Number);
+  datePickerState = { year: y, month: m, t, triggerEl };
+  renderDatePicker();
+}
+function renderDatePicker() {
+  const { year, month, t, triggerEl } = datePickerState;
+  const [ty, tm, td] = t.due_date.split("-").map(Number);
+  const selectedDay = ty === year && tm === month ? td : null;
+  const popup = document.getElementById("datePickerPopup");
+  popup.innerHTML = `
+    <div class="date-picker-header">
+      <button type="button" data-dp="prev">‹</button>
+      <span>${MESES[month - 1]} ${year}</span>
+      <button type="button" data-dp="next">›</button>
+    </div>
+    ${buildPlainCalendarHtml(year, month, selectedDay)}
+  `;
+  positionPopupNear(popup, triggerEl);
+  popup.classList.remove("hidden");
+  popup.querySelector('[data-dp="prev"]').addEventListener("click", (e) => {
+    e.stopPropagation();
+    datePickerState.month--; if (datePickerState.month < 1) { datePickerState.month = 12; datePickerState.year--; }
+    renderDatePicker();
+  });
+  popup.querySelector('[data-dp="next"]').addEventListener("click", (e) => {
+    e.stopPropagation();
+    datePickerState.month++; if (datePickerState.month > 12) { datePickerState.month = 1; datePickerState.year++; }
+    renderDatePicker();
+  });
+  popup.querySelectorAll("td[data-day]").forEach((cellEl) => {
+    cellEl.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const day = parseInt(cellEl.dataset.day);
+      const iso = `${datePickerState.year}-${jsPad(datePickerState.month)}-${jsPad(day)}`;
+      closeDatePickerPopup();
+      if (iso !== t.due_date) commitTransactionField(t, "due_date", iso);
+    });
+  });
+}
+function closeDatePickerPopup() { document.getElementById("datePickerPopup")?.classList.add("hidden"); }
+document.addEventListener("click", (e) => {
+  if (!e.target.closest("#datePickerPopup") && !e.target.closest(".cell-date")) closeDatePickerPopup();
+});
+
+// ---- Popup de escolha (contato / categoria), com busca e "+ novo" ----
+
+function openPickerPopup(triggerEl, t, kind) {
+  if (!t) return;
+  const isContact = kind === "contact";
+  const popup = document.getElementById("pickerPopup");
+
+  function render(filterText) {
+    const source = isContact ? state.contacts : state.categories.filter((c) => c.group === t.group);
+    const currentId = isContact ? t.contact_id : t.category_id;
+    const filtered = filterText ? source.filter((i) => i.name.toLowerCase().includes(filterText.toLowerCase())) : source;
+    popup.innerHTML = `
+      <input type="text" id="pickerSearch" class="picker-search" placeholder="Buscar ${isContact ? "contato" : "categoria"}..." value="${escapeHtml(filterText || "")}" />
+      <div class="picker-list">
+        <div class="picker-item ${!currentId ? "selected" : ""}" data-value="">— Sem ${isContact ? "contato" : "categoria"} —</div>
+        ${filtered.map((i) => `
+          <div class="picker-item ${i.id === currentId ? "selected" : ""}" data-value="${i.id}">
+            ${i.color ? `<span class="color-dot" style="background:${i.color}"></span>` : ""}${escapeHtml(i.name)}
+          </div>`).join("") || (filterText ? `<div class="empty-state">Nada encontrado.</div>` : "")}
+      </div>
+      <div class="picker-add">
+        <input type="text" id="pickerNewName" placeholder="Criar novo..." />
+        <button type="button" id="pickerAddBtn">+</button>
+      </div>
+    `;
+    popup.querySelectorAll(".picker-item").forEach((el) => el.addEventListener("click", (e) => {
+      e.stopPropagation();
+      closePickerPopup();
+      const value = el.dataset.value || null;
+      if (value !== currentId) commitTransactionField(t, isContact ? "contact_id" : "category_id", value);
+    }));
+    const searchInput = document.getElementById("pickerSearch");
+    searchInput.addEventListener("click", (e) => e.stopPropagation());
+    searchInput.addEventListener("input", (e) => render(e.target.value));
+    const newNameInput = document.getElementById("pickerNewName");
+    newNameInput.addEventListener("click", (e) => e.stopPropagation());
+    newNameInput.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); document.getElementById("pickerAddBtn").click(); } });
+    document.getElementById("pickerAddBtn").addEventListener("click", async (e) => {
+      e.stopPropagation();
+      const name = newNameInput.value.trim();
+      if (!name) return;
+      try {
+        let created;
+        if (isContact) created = await api("POST", "/api/contacts", { name });
+        else created = await api("POST", "/api/categories", { name, group: t.group });
+        (isContact ? state.contacts : state.categories).push(created);
+        closePickerPopup();
+        commitTransactionField(t, isContact ? "contact_id" : "category_id", created.id);
+      } catch (err) { showToast(err.message, true); }
+    });
+  }
+
+  render("");
+  positionPopupNear(popup, triggerEl);
+  popup.classList.remove("hidden");
+  setTimeout(() => document.getElementById("pickerSearch")?.focus(), 0);
+}
+function closePickerPopup() { document.getElementById("pickerPopup")?.classList.add("hidden"); }
+document.addEventListener("click", (e) => {
+  if (!e.target.closest("#pickerPopup") && !e.target.closest(".cell-contact") && !e.target.closest(".cell-category")) closePickerPopup();
+});
 
 async function handleTogglePago(checkbox, items) {
   const t = items.find((i) => i.id === checkbox.dataset.id);

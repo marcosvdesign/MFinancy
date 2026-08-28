@@ -469,3 +469,30 @@ nav { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
 @media (max-width: 1050px) {
   .lanc-dash-grid { grid-template-columns: 1fr; }
 }
+
+/* ---------- Edicao por celula (data / contato / categoria / valor / descricao) ---------- */
+
+.inline-cell-input {
+  width: 100%; padding: 5px 7px; border-radius: 6px; border: 1px solid var(--primary);
+  font-size: 13.5px; font-family: inherit; background: var(--input-bg); color: var(--text);
+}
+
+.date-picker-popup, .picker-popup {
+  position: fixed; z-index: 80; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; box-shadow: 0 18px 40px rgba(0,0,0,0.22); padding: 10px; width: 260px;
+}
+.date-picker-popup.hidden, .picker-popup.hidden { display: none; }
+
+.date-picker-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; font-weight: 600; font-size: 13px; }
+.date-picker-header button { border: none; background: var(--bg); border-radius: 6px; width: 24px; height: 24px; cursor: pointer; color: var(--primary); font-size: 14px; }
+.mini-date-picker td { height: 32px; cursor: pointer; }
+.mini-date-picker .day-num { padding: 0; }
+
+.picker-search { width: 100%; padding: 8px 10px; border-radius: 7px; border: 1px solid var(--border); font-size: 13px; margin-bottom: 8px; background: var(--input-bg); color: var(--text); }
+.picker-list { max-height: 190px; overflow-y: auto; margin-bottom: 8px; }
+.picker-item { display: flex; align-items: center; gap: 8px; padding: 8px 9px; border-radius: 7px; cursor: pointer; font-size: 13px; color: var(--text); }
+.picker-item:hover { background: var(--hover-tint); }
+.picker-item.selected { background: var(--primary); color: #fff; }
+.picker-add { display: flex; gap: 6px; border-top: 1px solid var(--border); padding-top: 8px; }
+.picker-add input { flex: 1; padding: 7px 9px; border-radius: 7px; border: 1px solid var(--border); font-size: 13px; background: var(--input-bg); color: var(--text); }
+.picker-add button { border: none; background: var(--primary); color: #fff; border-radius: 7px; padding: 0 12px; cursor: pointer; font-weight: 700; }
