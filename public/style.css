@@ -10,7 +10,7 @@
   --text-muted: #726d62;
   --primary: #5e8a2f;
   --primary-dark: #4a6f22;
-  --green: #1f9d55;
+  --green: var(--primary); /* mesmo verde dos botoes/nav, em vez de um verde separado */
   --red: #d64545;
   --sidebar-bg: #ece9e3;
   --sidebar-text: #4a4640;
@@ -41,7 +41,7 @@
   --text-muted: #9d9a95;
   --primary: #8fbd4a;
   --primary-dark: #a9d164;
-  --green: #3ecf7e;
+  --green: var(--primary); /* mesmo verde dos botoes/nav, em vez de um verde separado */
   --red: #ef6464;
   --sidebar-bg: #1c1b1a;
   --sidebar-text: #cfccc6;
@@ -191,7 +191,9 @@ nav { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
   border-radius: 999px; padding: 6px 14px; font-weight: 600; flex-shrink: 0;
 }
 .month-switch button { border: none; background: transparent; cursor: pointer; font-size: 16px; color: var(--primary); width: 22px; }
-.month-label-clickable { cursor: pointer; border-radius: 6px; padding: 2px 6px; display: inline-block; min-width: 118px; text-align: center; }
+/* Largura fixa (nao min-width) pra nao "pular" de tamanho conforme o nome
+   do mes muda (ex.: "Maio 2026" vs "Fevereiro 2026" vs "Setembro 2026"). */
+.month-label-clickable { cursor: pointer; border-radius: 6px; padding: 2px 6px; display: inline-block; width: 128px; text-align: center; }
 .month-label-clickable:hover { background: var(--hover-tint); color: var(--primary); }
 
 .btn-primary {

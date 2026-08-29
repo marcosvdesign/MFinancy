@@ -19,7 +19,17 @@ function setupCanvasScale(canvas, forcedHeight, reuseDims) {
   }
   const ratio = window.devicePixelRatio || 1;
   const width = rect.width;
-  const height = forcedHeight || (canvas.getAttribute("height") ? parseInt(canvas.getAttribute("height")) : 220);
+  // Guarda a altura "logica" (CSS) pretendida na PRIMEIRA vez, antes de
+  // canvas.height ser sobrescrito com o valor em pixels de dispositivo.
+  // canvas.height (propriedade) e o atributo height="" refletem o mesmo
+  // valor — reler canvas.getAttribute("height") depois da primeira
+  // chamada pegaria o buffer ja multiplicado pelo devicePixelRatio em vez
+  // do valor original, fazendo o grafico crescer um pouco mais a cada
+  // redesenho (bug real, reproduzido: 200 -> 254 -> 323 -> 411 -> ...).
+  if (canvas._baseHeight == null) {
+    canvas._baseHeight = canvas.getAttribute("height") ? parseInt(canvas.getAttribute("height")) : 220;
+  }
+  const height = forcedHeight || canvas._baseHeight;
   canvas.width = width * ratio;
   canvas.height = height * ratio;
   canvas.style.width = width + "px";
@@ -81,7 +91,14 @@ function themeColor(varName, fallback) {
 
 /** Anel de progresso (Previsto x Realizado). */
 function drawDonut(canvas, percent, color) {
-  const size = parseInt(canvas.getAttribute("width")) || 140;
+  // Mesmo cuidado do setupCanvasScale: guarda o tamanho original UMA vez,
+  // antes que canvas.width vire o buffer em pixels de dispositivo (que
+  // tambem se reflete no atributo width="") — reler o atributo depois
+  // faria o donut crescer a cada redesenho.
+  if (canvas._baseSize == null) {
+    canvas._baseSize = parseInt(canvas.getAttribute("width")) || 140;
+  }
+  const size = canvas._baseSize;
   const scaled = setupCanvasScale(canvas, size);
   if (scaled.hidden || !scaled.width) return;
   const { ctx, width, height } = scaled;

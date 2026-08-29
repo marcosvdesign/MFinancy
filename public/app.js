@@ -763,10 +763,16 @@ document.getElementById("lancAccountSelectTrigger")?.addEventListener("click", (
   if (willOpen) openLancAccountMenu();
 });
 
+let _lancDashboardReqId = 0;
 async function loadLancDashboard() {
-  const params = { profile_id: state.activeProfile, year: state.dashYear, month: state.dashMonth, account_id: state.lancamentosAccountId || undefined };
+  const reqId = ++_lancDashboardReqId;
+  const params = { profile_id: state.activeProfile, year: state.lancFilterYear, month: state.lancFilterMonth, account_id: state.lancamentosAccountId || undefined };
   let data;
   try { data = await api("GET", "/api/dashboard?" + qs(params)); } catch (e) { return showToast(e.message, true); }
+  // Se o usuario trocou de mes de novo enquanto essa requisicao estava em
+  // voo, uma resposta mais nova ja pode ter chegado primeiro — ignora esta
+  // (mais antiga) pra nao sobrescrever o dashboard com o mes errado.
+  if (reqId !== _lancDashboardReqId) return;
   state.lastLancDashboardData = data;
 
   const previstoResultado = data.previsto_total_receitas - data.previsto_total_despesas;
@@ -842,6 +848,7 @@ function applyLancMonthFilter() {
   sel.value = "mes_especifico";
   sel.dispatchEvent(new Event("change", { bubbles: true }));
   loadTransactionsTable();
+  loadLancDashboard(); // mini-dashboard acima da lista tambem segue o mes selecionado
 }
 document.getElementById("lancPrevMonth").addEventListener("click", () => {
   state.lancFilterMonth -= 1; if (state.lancFilterMonth < 1) { state.lancFilterMonth = 12; state.lancFilterYear -= 1; }
@@ -867,7 +874,9 @@ function loadLancamentos() {
   if (state.lancamentosGroup === "transferencias") loadTransfers(); else loadTransactionsTable();
 }
 
+let _transactionsTableReqId = 0;
 async function loadTransactionsTable() {
+  const reqId = ++_transactionsTableReqId;
   const period = computePeriodRange(document.getElementById("filterPeriodo").value);
   const params = {
     group: state.lancamentosGroup, profile_id: state.activeProfile,
@@ -878,6 +887,9 @@ async function loadTransactionsTable() {
   };
   let items;
   try { items = await api("GET", "/api/transactions?" + qs(params)); } catch (e) { return showToast(e.message, true); }
+  // Mesma protecao do loadLancDashboard: ignora resposta atrasada de um
+  // filtro/mes que o usuario ja trocou de novo.
+  if (reqId !== _transactionsTableReqId) return;
   state.lastTransactionItems = items;
 
   const visibleIds = new Set(items.map((t) => t.id));
