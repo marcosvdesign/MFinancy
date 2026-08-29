@@ -1648,7 +1648,7 @@ const FREQ_STEP_JS = {
 };
 const FREQ_LABELS_PT = { semanal: "Semanal", quinzenal: "Quinzenal", mensal: "Mensal", bimestral: "Bimestral", trimestral: "Trimestral", semestral: "Semestral", anual: "Anual" };
 
-function openRepetirPopup(existing, onSave) {
+function openRepetirPopup(existing, onSave, onCancel) {
   const freq = existing?.frequency || "mensal";
   const occ = existing?.occurrences || 12;
   openModal2("Repetir transação", `
@@ -1667,7 +1667,7 @@ function openRepetirPopup(existing, onSave) {
       <button class="btn-primary" id="rf_save">Salvar</button>
     </div>
   `);
-  document.getElementById("rf_cancel").addEventListener("click", closeModal2);
+  document.getElementById("rf_cancel").addEventListener("click", () => { closeModal2(); onCancel?.(); });
   document.getElementById("rf_save").addEventListener("click", () => {
     const frequency = document.querySelector('input[name="rf_freq"]:checked').value;
     const occurrences = parseInt(document.getElementById("rf_occurrences").value || "2");
@@ -1721,7 +1721,7 @@ function parcelasTableHtml(rows) {
   `;
 }
 
-function openParcelasPopup(defaults, existing, onSave) {
+function openParcelasPopup(defaults, existing, onSave, onCancel) {
   const pState = {
     valorModo: existing?.valorModo || "parcela",
     valorTotal: existing?.valorTotal ?? Number(defaults.amount || 0),
@@ -1804,7 +1804,7 @@ function openParcelasPopup(defaults, existing, onSave) {
     rows = computeParcelasRows(pState);
     renderTable();
   });
-  document.getElementById("pf_cancel").addEventListener("click", closeModal2);
+  document.getElementById("pf_cancel").addEventListener("click", () => { closeModal2(); onCancel?.(); });
   document.getElementById("pf_save").addEventListener("click", () => {
     if (!rows.length) return showToast("Gere ao menos uma parcela.", true);
     closeModal2();
@@ -1888,7 +1888,6 @@ function transactionFormHtml(t, presetGroup) {
     </div>
     <div class="repeat-summary-row hidden" id="repeatSummaryRow">
       <span class="card-sub" id="repeatSummaryText">Ainda não configurado</span>
-      <button type="button" class="btn-secondary" id="btnConfigRepeat" style="padding:6px 12px;font-size:12px;">Configurar</button>
     </div>
     ` : ""}
 
@@ -1955,17 +1954,17 @@ function openTransactionModal(t, scope) {
     function syncRadioChecked() {
       repeatRadios.forEach((r) => r.closest("label")?.classList.toggle("radio-checked", r.checked));
     }
-    syncRadioChecked();
-    repeatRadios.forEach((radio) => {
-      radio.addEventListener("change", () => {
-        if (!radio.checked) return;
-        syncRadioChecked();
-        if (radio.value === "none") repeatConfig = null;
-        updateRepeatSummary(radio.value);
-      });
-    });
-    document.getElementById("btnConfigRepeat")?.addEventListener("click", () => {
-      const mode = document.querySelector('input[name="repeatMode"]:checked').value;
+    function selectRepeatMode(value) {
+      const radio = [...repeatRadios].find((r) => r.value === value);
+      if (radio) radio.checked = true;
+      syncRadioChecked();
+      if (value === "none") repeatConfig = null;
+      updateRepeatSummary(value);
+    }
+    // Abre o popup de configuracao correspondente na hora — nao ha mais
+    // botao "Configurar" separado. Se o usuario cancelar o popup sem
+    // salvar, a selecao volta sozinha pra "Unico".
+    function openRepeatConfigPopup(mode) {
       const defaults = {
         amount: parseMaskedCurrency(document.getElementById("f_amount").value),
         due_date: document.getElementById("f_due_date").value || todayIso(),
@@ -1974,15 +1973,28 @@ function openTransactionModal(t, scope) {
         openParcelasPopup(defaults, repeatConfig?.type === "installments" ? repeatConfig : null, (result) => {
           repeatConfig = { type: "installments", ...result };
           updateRepeatSummary("installments");
-        });
+        }, () => selectRepeatMode("none"));
       } else if (mode === "recurrence") {
         openRepetirPopup(repeatConfig?.type === "recurrence" ? repeatConfig : null, (result) => {
           repeatConfig = { type: "recurrence", ...result };
           updateRepeatSummary("recurrence");
-        });
-      } else {
-        showToast("Escolha \"Parcelado\" ou \"Repetir\" primeiro.", true);
+        }, () => selectRepeatMode("none"));
       }
+    }
+    syncRadioChecked();
+    repeatRadios.forEach((radio) => {
+      radio.addEventListener("change", () => {
+        if (!radio.checked) return;
+        syncRadioChecked();
+        if (radio.value === "none") repeatConfig = null;
+        updateRepeatSummary(radio.value);
+      });
+      // "click" (nao "change") dispara sempre, mesmo se o usuario clicar de
+      // novo na opcao ja selecionada — permite reabrir o popup pra ajustar
+      // uma configuracao ja feita.
+      radio.addEventListener("click", () => {
+        if (radio.value === "installments" || radio.value === "recurrence") openRepeatConfigPopup(radio.value);
+      });
     });
   }
 
@@ -2019,10 +2031,10 @@ function openTransactionModal(t, scope) {
       return showToast("Preencha o valor.", true);
     }
     if (mode === "installments" && (!repeatConfig || repeatConfig.type !== "installments")) {
-      return showToast("Clique em \"Configurar\" para montar as parcelas.", true);
+      return showToast("Clique em \"Parcelado\" para configurar as parcelas.", true);
     }
     if (mode === "recurrence" && (!repeatConfig || repeatConfig.type !== "recurrence")) {
-      return showToast("Clique em \"Configurar\" para definir a repetição.", true);
+      return showToast("Clique em \"Repetir\" para configurar a repetição.", true);
     }
     try {
       if (t) {
