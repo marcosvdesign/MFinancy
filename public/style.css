@@ -357,6 +357,22 @@ nav { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
 #calendarWrap .calendar td.today { background: var(--today-tint); border-radius: 10px; }
 #calendarWrap .calendar td.selected { outline: 2px solid var(--primary); outline-offset: -2px; border-radius: 10px; background: transparent; }
 
+/* Mini-calendario dos popups de escolha de data (padronizado em todo o
+   app): sem quadrados/bordas por dia, numeros soltos e o dia selecionado
+   como um circulo solido preenchido — visual limpo, sem "grade". */
+.mini-date-picker td { border: none; background: transparent; height: 32px; }
+.mini-date-picker td.empty { background: transparent; }
+.mini-date-picker .day-num {
+  display: flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; margin: 0 auto; border-radius: 50%; padding: 0;
+  transition: background 0.12s, color 0.12s;
+}
+.mini-date-picker td:not(.empty):hover .day-num { background: var(--hover-tint); }
+.mini-date-picker td.today { background: transparent; font-weight: 700; }
+.mini-date-picker td.today .day-num { color: var(--primary); }
+.mini-date-picker td.selected { outline: none; background: transparent; }
+.mini-date-picker td.selected .day-num { background: var(--primary); color: #fff; font-weight: 700; }
+
 /* ---------- Filters / subtabs ---------- */
 
 .filters {
@@ -740,17 +756,32 @@ nav { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
   position: fixed; z-index: 96;
   background: var(--glass-bg); backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur));
   border: 1px solid var(--glass-border);
-  border-radius: 12px; box-shadow: 0 18px 40px rgba(0,0,0,0.22); padding: 10px; width: 260px;
+  border-radius: 16px; box-shadow: 0 18px 40px rgba(0,0,0,0.22); padding: 14px; width: 260px;
 }
 .date-picker-popup.hidden, .picker-popup.hidden { display: none; }
 
+/* Calendario padronizado (o popup que abre ao clicar numa data): cartao
+   de vidro com um leve "brilho" de gradiente nos cantos inferiores (mesma
+   linguagem visual da referencia), recortado pelas bordas arredondadas do
+   cartao. Escopado soh no #datePickerPopup (o calendario de dias em si) —
+   os outros popups que reaproveitam a classe .date-picker-popup (seletor
+   de mes/ano do dashboard, seletor de cor) mantem o cartao de vidro liso. */
+#datePickerPopup { overflow: hidden; }
+#datePickerPopup::before, #datePickerPopup::after {
+  content: ""; position: absolute; z-index: 0; width: 130px; height: 130px;
+  border-radius: 50%; filter: blur(30px); opacity: 0.28; pointer-events: none;
+}
+#datePickerPopup::before { background: var(--primary); bottom: -55px; left: -45px; }
+#datePickerPopup::after { background: var(--red); bottom: -55px; right: -45px; }
+.dp-content { position: relative; z-index: 1; }
+
 .date-picker-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; font-weight: 600; font-size: 13px; }
-.date-picker-header button { border: none; background: var(--bg); border-radius: 6px; width: 24px; height: 24px; cursor: pointer; color: var(--primary); font-size: 14px; }
-.mini-date-picker td { height: 32px; cursor: pointer; }
-.mini-date-picker .day-num { padding: 0; }
+.date-picker-header button {
+  border: none; background: transparent; border-radius: 6px; width: 24px; height: 24px;
+  cursor: pointer; color: var(--text-muted); font-size: 15px; transition: background 0.12s, color 0.12s;
+}
+.date-picker-header button:hover { background: var(--hover-tint); color: var(--primary); }
 .cal-month-year-group { display: flex; gap: 6px; }
-.cal-month-clickable, .cal-year-clickable { cursor: pointer; border-radius: 6px; padding: 2px 6px; transition: background 0.15s, color 0.15s; }
-.cal-month-clickable:hover, .cal-year-clickable:hover { background: var(--hover-tint); color: var(--primary); }
 
 /* ---------- Campo de data customizado (substitui <input type="date"> nativo) ---------- */
 

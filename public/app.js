@@ -939,7 +939,7 @@ async function loadTransactionsTable() {
     cell.addEventListener("click", () => {
       const t = items.find((i) => i.id === cell.dataset.id);
       if (!t) return;
-      openDatePickerPopup(cell, t.due_date, (iso) => { if (iso !== t.due_date) commitTransactionField(t, "due_date", iso); }, { disableMonthYearClick: true });
+      openDatePickerPopup(cell, t.due_date, (iso) => { if (iso !== t.due_date) commitTransactionField(t, "due_date", iso); });
     });
   });
   body.querySelectorAll(".cell-desc").forEach((cell) => {
@@ -1257,37 +1257,33 @@ function buildPlainCalendarHtml(year, month, selectedDay) {
   return html;
 }
 
-/** Calendario padrao do app (usado em toda parte onde se escolhe uma data):
- * cabecalho com mes e ano clicaveis (cada um abre um seletor proprio),
- * setas de navegacao e grade de dias. */
+/** Calendario padrao do app (usado em toda parte onde se escolhe uma
+ * data, incluindo o popup de confirmar data de pagamento): mes e ano em
+ * texto simples (nao clicavel — so as setas navegam) e grade de dias. */
 let datePickerState = null;
-function openDatePickerPopup(triggerEl, isoValue, onSelect, options) {
+function openDatePickerPopup(triggerEl, isoValue, onSelect) {
   const today = todayIso();
   const [y, m, d] = (isoValue || today).split("-").map(Number);
-  datePickerState = { year: y, month: m, selectedIso: isoValue || null, triggerEl, onSelect, disableMonthYearClick: !!(options && options.disableMonthYearClick) };
+  datePickerState = { year: y, month: m, selectedIso: isoValue || null, triggerEl, onSelect };
   renderDatePicker();
 }
 function renderDatePicker() {
-  const { year, month, selectedIso, triggerEl, disableMonthYearClick } = datePickerState;
+  const { year, month, selectedIso, triggerEl } = datePickerState;
   let selectedDay = null;
   if (selectedIso) {
     const [sy, sm, sd] = selectedIso.split("-").map(Number);
     if (sy === year && sm === month) selectedDay = sd;
   }
   const popup = document.getElementById("datePickerPopup");
-  const monthYearHtml = disableMonthYearClick
-    ? `<span class="cal-month-year-group"><span>${MESES[month - 1]}</span><span>${year}</span></span>`
-    : `<span class="cal-month-year-group">
-        <span class="cal-month-clickable" data-dp="month">${MESES[month - 1]}</span>
-        <span class="cal-year-clickable" data-dp="year">${year}</span>
-      </span>`;
   popup.innerHTML = `
-    <div class="date-picker-header">
-      <button type="button" data-dp="prev">‹</button>
-      ${monthYearHtml}
-      <button type="button" data-dp="next">›</button>
+    <div class="dp-content">
+      <div class="date-picker-header">
+        <button type="button" data-dp="prev">‹</button>
+        <span class="cal-month-year-group"><span>${MESES[month - 1]}</span><span>${year}</span></span>
+        <button type="button" data-dp="next">›</button>
+      </div>
+      ${buildPlainCalendarHtml(year, month, selectedDay)}
     </div>
-    ${buildPlainCalendarHtml(year, month, selectedDay)}
   `;
   positionPopupNear(popup, triggerEl);
   popup.classList.remove("hidden");
@@ -1301,16 +1297,6 @@ function renderDatePicker() {
     datePickerState.month++; if (datePickerState.month > 12) { datePickerState.month = 1; datePickerState.year++; }
     renderDatePicker();
   });
-  if (!disableMonthYearClick) {
-    popup.querySelector('[data-dp="month"]').addEventListener("click", (e) => {
-      e.stopPropagation();
-      openMonthOnlyPicker(e.currentTarget, datePickerState.month, (mo) => { datePickerState.month = mo; renderDatePicker(); });
-    });
-    popup.querySelector('[data-dp="year"]').addEventListener("click", (e) => {
-      e.stopPropagation();
-      openYearOnlyPicker(e.currentTarget, datePickerState.year, (yr) => { datePickerState.year = yr; renderDatePicker(); });
-    });
-  }
   popup.querySelectorAll("td[data-day]").forEach((cellEl) => {
     cellEl.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -1323,72 +1309,7 @@ function renderDatePicker() {
 }
 function closeDatePickerPopup() { document.getElementById("datePickerPopup")?.classList.add("hidden"); }
 document.addEventListener("click", (e) => {
-  if (!e.target.closest("#datePickerPopup") && !e.target.closest(".cell-date") && !e.target.closest(".custom-date-display")
-    && !e.target.closest("#monthOnlyPickerPopup") && !e.target.closest("#yearOnlyPickerPopup")) closeDatePickerPopup();
-});
-
-/** Sub-seletor de mes (grade de 12 meses), aberto ao clicar no nome do mes
- * no cabecalho do calendario padrao. */
-let monthOnlyState = null;
-function openMonthOnlyPicker(triggerEl, currentMonth, onSelect) {
-  monthOnlyState = { currentMonth, onSelect };
-  const popup = document.getElementById("monthOnlyPickerPopup");
-  popup.innerHTML = `
-    <div class="picker-list" style="display:grid; grid-template-columns:repeat(3,1fr); gap:6px; max-height:none; margin-bottom:0;">
-      ${MESES.map((label, i) => `<div class="picker-item ${i + 1 === currentMonth ? "selected" : ""}" style="justify-content:center; text-align:center;" data-month="${i + 1}">${label.slice(0, 3)}</div>`).join("")}
-    </div>
-  `;
-  positionPopupNear(popup, triggerEl);
-  popup.classList.remove("hidden");
-  popup.querySelectorAll("[data-month]").forEach((el) => {
-    el.addEventListener("click", (e) => {
-      e.stopPropagation();
-      closeMonthOnlyPicker();
-      monthOnlyState.onSelect(parseInt(el.dataset.month));
-    });
-  });
-}
-function closeMonthOnlyPicker() { document.getElementById("monthOnlyPickerPopup")?.classList.add("hidden"); }
-document.addEventListener("click", (e) => {
-  if (!e.target.closest("#monthOnlyPickerPopup") && !e.target.closest(".cal-month-clickable")) closeMonthOnlyPicker();
-});
-
-/** Sub-seletor de ano (grade deslizante de 12 anos por vez), aberto ao
- * clicar no ano no cabecalho do calendario padrao. */
-let yearOnlyState = null;
-function openYearOnlyPicker(triggerEl, currentYear, onSelect) {
-  yearOnlyState = { rangeStart: currentYear - 5, currentYear, onSelect };
-  renderYearOnlyPicker(triggerEl);
-}
-function renderYearOnlyPicker(triggerEl) {
-  const { rangeStart, currentYear } = yearOnlyState;
-  const years = Array.from({ length: 12 }, (_, i) => rangeStart + i);
-  const popup = document.getElementById("yearOnlyPickerPopup");
-  popup.innerHTML = `
-    <div class="date-picker-header">
-      <button type="button" data-yp="prev">‹</button>
-      <span>${years[0]} – ${years[years.length - 1]}</span>
-      <button type="button" data-yp="next">›</button>
-    </div>
-    <div class="picker-list" style="display:grid; grid-template-columns:repeat(3,1fr); gap:6px; max-height:none; margin-bottom:0;">
-      ${years.map((y) => `<div class="picker-item ${y === currentYear ? "selected" : ""}" style="justify-content:center; text-align:center;" data-year="${y}">${y}</div>`).join("")}
-    </div>
-  `;
-  positionPopupNear(popup, triggerEl);
-  popup.classList.remove("hidden");
-  popup.querySelector('[data-yp="prev"]').addEventListener("click", (e) => { e.stopPropagation(); yearOnlyState.rangeStart -= 12; renderYearOnlyPicker(triggerEl); });
-  popup.querySelector('[data-yp="next"]').addEventListener("click", (e) => { e.stopPropagation(); yearOnlyState.rangeStart += 12; renderYearOnlyPicker(triggerEl); });
-  popup.querySelectorAll("[data-year]").forEach((el) => {
-    el.addEventListener("click", (e) => {
-      e.stopPropagation();
-      closeYearOnlyPicker();
-      yearOnlyState.onSelect(parseInt(el.dataset.year));
-    });
-  });
-}
-function closeYearOnlyPicker() { document.getElementById("yearOnlyPickerPopup")?.classList.add("hidden"); }
-document.addEventListener("click", (e) => {
-  if (!e.target.closest("#yearOnlyPickerPopup") && !e.target.closest(".cal-year-clickable")) closeYearOnlyPicker();
+  if (!e.target.closest("#datePickerPopup") && !e.target.closest(".cell-date") && !e.target.closest(".custom-date-display")) closeDatePickerPopup();
 });
 
 /** Converte um <input type="date"> nativo num campo de texto com a
@@ -2957,7 +2878,7 @@ function closeAllFloatingPopups() {
   if (!shield) return;
   const popupIds = [
     "calcPopup", "datePickerPopup", "pickerPopup", "monthYearPickerPopup",
-    "monthOnlyPickerPopup", "yearOnlyPickerPopup", "rowActionMenu", "bulkContextMenu",
+    "rowActionMenu", "bulkContextMenu",
     "globalDropdownMenu", "profileSelectMenu", "lancAccountSelectMenu", "colorPickerPopup",
   ];
   function anyOpen() {
