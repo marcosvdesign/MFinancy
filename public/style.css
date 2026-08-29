@@ -13,6 +13,7 @@
   --green: var(--primary); /* mesmo verde dos botoes/nav, em vez de um verde separado */
   --red: #d64545;
   --sidebar-bg: #ece9e3;
+  --sidebar-glass-bg: rgba(236,233,227,0.7);
   --sidebar-text: #4a4640;
   --sidebar-text-strong: #221f1b;
   --sidebar-hover: rgba(0,0,0,0.05);
@@ -44,6 +45,7 @@
   --green: var(--primary); /* mesmo verde dos botoes/nav, em vez de um verde separado */
   --red: #ef6464;
   --sidebar-bg: #1c1b1a;
+  --sidebar-glass-bg: rgba(28,27,26,0.6);
   --sidebar-text: #cfccc6;
   --sidebar-text-strong: #f5f4f2;
   --sidebar-hover: rgba(255,255,255,0.06);
@@ -95,14 +97,26 @@ button, select, input, textarea { color: inherit; font-family: inherit; }
 
 .hidden { display: none !important; }
 
-.app { display: flex; min-height: 100vh; }
+.app { display: flex; min-height: 100vh; gap: 16px; padding: 16px; align-items: flex-start; }
 
 /* ---------- Sidebar ---------- */
 
+/* Desconectado das bordas da pagina: flutua como um bloco de vidro
+   (mesmo tratamento visual dos paineis do dashboard), em vez de ficar
+   colado nos limites da tela. Fica "sticky" pra acompanhar o scroll,
+   ja que o conteudo ao lado pode ficar mais alto que a viewport. */
 .sidebar {
   width: 230px;
   flex-shrink: 0;
-  background: var(--sidebar-bg);
+  position: sticky; top: 16px;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  background: var(--sidebar-glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  box-shadow: 0 18px 40px rgba(0,0,0,0.12);
   color: var(--sidebar-text);
   display: flex;
   flex-direction: column;
@@ -571,7 +585,7 @@ nav { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
 }
 @media (max-width: 900px) {
   .app { flex-direction: column; }
-  .sidebar { width: 100%; }
+  .sidebar { width: 100%; position: static; max-height: none; }
   .cards-row { grid-template-columns: repeat(2, 1fr); }
   .grid-2 { grid-template-columns: 1fr; }
   .dash-cols { grid-template-columns: 1fr; }
@@ -585,7 +599,7 @@ nav { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
 
 /* ---------- Sidebar retratil ---------- */
 
-.sidebar { transition: width 0.16s ease; overflow: hidden; }
+.sidebar { transition: width 0.16s ease; overflow-x: hidden; }
 .sidebar.collapsed { width: 68px; }
 
 .sidebar-toggle-btn {
@@ -720,7 +734,10 @@ nav { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
 }
 
 .date-picker-popup, .picker-popup {
-  position: fixed; z-index: 80;
+  /* Precisa ficar acima do confirm-dialog-overlay (z-index 95) — o campo
+     de data dentro do popup de "confirme a data de pagamento" abria o
+     calendario atras dele. */
+  position: fixed; z-index: 96;
   background: var(--glass-bg); backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur));
   border: 1px solid var(--glass-border);
   border-radius: 12px; box-shadow: 0 18px 40px rgba(0,0,0,0.22); padding: 10px; width: 260px;
