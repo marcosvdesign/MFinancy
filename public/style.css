@@ -150,6 +150,10 @@ button, select, input, textarea { color: inherit; font-family: inherit; }
 .custom-select-option.selected { background: var(--primary); color: #fff; font-weight: 600; }
 .custom-select-option .check { opacity: 0; font-size: 12px; }
 .custom-select-option.selected .check { opacity: 1; }
+/* Saldo de conta (verde/vermelho) dentro de uma opcao selecionada (fundo
+   verde): forcar branco, senao o verde some e o vermelho contrasta mal. */
+.custom-select-option.selected .positive,
+.custom-select-option.selected .negative { color: #fff; }
 
 /* Modal de escolha de escopo (editar/excluir recorrencia ou parcelamento) */
 .scope-options { display: flex; flex-direction: column; gap: 10px; }
@@ -191,9 +195,14 @@ nav { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
   border-radius: 999px; padding: 6px 14px; font-weight: 600; flex-shrink: 0;
 }
 .month-switch button { border: none; background: transparent; cursor: pointer; font-size: 16px; color: var(--primary); width: 22px; }
-/* Largura fixa (nao min-width) pra nao "pular" de tamanho conforme o nome
-   do mes muda (ex.: "Maio 2026" vs "Fevereiro 2026" vs "Setembro 2026"). */
-.month-label-clickable { cursor: pointer; border-radius: 6px; padding: 2px 6px; display: inline-block; width: 128px; text-align: center; }
+/* Largura E altura fixas (nao min-width) pra nao "pular" de tamanho
+   conforme o nome do mes muda (ex.: "Maio 2026" vs "Fevereiro 2026") — o
+   white-space:nowrap impede a quebra em duas linhas quando o nome e longo. */
+.month-label-clickable {
+  cursor: pointer; border-radius: 6px; padding: 2px 6px; display: inline-flex;
+  align-items: center; justify-content: center; width: 150px; height: 22px;
+  text-align: center; white-space: nowrap; overflow: hidden;
+}
 .month-label-clickable:hover { background: var(--hover-tint); color: var(--primary); }
 
 .btn-primary {
@@ -235,6 +244,12 @@ nav { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
 
 .grid-2 { display: grid; grid-template-columns: 1.3fr 1fr; gap: 16px; margin-bottom: 16px; }
 .grid-contacts { display: grid; grid-template-columns: 1.1fr 1fr 1fr; gap: 16px; }
+
+/* Dashboard: duas colunas de largura IGUAL, cada uma com seus proprios
+   blocos empilhados de forma independente — sem alinhamento modular entre
+   as colunas (cada bloco tem a altura que precisar). */
+.dash-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+.dash-col { display: flex; flex-direction: column; gap: 16px; }
 
 .panel {
   background: var(--glass-bg); backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur));
@@ -365,6 +380,9 @@ nav { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
 .badge-pago { background: var(--badge-pago-bg); color: var(--green); }
 .badge-pendente { background: var(--badge-pendente-bg); color: var(--badge-pendente-text); }
 .badge-vencido { background: var(--badge-vencido-bg); color: var(--red); }
+.badge-pagamento-unico { background: var(--hover-tint); color: var(--text-muted); }
+.badge-pagamento-parcelado { background: rgba(59,130,246,0.14); color: #3b82f6; }
+.badge-pagamento-repetir { background: rgba(147,51,234,0.14); color: #9333ea; }
 
 .row-actions { display: flex; gap: 6px; }
 .row-actions button { border: none; background: var(--bg); border-radius: 6px; padding: 5px 9px; cursor: pointer; font-size: 12px; }
@@ -556,6 +574,7 @@ nav { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
   .sidebar { width: 100%; }
   .cards-row { grid-template-columns: repeat(2, 1fr); }
   .grid-2 { grid-template-columns: 1fr; }
+  .dash-cols { grid-template-columns: 1fr; }
 }
 @media (min-width: 1700px) {
   .cards-row { grid-template-columns: repeat(4, 1fr); gap: 20px; }
@@ -671,6 +690,8 @@ nav { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
 .light-menu .custom-select-option { color: var(--text) !important; }
 .light-menu .custom-select-option:hover { background: var(--hover-tint) !important; color: var(--text) !important; }
 .light-menu .custom-select-option.selected { background: var(--primary) !important; color: #fff !important; }
+.light-menu .custom-select-option.selected .positive,
+.light-menu .custom-select-option.selected .negative { color: #fff !important; }
 
 /* ---------- Linha de adicionar inline (transferencias) ---------- */
 

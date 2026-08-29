@@ -993,6 +993,57 @@ export async function convertToInstallments(transactionId: string, schedule: Ins
   return results;
 }
 
+/** Transforma um lancamento avulso ja existente em uma serie recorrente
+ * (mesmo valor/descricao, repetido de acordo com a frequencia). Espelha a
+ * ramificacao de recorrencia de createTransaction, so que a partir de uma
+ * transacao ja existente em vez de um payload novo. */
+export async function convertToRecurrence(transactionId: string, frequency: string, occurrences: number): Promise<Transaction[] | { error: string }> {
+  const existing = await getTransactionById(transactionId);
+  if (!existing) return { error: "Lançamento não encontrado." };
+  if (existing.installment_group_id || existing.recurrence_group_id) {
+    return { error: "Este lançamento já faz parte de um grupo." };
+  }
+  const total = Number(occurrences);
+  if (!total || total < 2) return { error: "Informe ao menos 2 ocorrências." };
+  const step = FREQUENCY_STEP[frequency] || FREQUENCY_STEP.mensal;
+
+  const groupId = newId();
+  const results: Transaction[] = [];
+
+  const { rows } = await sql.query(
+    `UPDATE transactions SET recurrence_group_id=$1, recurrence_frequency=$2 WHERE id=$3 RETURNING *`,
+    [groupId, frequency, transactionId]
+  );
+  results.push(mapTransaction(rows[0]));
+
+  for (let i = 1; i < total; i++) {
+    const row = await insertTransactionRow({
+      description: existing.description,
+      amount: existing.amount,
+      group: existing.group,
+      account_id: existing.account_id,
+      category_id: existing.category_id,
+      contact_id: existing.contact_id,
+      cost_center_id: existing.cost_center_id,
+      tag_ids: existing.tag_ids || [],
+      notes: existing.notes,
+      status: "pendente",
+      paid_date: null,
+      id: newId(),
+      due_date: step(existing.due_date, i),
+      installment_group_id: null,
+      installment_number: null,
+      installment_total: null,
+      recurrence_group_id: groupId,
+      recurrence_frequency: frequency,
+    });
+    results.push(row);
+  }
+
+  await log("updated", "transaction", `Lançamento "${existing.description}" transformado em recorrência (${total}x)`);
+  return results;
+}
+
 // ---------------------------------------------------------------------
 // Acoes em massa (selecionar varios lancamentos e aplicar uma acao)
 // ---------------------------------------------------------------------

@@ -81,95 +81,95 @@
         </div>
       </header>
 
-      <div class="grid-2">
-        <div class="panel">
-          <h2>Previsto x Realizado</h2>
-          <div class="donut-row">
-            <div class="donut-block">
-              <canvas id="donutReceitas" width="108" height="108"></canvas>
-              <div class="donut-caption">RECEBIMENTOS</div>
-              <div class="progress-bar"><div class="progress-fill progress-fill-green" id="dProgressReceita" style="width:0%;"></div></div>
-              <div class="donut-lines">
-                <div><span>Realizado</span><b id="dReceitaRealizado">R$ 0,00</b></div>
-                <div><span>Falta</span><b id="dReceitaFalta">R$ 0,00</b></div>
-                <div><span>Previsto</span><b id="dReceitaPrevisto">R$ 0,00</b></div>
+      <div class="dash-cols">
+        <div class="dash-col">
+          <div class="panel">
+            <h2>Previsto x Realizado</h2>
+            <div class="donut-row">
+              <div class="donut-block">
+                <canvas id="donutReceitas" width="108" height="108"></canvas>
+                <div class="donut-caption">RECEBIMENTOS</div>
+                <div class="progress-bar"><div class="progress-fill progress-fill-green" id="dProgressReceita" style="width:0%;"></div></div>
+                <div class="donut-lines">
+                  <div><span>Realizado</span><b id="dReceitaRealizado">R$ 0,00</b></div>
+                  <div><span>Falta</span><b id="dReceitaFalta">R$ 0,00</b></div>
+                  <div><span>Previsto</span><b id="dReceitaPrevisto">R$ 0,00</b></div>
+                </div>
+              </div>
+              <div class="donut-block">
+                <canvas id="donutDespesas" width="108" height="108"></canvas>
+                <div class="donut-caption">DESPESAS</div>
+                <div class="progress-bar"><div class="progress-fill progress-fill-red" id="dProgressDespesa" style="width:0%;"></div></div>
+                <div class="donut-lines">
+                  <div><span>Realizado</span><b id="dDespesaRealizado">R$ 0,00</b></div>
+                  <div><span>Falta</span><b id="dDespesaFalta">R$ 0,00</b></div>
+                  <div><span>Previsto</span><b id="dDespesaPrevisto">R$ 0,00</b></div>
+                </div>
               </div>
             </div>
-            <div class="donut-block">
-              <canvas id="donutDespesas" width="108" height="108"></canvas>
-              <div class="donut-caption">DESPESAS</div>
-              <div class="progress-bar"><div class="progress-fill progress-fill-red" id="dProgressDespesa" style="width:0%;"></div></div>
-              <div class="donut-lines">
-                <div><span>Realizado</span><b id="dDespesaRealizado">R$ 0,00</b></div>
-                <div><span>Falta</span><b id="dDespesaFalta">R$ 0,00</b></div>
-                <div><span>Previsto</span><b id="dDespesaPrevisto">R$ 0,00</b></div>
+          </div>
+
+          <div class="panel">
+            <h2>Fluxo de caixa</h2>
+            <canvas id="chartComparativo" height="260"></canvas>
+          </div>
+
+          <div class="panel">
+            <div class="page-header" style="margin-bottom:2px;">
+              <h2 style="margin:0;">Comparativo mês anterior</h2>
+              <span class="help-icon" title="Compara os totais do mês atual com os do mês anterior">?</span>
+            </div>
+            <div class="card-sub" id="comparativoSubtitle" style="margin-bottom:10px;">Todas as contas</div>
+            <div id="comparativoGrupos" class="mini-table"></div>
+          </div>
+
+          <div class="panel">
+            <h2>Lançamentos em atraso <span class="badge badge-vencido" id="qtdVencidasBadge">0</span></h2>
+            <div class="card-sub" style="margin-bottom:8px;">Total em atraso: <b class="negative" id="totalVencidas">R$ 0,00</b></div>
+            <div id="listaVencidas" class="mini-table"></div>
+          </div>
+
+          <div class="panel">
+            <h2>Demonstração de Resultados (DRE) — mês atual</h2>
+            <div id="dreDashboard" class="dre-table"></div>
+          </div>
+        </div>
+
+        <div class="dash-col">
+          <div class="panel">
+            <div class="saldo-head">
+              <div>
+                <div class="card-label">Saldo · perfil selecionado</div>
+                <div class="card-value" id="saldoAtual">R$ 0,00</div>
               </div>
+              <button id="btnToggleSaldoPerfil" class="btn-secondary">Por perfil ▾</button>
+            </div>
+            <div id="saldoPorPerfil" class="account-balance-list hidden"></div>
+            <hr class="divider" />
+            <div class="card-label">Saldo por conta</div>
+            <div id="saldoPorConta" class="account-balance-list"></div>
+          </div>
+
+          <div class="panel">
+            <h2>Agenda do mês</h2>
+            <div id="calendarWrap"></div>
+            <div class="calendar-legend">
+              <span class="legend-item"><span class="dot dot-despesa"></span>Despesas</span>
+              <span class="legend-item"><span class="dot dot-receita"></span>Recebimentos</span>
+              <span class="legend-item"><span class="dot dot-transferencia"></span>Transferências</span>
             </div>
           </div>
-        </div>
 
-        <div class="panel">
-          <div class="saldo-head">
-            <div>
-              <div class="card-label">Saldo · perfil selecionado</div>
-              <div class="card-value" id="saldoAtual">R$ 0,00</div>
-            </div>
-            <button id="btnToggleSaldoPerfil" class="btn-secondary">Por perfil ▾</button>
+          <div class="panel">
+            <h2 id="agendaDiaTitulo">Vencimentos do dia</h2>
+            <div id="agendaDiaLista" class="mini-table"></div>
           </div>
-          <div id="saldoPorPerfil" class="account-balance-list hidden"></div>
-          <hr class="divider" />
-          <div class="card-label">Saldo por conta</div>
-          <div id="saldoPorConta" class="account-balance-list"></div>
-        </div>
-      </div>
 
-      <div class="grid-2">
-        <div class="panel">
-          <h2>Fluxo de caixa</h2>
-          <canvas id="chartComparativo" height="200"></canvas>
-        </div>
-
-        <div class="panel">
-          <div class="page-header" style="margin-bottom:2px;">
-            <h2 style="margin:0;">Comparativo mês anterior</h2>
-            <span class="help-icon" title="Compara os totais do mês atual com os do mês anterior">?</span>
-          </div>
-          <div class="card-sub" id="comparativoSubtitle" style="margin-bottom:10px;">Todas as contas</div>
-          <div id="comparativoGrupos" class="mini-table"></div>
-        </div>
-      </div>
-
-      <div class="grid-2">
-        <div class="panel">
-          <h2>Agenda do mês</h2>
-          <div id="calendarWrap"></div>
-          <div class="calendar-legend">
-            <span class="legend-item"><span class="dot dot-despesa"></span>Despesas</span>
-            <span class="legend-item"><span class="dot dot-receita"></span>Recebimentos</span>
-            <span class="legend-item"><span class="dot dot-transferencia"></span>Transferências</span>
+          <div class="panel">
+            <h2>Próximos vencimentos (30 dias)</h2>
+            <div id="proximosVencimentos" class="mini-table"></div>
           </div>
         </div>
-        <div class="panel">
-          <h2 id="agendaDiaTitulo">Vencimentos do dia</h2>
-          <div id="agendaDiaLista" class="mini-table"></div>
-        </div>
-      </div>
-
-      <div class="grid-2">
-        <div class="panel">
-          <h2>Próximos vencimentos (30 dias)</h2>
-          <div id="proximosVencimentos" class="mini-table"></div>
-        </div>
-        <div class="panel">
-          <h2>Lançamentos em atraso <span class="badge badge-vencido" id="qtdVencidasBadge">0</span></h2>
-          <div class="card-sub" style="margin-bottom:8px;">Total em atraso: <b class="negative" id="totalVencidas">R$ 0,00</b></div>
-          <div id="listaVencidas" class="mini-table"></div>
-        </div>
-      </div>
-
-      <div class="panel">
-        <h2>Demonstração de Resultados (DRE) — mês atual</h2>
-        <div id="dreDashboard" class="dre-table"></div>
       </div>
     </section>
 
@@ -270,7 +270,7 @@
             <tr>
               <th style="width:34px;"><input type="checkbox" id="selectAllCheckbox" /></th>
               <th>Data</th><th>Descrição</th><th>Contato</th><th>Categoria</th>
-              <th>Valor</th><th>Pago?</th><th></th>
+              <th>Pagamento</th><th>Valor</th><th>Pago?</th><th></th>
             </tr>
           </thead>
           <tbody id="transactionsBody"></tbody>

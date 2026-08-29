@@ -903,16 +903,21 @@ async function loadTransactionsTable() {
   const body = document.getElementById("transactionsBody");
   body.innerHTML = items.length ? items.map((t) => {
     const overdue = t.status === "pendente" && t.due_date < today;
-    const groupTag = t.installment_total ? ` (${t.installment_number}/${t.installment_total})` : t.recurrence_group_id ? " 🔁" : "";
     const groupId = t.recurrence_group_id || t.installment_group_id || "";
+    const pagamento = t.installment_total
+      ? { label: `Parcelado (${t.installment_number}/${t.installment_total})`, cls: "badge-pagamento-parcelado" }
+      : t.recurrence_group_id
+        ? { label: "Repetir", cls: "badge-pagamento-repetir" }
+        : { label: "Único", cls: "badge-pagamento-unico" };
     const checked = state.selectedTransactionIds.has(t.id);
     return `
       <tr data-row-id="${t.id}" class="${checked ? "row-selected" : ""}">
         <td><input type="checkbox" class="row-select-checkbox" data-id="${t.id}" ${checked ? "checked" : ""} /></td>
         <td class="clickable-cell cell-date" data-id="${t.id}">${formatDateBR(t.due_date)}${overdue ? ' <span class="badge badge-vencido">atrasado</span>' : ""}</td>
-        <td class="clickable-cell cell-desc" data-id="${t.id}"><span class="cell-text">${escapeHtml(t.description)}</span>${groupTag}<div class="meta" style="color:var(--text-muted);font-size:11.5px;">${escapeHtml(accById[t.account_id]?.name || "")}</div></td>
+        <td class="clickable-cell cell-desc" data-id="${t.id}"><span class="cell-text">${escapeHtml(t.description)}</span><div class="meta" style="color:var(--text-muted);font-size:11.5px;">${escapeHtml(accById[t.account_id]?.name || "")}</div></td>
         <td class="clickable-cell cell-contact" data-id="${t.id}"><span class="cell-text">${escapeHtml(contactById[t.contact_id]?.name || "-")}</span></td>
         <td class="clickable-cell cell-category" data-id="${t.id}"><span class="cell-text">${escapeHtml(catById[t.category_id]?.name || "-")}</span></td>
+        <td><span class="badge ${pagamento.cls}">${pagamento.label}</span></td>
         <td class="clickable-cell cell-amount ${t.group === "recebimento" ? "positive" : "negative"}" data-id="${t.id}"><span class="cell-text">${formatCurrency(t.amount)}</span></td>
         <td>
           <label class="toggle-switch">
@@ -925,7 +930,7 @@ async function loadTransactionsTable() {
           <button type="button" class="row-menu-trigger" data-bulk-menu-id="${t.id}" title="Mais opções">▾</button>
         </td>
       </tr>`;
-  }).join("") : `<tr><td colspan="8"><div class="empty-state">Nenhum lançamento encontrado.</div></td></tr>`;
+  }).join("") : `<tr><td colspan="9"><div class="empty-state">Nenhum lançamento encontrado.</div></td></tr>`;
 
   body.querySelectorAll('input.pago-toggle[data-id]').forEach((chk) => {
     chk.addEventListener("change", () => handleTogglePago(chk, items));
@@ -1857,10 +1862,7 @@ function transactionFormHtml(t, presetGroup) {
       </div>
     </div>
     ${isEdit && t.installment_group_id ? `<div class="card-sub" id="installmentInfoBox" style="margin-bottom:14px;">Carregando informações do parcelamento...</div>` : ""}
-    ${isEdit && !t.installment_group_id && !t.recurrence_group_id ? `
-    <div class="form-row">
-      <button type="button" class="btn-secondary" id="btnCriarParcelas">Criar parcelas</button>
-    </div>` : ""}
+    ${isEdit && t.recurrence_group_id ? `<div class="card-sub" style="margin-bottom:14px;">Repetição: ${FREQ_LABELS_PT[t.recurrence_frequency] || t.recurrence_frequency}</div>` : ""}
 
     <div class="form-row" id="statusFieldRow">
       <label>Status</label>
@@ -1878,7 +1880,7 @@ function transactionFormHtml(t, presetGroup) {
       <textarea id="f_notes" rows="2">${escapeHtml(t?.notes || "")}</textarea>
     </div>
 
-    ${isEdit ? "" : `
+    ${(!isEdit || (!t.installment_group_id && !t.recurrence_group_id)) ? `
     <div class="form-row segmented-control">
       <label><input type="radio" name="repeatMode" value="none" checked/> Único</label>
       <label><input type="radio" name="repeatMode" value="installments"/> Parcelado</label>
@@ -1888,7 +1890,7 @@ function transactionFormHtml(t, presetGroup) {
       <span class="card-sub" id="repeatSummaryText">Ainda não configurado</span>
       <button type="button" class="btn-secondary" id="btnConfigRepeat" style="padding:6px 12px;font-size:12px;">Configurar</button>
     </div>
-    `}
+    ` : ""}
 
     <div class="form-actions">
       <button class="btn-secondary" id="btnCancelForm">Cancelar</button>
@@ -1945,7 +1947,10 @@ function openTransactionModal(t, scope) {
     }
   }
 
-  if (!t) {
+  // Controle "Único/Parcelado/Repetir": aparece tanto ao criar quanto ao
+  // editar um lancamento avulso (que ainda nao faz parte de um grupo).
+  const showRepeatControl = !t || (!t.installment_group_id && !t.recurrence_group_id);
+  if (showRepeatControl) {
     const repeatRadios = document.querySelectorAll('input[name="repeatMode"]');
     function syncRadioChecked() {
       repeatRadios.forEach((r) => r.closest("label")?.classList.toggle("radio-checked", r.checked));
@@ -1981,23 +1986,6 @@ function openTransactionModal(t, scope) {
     });
   }
 
-  document.getElementById("btnCriarParcelas")?.addEventListener("click", () => {
-    const defaults = {
-      amount: parseMaskedCurrency(document.getElementById("f_amount").value),
-      due_date: document.getElementById("f_due_date").value || todayIso(),
-    };
-    openParcelasPopup(defaults, null, async (result) => {
-      try {
-        await api("POST", `/api/transactions/${t.id}/installments`, {
-          schedule: result.rows.map((r) => ({ due_date: r.due_date, amount: r.amount, status: r.status })),
-        });
-        showToast("Lançamento transformado em parcelado.");
-        closeModal();
-        refreshCurrentView();
-      } catch (e) { showToast(e.message, true); }
-    });
-  });
-
   if (t && t.installment_group_id) {
     api("GET", "/api/transactions?" + qs({ installment_group_id: t.installment_group_id }))
       .then((siblings) => {
@@ -2023,23 +2011,41 @@ function openTransactionModal(t, scope) {
       status: document.getElementById("f_status").value,
       notes: document.getElementById("f_notes").value,
     };
-    const mode = !t ? document.querySelector('input[name="repeatMode"]:checked').value : "none";
+    const mode = showRepeatControl ? document.querySelector('input[name="repeatMode"]:checked').value : "none";
     if (!payload.description || !payload.due_date || !payload.account_id) {
       return showToast("Preencha descrição, vencimento e conta.", true);
     }
     if (mode !== "installments" && !payload.amount) {
       return showToast("Preencha o valor.", true);
     }
+    if (mode === "installments" && (!repeatConfig || repeatConfig.type !== "installments")) {
+      return showToast("Clique em \"Configurar\" para montar as parcelas.", true);
+    }
+    if (mode === "recurrence" && (!repeatConfig || repeatConfig.type !== "recurrence")) {
+      return showToast("Clique em \"Configurar\" para definir a repetição.", true);
+    }
     try {
       if (t) {
+        // Salva primeiro os campos editados; a conversao em parcelado/repetir
+        // (quando escolhida) parte do lancamento ja atualizado.
         await api("PUT", `/api/transactions/${t.id}?scope=${scope}`, payload);
-        showToast("Lançamento atualizado." + (scope !== "single" ? " (outras ocorrências também foram atualizadas)" : ""));
+        if (mode === "installments") {
+          await api("POST", `/api/transactions/${t.id}/installments`, {
+            schedule: repeatConfig.rows.map((r) => ({ due_date: r.due_date, amount: r.amount, status: r.status })),
+          });
+          showToast("Lançamento atualizado e transformado em parcelado.");
+        } else if (mode === "recurrence") {
+          await api("POST", `/api/transactions/${t.id}/recurrence`, {
+            frequency: repeatConfig.frequency, occurrences: repeatConfig.occurrences,
+          });
+          showToast("Lançamento atualizado e transformado em recorrente.");
+        } else {
+          showToast("Lançamento atualizado." + (scope !== "single" ? " (outras ocorrências também foram atualizadas)" : ""));
+        }
       } else {
         if (mode === "installments") {
-          if (!repeatConfig || repeatConfig.type !== "installments") return showToast("Clique em \"Configurar\" para montar as parcelas.", true);
           payload.installments = { enabled: true, schedule: repeatConfig.rows.map((r) => ({ due_date: r.due_date, amount: r.amount, status: r.status })) };
         } else if (mode === "recurrence") {
-          if (!repeatConfig || repeatConfig.type !== "recurrence") return showToast("Clique em \"Configurar\" para definir a repetição.", true);
           payload.recurrence = { enabled: true, frequency: repeatConfig.frequency, occurrences: repeatConfig.occurrences };
         }
         await api("POST", "/api/transactions", payload);
