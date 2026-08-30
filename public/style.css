@@ -258,7 +258,7 @@ nav { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
    (mudando o espaco disponivel sem mudar a largura da janela), o layout
    troca de 1 pra 2 colunas sozinho, sem precisar de nenhum JS. */
 .contacts-container { container-type: inline-size; container-name: contacts; }
-.grid-contacts { display: flex; flex-direction: column; gap: 16px; max-width: 1100px; margin: 0 auto; }
+.grid-contacts { display: flex; flex-direction: column; gap: 16px; }
 .contacts-debts-col { display: flex; flex-direction: column; gap: 16px; }
 @container contacts (min-width: 680px) {
   .grid-contacts { display: grid; grid-template-columns: 1.1fr 1fr; align-items: start; }
@@ -488,6 +488,9 @@ nav { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
   box-shadow: 0 14px 34px rgba(0,0,0,0.16); min-width: 160px; padding: 5px;
 }
 .bulk-menu-item.has-submenu:hover > .bulk-submenu { display: block; }
+/* Quando nao ha espaco a direita (menu perto da borda da tela), abre o
+   submenu pra esquerda do item-pai em vez de direita — ver attachSubmenuFlip. */
+.bulk-submenu.submenu-flip { left: auto; right: 100%; margin-left: 0; margin-right: 4px; }
 
 /* ---------- Barras de progresso (previsto x realizado) ---------- */
 

@@ -11,8 +11,9 @@
 <script>
   (function () {
     try {
+      // Mesmo padrao fixo (escuro) do app principal — ver index.html.
       var saved = localStorage.getItem("theme");
-      var theme = saved || (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+      var theme = saved || "dark";
       document.documentElement.setAttribute("data-theme", theme);
     } catch (e) {}
   })();

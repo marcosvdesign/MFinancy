@@ -1080,9 +1080,10 @@ function openBulkContextMenu(x, y, ids) {
     </div>
     <button type="button" class="row-menu-item danger" data-action="delete">Excluir itens</button>
   `;
-  menu.style.top = `${y}px`;
-  menu.style.left = `${Math.max(8, Math.min(x, window.innerWidth - 210))}px`;
   menu.classList.remove("hidden");
+  const fakeTrigger = { getBoundingClientRect: () => ({ left: x, right: x, top: y, bottom: y }) };
+  positionFloatingElement(menu, fakeTrigger, { align: "left", fallbackWidth: 210, gap: 0 });
+  attachSubmenuFlip(menu);
 
   menu.querySelectorAll("[data-action]").forEach((btn) => {
     btn.addEventListener("click", async (e) => {
@@ -1091,6 +1092,18 @@ function openBulkContextMenu(x, y, ids) {
       const action = btn.dataset.action;
       try {
         if (action === "delete") {
+          // Um unico item selecionado que faz parte de parcelamento/
+          // recorrencia: pergunta o escopo (so esta / esta e as proximas /
+          // todas) em vez de excluir soh essa ocorrencia sem avisar.
+          if (ids.length === 1) {
+            const single = (state.lastTransactionItems || []).find((i) => i.id === ids[0]);
+            const groupId = single && (single.recurrence_group_id || single.installment_group_id);
+            if (groupId) {
+              state.selectedTransactionIds.clear();
+              openScopeModal("Excluir", (scope) => deleteTransactionWithScope(ids[0], scope));
+              return;
+            }
+          }
           if (!(await appConfirm(`Excluir ${ids.length} lançamento(s)?`))) return;
           await api("POST", "/api/transactions/bulk", { ids, action: "delete" });
           showToast("Lançamentos excluídos.");
@@ -1125,11 +1138,8 @@ function openRowActionMenu(triggerEl, t, onChanged) {
     <button type="button" class="row-menu-item" data-menu-action="duplicate">Duplicar</button>
     <button type="button" class="row-menu-item danger" data-menu-action="delete">Excluir</button>
   `;
-  const rect = triggerEl.getBoundingClientRect();
-  menu.style.top = `${rect.bottom + 4}px`;
-  menu.style.right = `${Math.max(8, window.innerWidth - rect.right)}px`;
-  menu.style.left = "auto";
   menu.classList.remove("hidden");
+  positionFloatingMenu(menu, triggerEl);
 
   menu.querySelectorAll("[data-menu-action]").forEach((btn) => {
     btn.onclick = (e) => {
@@ -1166,10 +1176,65 @@ async function duplicateTransaction(t, onChanged) {
 // ---------------------------------------------------------------------
 
 const POPUP_WIDTH = 260;
-function positionPopupNear(popup, triggerEl) {
+
+/** Posiciona um popup/menu flutuante perto de um elemento-gatilho sem
+ * nunca deixar sobrar pra fora da viewport: se nao houver espaco embaixo,
+ * abre pra cima; se o alinhamento preferido nao couber horizontalmente,
+ * tenta o lado oposto antes de so clampar nas bordas. Usa a MEDIDA REAL
+ * do elemento (offsetWidth/Height) — por isso so deve ser chamado depois
+ * de innerHTML + remover "hidden", pra ja estar renderizado. */
+function positionFloatingElement(el, triggerEl, opts) {
+  const options = opts || {};
+  const gap = options.gap != null ? options.gap : 4;
+  const align = options.align || "left";
   const rect = triggerEl.getBoundingClientRect();
-  popup.style.top = `${rect.bottom + 4}px`;
-  popup.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - POPUP_WIDTH - 8))}px`;
+  const elW = el.offsetWidth || options.fallbackWidth || 200;
+  const elH = el.offsetHeight || 0;
+  const vw = window.innerWidth, vh = window.innerHeight;
+
+  let left;
+  if (align === "right") {
+    left = rect.right - elW;
+    if (left < 8) left = rect.left;
+  } else {
+    left = rect.left;
+    if (left + elW + 8 > vw) left = rect.right - elW;
+  }
+  left = Math.max(8, Math.min(left, vw - elW - 8));
+
+  let top = rect.bottom + gap;
+  if (top + elH + 8 > vh && rect.top - elH - gap > 8) top = rect.top - elH - gap;
+  top = Math.max(8, top);
+
+  el.style.left = `${left}px`;
+  el.style.top = `${top}px`;
+  el.style.right = "auto";
+}
+function positionPopupNear(popup, triggerEl) {
+  positionFloatingElement(popup, triggerEl, { fallbackWidth: POPUP_WIDTH });
+}
+function positionFloatingMenu(menu, triggerEl) {
+  positionFloatingElement(menu, triggerEl, { align: "right", fallbackWidth: 150 });
+}
+
+/** Os submenus (ex.: "Duplicar itens ▸") abrem por CSS puro (:hover) pra
+ * direita do item-pai — sem essa checagem eles estouram a borda direita
+ * da tela quando o menu principal ja esta perto dela. Ao passar o mouse,
+ * mede o espaco disponivel e adiciona .submenu-flip pra abrir pra
+ * esquerda em vez de direita quando necessario. */
+function attachSubmenuFlip(menu) {
+  menu.querySelectorAll(".has-submenu").forEach((item) => {
+    const submenu = item.querySelector(".bulk-submenu");
+    if (!submenu) return;
+    item.addEventListener("mouseenter", () => {
+      submenu.classList.remove("submenu-flip");
+      const itemRect = item.getBoundingClientRect();
+      const submenuWidth = submenu.offsetWidth || 170;
+      const wouldOverflowRight = itemRect.right + 4 + submenuWidth > window.innerWidth;
+      const fitsLeft = itemRect.left - 4 - submenuWidth > 0;
+      if (wouldOverflowRight && fitsLeft) submenu.classList.add("submenu-flip");
+    });
+  });
 }
 
 /** Aplica a alteracao de um unico campo, perguntando o escopo antes se o
@@ -2027,9 +2092,17 @@ function openTransactionModal(t, scope) {
         }
         await api("POST", "/api/transactions", payload);
         showToast("Lançamento criado.");
+        // Garante que o lancamento recem-criado apareca na lista na hora:
+        // reseta o filtro de status (senao pode ficar escondido, ex. filtro
+        // em "somente pagos" mas o novo item ficou pendente) e ajusta o
+        // filtro de periodo pro mes do vencimento informado.
+        const statusFilter = document.getElementById("filterStatus");
+        if (statusFilter) statusFilter.value = "";
+        const [dy, dm] = payload.due_date.split("-").map(Number);
+        state.lancFilterYear = dy; state.lancFilterMonth = dm;
       }
       closeModal();
-      refreshCurrentView();
+      if (!t) applyLancMonthFilter(); else refreshCurrentView();
     } catch (e) { showToast(e.message, true); }
   });
 }

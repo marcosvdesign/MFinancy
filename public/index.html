@@ -16,8 +16,14 @@
 <script>
   (function () {
     try {
+      // Padrao fixo (escuro) em vez de seguir o prefers-color-scheme do
+      // sistema operacional: localStorage nao e compartilhado entre
+      // aparelhos, entao seguir a preferencia do SO fazia o app abrir com
+      // temas (e tons de cor) diferentes no computador e no celular ate o
+      // usuario alternar manualmente em cada um. Uma escolha explicita via
+      // "Modo claro/escuro" continua sempre respeitada normalmente.
       var saved = localStorage.getItem("theme");
-      var theme = saved || (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light");
+      var theme = saved || "dark";
       document.documentElement.setAttribute("data-theme", theme);
     } catch (e) {}
   })();
