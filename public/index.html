@@ -11,7 +11,7 @@
 <meta name="theme-color" content="#141a2b" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="/style.css" />
 <script>
   (function () {
@@ -64,6 +64,7 @@
     </form>
     <div class="sidebar-footer">Dados salvos na nuvem (Postgres)</div>
   </aside>
+  <div id="sidebarBackdrop" class="sidebar-backdrop hidden"></div>
 
   <main class="content">
 
@@ -74,10 +75,13 @@
           <h1>Dashboard</h1>
           <div class="greeting" id="greeting">Olá!</div>
         </div>
-        <div class="month-switch">
-          <button id="prevMonth">‹</button>
-          <span id="monthLabel" class="month-label-clickable">—</span>
-          <button id="nextMonth">›</button>
+        <div class="page-header-actions">
+          <div class="month-switch">
+            <button id="prevMonth">‹</button>
+            <span id="monthLabel" class="month-label-clickable">—</span>
+            <button id="nextMonth">›</button>
+          </div>
+          <button type="button" id="btnHideValues" class="hide-values-btn" title="Ocultar valores"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.8-7 10-7 10 7 10 7-3.8 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg></button>
         </div>
       </header>
 
@@ -252,7 +256,10 @@
             <option value="pendente">Não pagos</option>
             <option value="pago">Pagos</option>
           </select>
-          <input type="text" id="filterSearch" placeholder="Buscar descrição..." />
+          <input type="text" id="filterSearch" class="hidden" placeholder="Buscar descrição..." />
+          <button type="button" id="btnSearchToggle" class="filter-search-btn" title="Buscar por descrição">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+          </button>
           <button id="btnFiltrar" class="btn-primary">Filtrar</button>
           <button class="btn-secondary" id="btnNovoLancamento" style="margin-left:auto;">+ Adicionar</button>
         </div>
@@ -287,7 +294,7 @@
     </section>
 
     <!-- ============ CONTATOS ============ -->
-    <section id="tab-contatos" class="tab">
+    <section id="tab-contatos" class="tab contacts-container">
       <header class="page-header">
         <h1>Contatos</h1>
         <button class="btn-primary" id="btnNovoContato">+ Novo contato</button>
@@ -298,6 +305,7 @@
           <input type="text" id="contactSearch" placeholder="Pesquisar contatos..." class="search-input" />
           <div id="contactsList" class="mini-table mini-table-tall"></div>
         </div>
+        <div class="contacts-debts-col">
         <div class="panel">
           <h2 class="positive">Quem está me devendo <span id="totalMeDevem"></span></h2>
           <div id="quemMeDeve" class="mini-table"></div>
@@ -305,6 +313,7 @@
         <div class="panel">
           <h2 class="negative">Quem estou devendo <span id="totalEuDevo"></span></h2>
           <div id="quemEuDevo" class="mini-table"></div>
+        </div>
         </div>
       </div>
     </section>
@@ -537,8 +546,6 @@
   </div>
 </div>
 
-<button type="button" id="btnHideValues" class="hide-values-btn" title="Ocultar valores"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.8-7 10-7 10 7 10 7-3.8 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg></button>
-
 <!-- Blindeia cliques no resto da pagina enquanto qualquer popup flutuante
      estiver aberto (calculadora, calendario, seletores, menus de linha) -->
 <div id="popupShield" class="popup-shield hidden"></div>
@@ -564,10 +571,11 @@
 <div id="monthYearPickerPopup" class="date-picker-popup hidden"></div>
 <div id="bulkContextMenu" class="row-menu-dropdown bulk-context-menu hidden"></div>
 <div id="colorPickerPopup" class="date-picker-popup hidden" style="width:210px;"></div>
+<div id="searchPopup" class="date-picker-popup hidden" style="width:220px;">
+  <input type="text" id="searchPopupInput" class="search-popup-input" placeholder="Buscar descrição..." />
+</div>
 <div id="globalDropdownMenu" class="global-dropdown-menu light-menu hidden"></div>
 
-<script src="/vendor/jspdf.umd.min.js"></script>
-<script src="/vendor/jspdf.plugin.autotable.js"></script>
 <script src="/charts.js"></script>
 <script src="/app.js"></script>
 </body>

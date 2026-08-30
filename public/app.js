@@ -144,6 +144,11 @@ function switchTab(tab) {
   if (tab === "contatos") loadContatos();
   if (tab === "relatorios") loadReport();
   if (tab === "configuracoes") loadConfigPanel(state.activeConfig);
+  // No mobile, navegar fecha a gaveta da sidebar de volta pro rail estreito.
+  if (isMobileViewport()) {
+    document.getElementById("sidebar")?.classList.add("collapsed");
+    updateSidebarBackdrop();
+  }
 }
 document.querySelectorAll(".nav-item").forEach((btn) => btn.addEventListener("click", () => switchTab(btn.dataset.tab)));
 
@@ -1520,6 +1525,45 @@ async function handleTransactionAction(action, id, items, groupId) {
 
 document.getElementById("btnFiltrar").addEventListener("click", loadTransactionsTable);
 
+// ---- Busca por descricao (icone de lupa que abre um popup, poupa espaco
+// na barra de filtros — importante pra ela caber numa unica linha) ----
+
+function updateSearchIconState() {
+  const btn = document.getElementById("btnSearchToggle");
+  if (btn) btn.classList.toggle("active", !!document.getElementById("filterSearch").value.trim());
+}
+function closeSearchPopup() { document.getElementById("searchPopup")?.classList.add("hidden"); }
+function openSearchPopup(triggerEl) {
+  const popup = document.getElementById("searchPopup");
+  const input = document.getElementById("searchPopupInput");
+  input.value = document.getElementById("filterSearch").value;
+  positionPopupNear(popup, triggerEl);
+  popup.classList.remove("hidden");
+  setTimeout(() => input.focus(), 30);
+}
+document.getElementById("btnSearchToggle")?.addEventListener("click", (e) => {
+  e.stopPropagation();
+  const popup = document.getElementById("searchPopup");
+  if (!popup.classList.contains("hidden")) { closeSearchPopup(); return; }
+  openSearchPopup(e.currentTarget);
+});
+function applySearchPopup() {
+  document.getElementById("filterSearch").value = document.getElementById("searchPopupInput").value;
+  updateSearchIconState();
+  closeSearchPopup();
+  loadTransactionsTable();
+}
+document.getElementById("searchPopupInput")?.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") { e.preventDefault(); applySearchPopup(); }
+  if (e.key === "Escape") { closeSearchPopup(); }
+});
+document.addEventListener("click", (e) => {
+  if (!e.target.closest("#searchPopup") && !e.target.closest("#btnSearchToggle")) {
+    const popup = document.getElementById("searchPopup");
+    if (popup && !popup.classList.contains("hidden")) applySearchPopup();
+  }
+});
+
 function tagChipsHtml(selectedIds) {
   if (!state.tags.length) return `<div class="card-sub">Nenhuma tag cadastrada ainda (crie em Configurações).</div>`;
   return `<div class="tag-checks">${state.tags.map((tag) => `
@@ -2266,11 +2310,35 @@ async function loadReport(downloadPdf) {
 
 const GROUPED_REPORT_KINDS = ["por_descricao", "por_dia", "por_tipo", "por_categoria", "por_centro_custo", "por_contato", "por_tag"];
 
+/** Carrega jsPDF + jsPDF-AutoTable sob demanda (so quando o usuario
+ * realmente gera um PDF), em vez de no carregamento inicial da pagina —
+ * esses dois arquivos vendorizados somam ~450KB, desnecessarios pra quem
+ * nunca visita Relatorios. Vendorizados localmente (nao via CDN) pra
+ * manter o app funcionando 100% offline. */
+let _pdfLibsPromise = null;
+function loadScriptOnce(src) {
+  return new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = src;
+    script.onload = resolve;
+    script.onerror = () => reject(new Error(`Falha ao carregar ${src}`));
+    document.head.appendChild(script);
+  });
+}
+function ensurePdfLibsLoaded() {
+  if (window.jspdf) return Promise.resolve();
+  if (!_pdfLibsPromise) {
+    _pdfLibsPromise = loadScriptOnce("/vendor/jspdf.umd.min.js").then(() => loadScriptOnce("/vendor/jspdf.plugin.autotable.js"));
+  }
+  return _pdfLibsPromise;
+}
+
 /** Gera e baixa o relatorio financeiro completo em PDF: DRE, performance
  * mensal e anual, saldos por conta e a lista de itens do relatorio ativo
  * (com quantidade e total), alem do resumo de receitas/despesas/saldo do
  * periodo selecionado nos filtros. */
 async function generateReportPdf(r, params, currentData) {
+  await ensurePdfLibsLoaded();
   if (!window.jspdf) throw new Error("Biblioteca de PDF não carregada.");
   const todayIso_ = todayIso();
   const now = new Date();
@@ -2852,7 +2920,7 @@ function redrawThemedCharts() {
 let _chartResizeDebounce;
 window.addEventListener("resize", () => {
   clearTimeout(_chartResizeDebounce);
-  _chartResizeDebounce = setTimeout(redrawThemedCharts, 150);
+  _chartResizeDebounce = setTimeout(() => { redrawThemedCharts(); updateSidebarBackdrop(); }, 150);
 });
 
 document.getElementById("btnToggleTheme")?.addEventListener("click", () => {
@@ -2887,12 +2955,28 @@ document.getElementById("btnHideValues")?.addEventListener("click", () => {
 // Sidebar retrátil (recolhe para ícones; passar o mouse expande)
 // ---------------------------------------------------------------------
 
+const MOBILE_BREAKPOINT = 900;
+function isMobileViewport() { return window.innerWidth <= MOBILE_BREAKPOINT; }
+
+/** No mobile a sidebar continua na esquerda (nunca vai pro topo): recolhida
+ * ela vira um "rail" estreito de icones que empurra o conteudo normalmente;
+ * expandida ela vira uma gaveta flutuante (position:fixed) por cima do
+ * conteudo, ao inves de espremer o resto da pagina — ver CSS. */
 (function initSidebar() {
   const sidebar = document.getElementById("sidebar");
   let collapsed = false;
   try { collapsed = localStorage.getItem("sidebarCollapsed") === "1"; } catch (e) {}
+  if (isMobileViewport()) collapsed = true; // mobile sempre comeca recolhida (rail), independente da preferencia salva no desktop
   sidebar.classList.toggle("collapsed", collapsed);
 })();
+
+function updateSidebarBackdrop() {
+  const sidebar = document.getElementById("sidebar");
+  const backdrop = document.getElementById("sidebarBackdrop");
+  if (!backdrop) return;
+  const drawerOpen = isMobileViewport() && !sidebar.classList.contains("collapsed");
+  backdrop.classList.toggle("hidden", !drawerOpen);
+}
 
 document.getElementById("btnToggleSidebar")?.addEventListener("click", (e) => {
   e.preventDefault();
@@ -2900,6 +2984,15 @@ document.getElementById("btnToggleSidebar")?.addEventListener("click", (e) => {
   const sidebar = document.getElementById("sidebar");
   const isCollapsed = sidebar.classList.toggle("collapsed");
   try { localStorage.setItem("sidebarCollapsed", isCollapsed ? "1" : "0"); } catch (err) {}
+  updateSidebarBackdrop();
+  // O toggle muda a largura disponivel do conteudo sem disparar o evento
+  // "resize" da janela (so as dimensoes da viewport fazem isso) — sem isso
+  // os graficos em <canvas> ficavam com a largura antiga ate um resize real.
+  setTimeout(redrawThemedCharts, 200);
+});
+document.getElementById("sidebarBackdrop")?.addEventListener("click", () => {
+  document.getElementById("sidebar").classList.add("collapsed");
+  updateSidebarBackdrop();
 });
 
 // ---------------------------------------------------------------------
@@ -3015,12 +3108,11 @@ function closeAllFloatingPopups() {
   closeDatePickerPopup();
   closePickerPopup();
   closeMonthYearPicker();
-  closeMonthOnlyPicker();
-  closeYearOnlyPicker();
   closeRowActionMenu();
   closeBulkContextMenu();
   closeGlobalDropdown();
   closeCustomSelect();
+  closeSearchPopup();
   if (typeof closeColorPickerPopup === "function") closeColorPickerPopup();
 }
 
@@ -3029,7 +3121,7 @@ function closeAllFloatingPopups() {
   if (!shield) return;
   const popupIds = [
     "calcPopup", "datePickerPopup", "pickerPopup", "monthYearPickerPopup",
-    "rowActionMenu", "bulkContextMenu",
+    "rowActionMenu", "bulkContextMenu", "searchPopup",
     "globalDropdownMenu", "profileSelectMenu", "lancAccountSelectMenu", "colorPickerPopup",
   ];
   function anyOpen() {

@@ -88,12 +88,6 @@ button, select, input, textarea { color: inherit; font-family: inherit; }
    (paineis, cartoes, modais, popups) mais abaixo neste arquivo, trocando
    os tokens solidos --surface/--border pelos tokens translucidos
    --glass-bg/--glass-border + backdrop-filter. */
-.glass {
-  background: var(--glass-bg);
-  backdrop-filter: blur(var(--glass-blur));
-  -webkit-backdrop-filter: blur(var(--glass-blur));
-  border: 1px solid var(--glass-border);
-}
 
 .hidden { display: none !important; }
 
@@ -257,7 +251,18 @@ nav { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
 .entity-card-actions button { border: none; background: var(--bg); border-radius: 6px; padding: 6px 10px; cursor: pointer; font-size: 12px; }
 
 .grid-2 { display: grid; grid-template-columns: 1.3fr 1fr; gap: 16px; margin-bottom: 16px; }
-.grid-contacts { display: grid; grid-template-columns: 1.1fr 1fr 1fr; gap: 16px; }
+/* Contatos: duas colunas (contatos a esquerda; quem-me-deve + quem-devo
+   empilhados a direita), centralizadas na pagina com um teto de largura.
+   Usa container query (nao media query) escutando a LARGURA DO CONTEUDO,
+   nao a da viewport — assim, quando a sidebar e recolhida/expandida
+   (mudando o espaco disponivel sem mudar a largura da janela), o layout
+   troca de 1 pra 2 colunas sozinho, sem precisar de nenhum JS. */
+.contacts-container { container-type: inline-size; container-name: contacts; }
+.grid-contacts { display: flex; flex-direction: column; gap: 16px; max-width: 1100px; margin: 0 auto; }
+.contacts-debts-col { display: flex; flex-direction: column; gap: 16px; }
+@container contacts (min-width: 680px) {
+  .grid-contacts { display: grid; grid-template-columns: 1.1fr 1fr; align-items: start; }
+}
 
 /* Dashboard: duas colunas de largura IGUAL, cada uma com seus proprios
    blocos empilhados de forma independente — sem alinhamento modular entre
@@ -316,8 +321,6 @@ nav { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
 .compare-item .progress-bar { margin: 6px 0 0 0; height: 5px; }
 .compare-item.compare-sub .progress-bar { height: 4px; }
 .compare-row { display: flex; justify-content: space-between; align-items: center; font-size: 13.5px; }
-.compare-row .arrow-up { color: var(--red); }
-.compare-row .arrow-down { color: var(--green); }
 
 .help-icon {
   display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px;
@@ -330,7 +333,6 @@ nav { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
 .dre-table { display: flex; flex-direction: column; max-width: 460px; }
 .dre-row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px dashed var(--border); font-size: 14px; }
 .dre-row.total { font-weight: 700; border-bottom: none; border-top: 2px solid var(--border); margin-top: 4px; padding-top: 10px; }
-.dre-row .label-op { color: var(--text-muted); margin-right: 6px; }
 
 /* ---------- Calendar ---------- */
 
@@ -381,6 +383,23 @@ nav { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
   border: 1px solid var(--glass-border); border-radius: var(--radius); padding: 14px; margin-bottom: 16px;
 }
 .filters input, .filters select { padding: 8px 10px; border-radius: 7px; border: 1px solid var(--border); font-size: 13px; background: var(--input-bg); color: var(--text); }
+
+/* Botao de lupa (abre um popup pra digitar a busca) no lugar do campo de
+   texto direto na barra de filtros — poupa bastante largura, essencial
+   pra barra caber numa unica linha em telas menores. */
+.filter-search-btn {
+  display: flex; align-items: center; justify-content: center; position: relative; flex-shrink: 0;
+  width: 34px; height: 34px; border-radius: 7px; border: 1px solid var(--border);
+  background: var(--input-bg); color: var(--text-muted); cursor: pointer;
+}
+.filter-search-btn svg { width: 16px; height: 16px; }
+.filter-search-btn:hover { color: var(--primary); border-color: var(--primary); }
+.filter-search-btn.active { color: var(--primary); border-color: var(--primary); }
+.filter-search-btn.active::after {
+  content: ""; position: absolute; top: 3px; right: 3px; width: 6px; height: 6px;
+  border-radius: 50%; background: var(--primary);
+}
+.search-popup-input { width: 100%; padding: 8px 10px; border-radius: 7px; border: 1px solid var(--border); font-size: 13.5px; background: var(--input-bg); color: var(--text); }
 .search-input { width: 100%; padding: 9px 11px; border-radius: 8px; border: 1px solid var(--border); font-size: 13.5px; margin-bottom: 12px; background: var(--input-bg); color: var(--text); }
 
 .subtabs { display: flex; gap: 6px; margin-bottom: 16px; flex-wrap: wrap; }
@@ -585,7 +604,6 @@ nav { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
 .segmented-control input[type="radio"] { position: absolute; opacity: 0; width: 0; height: 0; }
 .segmented-control label:has(input:checked) { background: var(--primary); color: #fff; }
 .segmented-control label.radio-checked { background: var(--primary); color: #fff; }
-.extra-fields { background: var(--bg); border-radius: 8px; padding: 12px; margin-top: 8px; }
 .tag-checks { display: flex; flex-wrap: wrap; gap: 8px; }
 .tag-chip { display: flex; align-items: center; gap: 5px; font-size: 12.5px; border: 1px solid var(--border); border-radius: 999px; padding: 5px 10px; cursor: pointer; }
 .tag-chip input { margin: 0; }
@@ -595,16 +613,34 @@ nav { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
 .toast.error { background: #b03434; }
 
 @media (max-width: 1050px) {
-  .grid-contacts { grid-template-columns: 1fr; }
   .reports-layout { grid-template-columns: 1fr; }
-  .reports-sidebar { position: static; flex-direction: row; flex-wrap: wrap; }
+  .reports-sidebar { position: static; }
+  /* Relatórios: a lista vertical de links vira "tags" que quebram linha —
+     cada uma com contorno proprio pra nao ficar tudo grudado (ver tambem
+     .reports-group-title abaixo). Configurações reaproveita as mesmas
+     classes mas continua em lista vertical (pedido explicito), por isso
+     esta regra e escopada so ao #tab-relatorios. */
+  #tab-relatorios .reports-sidebar { flex-direction: row; flex-wrap: wrap; gap: 8px; align-items: center; }
+  #tab-relatorios .reports-group-title { flex-basis: 100%; margin: 10px 2px 0 2px; }
+  #tab-relatorios .reports-group-title:first-child { margin-top: 0; }
+  #tab-relatorios .report-link {
+    border: 1px solid var(--glass-border); border-radius: 999px; padding: 7px 13px; background: var(--bg);
+  }
+  #tab-relatorios .report-link.active { border-color: var(--primary); }
 }
 @media (max-width: 900px) {
-  .app { flex-direction: column; }
-  .sidebar { width: 100%; position: static; max-height: none; }
   .cards-row { grid-template-columns: repeat(2, 1fr); }
   .grid-2 { grid-template-columns: 1fr; }
   .dash-cols { grid-template-columns: 1fr; }
+  .dre-table { max-width: none; }
+  .page-header { flex-wrap: wrap; }
+  /* Barra de filtros numa unica linha, com scroll horizontal como reforco
+     de seguranca pra telas realmente minusculas em vez de quebrar em
+     varias linhas (o botao de lupa no lugar do campo de texto ja libera
+     bastante espaco pra isso funcionar na maioria dos aparelhos). */
+  .filters { flex-wrap: nowrap; overflow-x: auto; }
+  .filters > * { flex-shrink: 0; }
+  #btnNovoLancamento { margin-left: 0 !important; }
 }
 @media (min-width: 1700px) {
   .cards-row { grid-template-columns: repeat(4, 1fr); gap: 20px; }
@@ -617,6 +653,24 @@ nav { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
 
 .sidebar { transition: width 0.16s ease; overflow-x: hidden; }
 .sidebar.collapsed { width: 68px; }
+
+/* No mobile/tablet a sidebar continua na esquerda (nunca "cai" pro topo).
+   Recolhida (estado padrao ao carregar a pagina nessas larguras) ela fica
+   como um rail estreito de 68px dentro do fluxo normal, empurrando o
+   conteudo um pouco — perfeitamente utilizavel em qualquer largura de
+   celular. Expandida ela vira uma "gaveta" flutuante (position:fixed) por
+   cima do conteudo em vez de espremer o resto da pagina; um backdrop
+   escurece o fundo e fecha a gaveta ao ser tocado. */
+@media (max-width: 900px) {
+  .app { gap: 10px; padding: 10px; }
+  .sidebar { position: sticky; top: 10px; max-height: calc(100vh - 20px); }
+  .sidebar:not(.collapsed) {
+    position: fixed; top: 10px; left: 10px; bottom: 10px; max-height: none;
+    width: min(260px, calc(100vw - 20px)); z-index: 210;
+  }
+  .sidebar-backdrop.hidden { display: none; }
+  .sidebar-backdrop { display: block; position: fixed; inset: 0; z-index: 205; background: rgba(0,0,0,0.45); }
+}
 
 .sidebar-toggle-btn {
   margin-left: auto; border: none; background: var(--sidebar-hover); color: var(--sidebar-text);
@@ -835,8 +889,9 @@ nav { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
 
 /* ---------- Ocultar valores (privacidade) ---------- */
 
+.page-header-actions { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
 .hide-values-btn {
-  position: fixed; top: 18px; right: 22px; z-index: 40;
+  flex-shrink: 0;
   border: 1px solid var(--glass-border); background: var(--glass-bg);
   backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur));
   color: var(--text); width: 38px; height: 38px; border-radius: 999px; cursor: pointer;
