@@ -2175,7 +2175,7 @@ document.querySelectorAll(".report-link").forEach((btn) => {
     loadReport();
   });
 });
-document.getElementById("btnGerarRelatorio").addEventListener("click", loadReport);
+document.getElementById("btnGerarRelatorio").addEventListener("click", () => loadReport(true));
 
 function renderGroupedTable(rows, side, report) {
   if (!rows.length) return `<div class="empty-state">Nenhum lançamento no período.</div>`;
@@ -2222,7 +2222,7 @@ function renderSaldos(data) {
   </tbody></table>`;
 }
 
-async function loadReport() {
+async function loadReport(downloadPdf) {
   const r = state.activeReport;
   document.getElementById("reportTitle").textContent = r.label + (r.side ? ` (${r.side === "receita" ? "recebimentos" : "despesas"})` : "");
   const params = {
@@ -2244,19 +2244,170 @@ async function loadReport() {
         <div class="card"><div class="card-label">Saldo do período</div><div class="card-value ${(data.total_receitas - data.total_despesas) >= 0 ? "positive" : "negative"}">${formatCurrency(data.total_receitas - data.total_despesas)}</div></div>
       </div>` : "";
 
-  if (data.kind === "grouped") { el.innerHTML = summary + renderGroupedTable(data.rows, r.side, r.report); return; }
-  if (data.kind === "list") { el.innerHTML = summary + renderListTable(data.items); return; }
-  if (data.kind === "extrato") { el.innerHTML = `<div class="card-sub" style="margin-bottom:12px;">Saldo final do período: <b class="${data.saldo_final < 0 ? "negative" : "positive"}">${formatCurrency(data.saldo_final)}</b></div>` + renderExtrato(data); return; }
-  if (data.kind === "dre") { el.innerHTML = `<div class="panel" style="max-width:480px;">${renderDreHtml(data.dre)}</div>`; return; }
-  if (data.kind === "saldos") { el.innerHTML = renderSaldos(data); return; }
-  if (data.kind === "performance") {
+  if (data.kind === "grouped") el.innerHTML = summary + renderGroupedTable(data.rows, r.side, r.report);
+  else if (data.kind === "list") el.innerHTML = summary + renderListTable(data.items);
+  else if (data.kind === "extrato") el.innerHTML = `<div class="card-sub" style="margin-bottom:12px;">Saldo final do período: <b class="${data.saldo_final < 0 ? "negative" : "positive"}">${formatCurrency(data.saldo_final)}</b></div>` + renderExtrato(data);
+  else if (data.kind === "dre") el.innerHTML = `<div class="panel" style="max-width:480px;">${renderDreHtml(data.dre)}</div>`;
+  else if (data.kind === "saldos") el.innerHTML = renderSaldos(data);
+  else if (data.kind === "performance") {
     el.innerHTML = `<div class="panel"><canvas id="perfChart" height="260"></canvas></div>`;
     const canvas = document.getElementById("perfChart");
     drawHatchedFlowChart(canvas, data.rows);
     attachChartTooltip(canvas);
-    return;
+  } else {
+    el.innerHTML = `<div class="empty-state">Sem dados.</div>`;
   }
-  el.innerHTML = `<div class="empty-state">Sem dados.</div>`;
+
+  if (downloadPdf) {
+    try { await generateReportPdf(r, params, data); }
+    catch (e) { showToast("Não foi possível gerar o PDF: " + e.message, true); }
+  }
+}
+
+const GROUPED_REPORT_KINDS = ["por_descricao", "por_dia", "por_tipo", "por_categoria", "por_centro_custo", "por_contato", "por_tag"];
+
+/** Gera e baixa o relatorio financeiro completo em PDF: DRE, performance
+ * mensal e anual, saldos por conta e a lista de itens do relatorio ativo
+ * (com quantidade e total), alem do resumo de receitas/despesas/saldo do
+ * periodo selecionado nos filtros. */
+async function generateReportPdf(r, params, currentData) {
+  if (!window.jspdf) throw new Error("Biblioteca de PDF não carregada.");
+  const todayIso_ = todayIso();
+  const now = new Date();
+  const firstDayOfMonthIso_ = `${now.getFullYear()}-${jsPad(now.getMonth() + 1)}-01`;
+  const periodStart = params.start || firstDayOfMonthIso_;
+  const periodEnd = params.end || todayIso_;
+  const year = params.year || todayIso_.slice(0, 4);
+
+  const needsTotals = currentData.total_receitas === undefined;
+  const needsItemList = !GROUPED_REPORT_KINDS.includes(r.report);
+  const baseParams = { profile_id: params.profile_id, status: params.status };
+
+  const [dreData, perfMensalData, perfAnualData, saldosData, totalsData, itemListData] = await Promise.all([
+    api("GET", "/api/reports?" + qs({ ...baseParams, report: "dre", start: periodStart, end: periodEnd })),
+    api("GET", "/api/reports?" + qs({ ...baseParams, report: "performance_mensal", year })),
+    api("GET", "/api/reports?" + qs({ ...baseParams, report: "performance_anual" })),
+    api("GET", "/api/reports?" + qs({ ...baseParams, report: "saldos" })),
+    needsTotals ? api("GET", "/api/reports?" + qs({ ...baseParams, report: "despesas_receitas", start: periodStart, end: periodEnd })) : Promise.resolve(currentData),
+    needsItemList ? api("GET", "/api/reports?" + qs({ ...baseParams, report: "por_categoria", start: periodStart, end: periodEnd })) : Promise.resolve(currentData),
+  ]);
+
+  const doc = new window.jspdf.jsPDF();
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const money = (v) => formatCurrency(v || 0);
+  let y = 18;
+
+  doc.setFontSize(16); doc.setFont(undefined, "bold");
+  doc.text("Relatório Financeiro — MyFinance", 14, y);
+  doc.setFontSize(10); doc.setFont(undefined, "normal"); doc.setTextColor(110);
+  y += 7;
+  doc.text(`Período: ${formatDateBR(periodStart)} até ${formatDateBR(periodEnd)}  •  Gerado em ${formatDateBR(todayIso_)}`, 14, y);
+  doc.setTextColor(20);
+  y += 10;
+
+  // Resumo do periodo
+  doc.setFontSize(12); doc.setFont(undefined, "bold");
+  doc.text("Resumo do período", 14, y);
+  y += 2;
+  doc.autoTable({
+    startY: y,
+    head: [["Total receitas", "Total despesas", "Saldo do período"]],
+    body: [[money(totalsData.total_receitas), money(totalsData.total_despesas), money((totalsData.total_receitas || 0) - (totalsData.total_despesas || 0))]],
+    theme: "grid", styles: { fontSize: 10 }, headStyles: { fillColor: [94, 138, 47] },
+  });
+  y = doc.lastAutoTable.finalY + 10;
+
+  // DRE
+  doc.setFontSize(12); doc.setFont(undefined, "bold");
+  doc.text("Demonstração de Resultados (DRE)", 14, y);
+  y += 2;
+  const d = dreData.dre;
+  doc.autoTable({
+    startY: y,
+    head: [["", "Valor"]],
+    body: [
+      ["Receita Bruta", money(d.receita_bruta)],
+      ["(–) Impostos", money(-d.impostos)],
+      ["Lucro Bruto", money(d.lucro_bruto)],
+      ["(–) Despesas Variáveis", money(-d.despesas_variaveis)],
+      ["Lucro Operacional", money(d.lucro_operacional)],
+      ["(–) Despesas Fixas", money(-d.despesas_fixas)],
+      ["(–) Gastos com Pessoal", money(-d.gastos_pessoal)],
+      [d.resultado_liquido >= 0 ? "Resultado Líquido" : "Prejuízo Líquido", money(d.resultado_liquido)],
+    ],
+    theme: "grid", styles: { fontSize: 10 }, headStyles: { fillColor: [94, 138, 47] },
+    columnStyles: { 1: { halign: "right" } },
+  });
+  y = doc.lastAutoTable.finalY + 10;
+
+  function ensureSpace(needed) {
+    if (y + needed > doc.internal.pageSize.getHeight() - 14) { doc.addPage(); y = 18; }
+  }
+
+  // Performance mensal
+  ensureSpace(30);
+  doc.setFontSize(12); doc.setFont(undefined, "bold");
+  doc.text(`Performance Mensal (${year})`, 14, y);
+  y += 2;
+  doc.autoTable({
+    startY: y,
+    head: [["Mês", "Receitas", "Despesas", "Saldo"]],
+    body: perfMensalData.rows.map((row) => [row.label, money(row.receitas), money(row.despesas), money(row.receitas - row.despesas)]),
+    theme: "grid", styles: { fontSize: 9 }, headStyles: { fillColor: [94, 138, 47] },
+    columnStyles: { 1: { halign: "right" }, 2: { halign: "right" }, 3: { halign: "right" } },
+  });
+  y = doc.lastAutoTable.finalY + 10;
+
+  // Performance anual
+  ensureSpace(30);
+  doc.setFontSize(12); doc.setFont(undefined, "bold");
+  doc.text("Performance Anual", 14, y);
+  y += 2;
+  doc.autoTable({
+    startY: y,
+    head: [["Ano", "Receitas", "Despesas", "Saldo"]],
+    body: perfAnualData.rows.map((row) => [row.label, money(row.receitas), money(row.despesas), money(row.receitas - row.despesas)]),
+    theme: "grid", styles: { fontSize: 9 }, headStyles: { fillColor: [94, 138, 47] },
+    columnStyles: { 1: { halign: "right" }, 2: { halign: "right" }, 3: { halign: "right" } },
+  });
+  y = doc.lastAutoTable.finalY + 10;
+
+  // Saldos por conta
+  ensureSpace(30);
+  doc.setFontSize(12); doc.setFont(undefined, "bold");
+  doc.text("Saldos por conta", 14, y);
+  y += 2;
+  doc.autoTable({
+    startY: y,
+    head: [["Conta", "Perfil", "Saldo"]],
+    body: [
+      ...saldosData.accounts.map((a) => [a.name, state.profiles.find((p) => p.id === a.profile_id)?.name || "-", money(a.balance)]),
+      ["Total", "", money(saldosData.total)],
+    ],
+    theme: "grid", styles: { fontSize: 9 }, headStyles: { fillColor: [94, 138, 47] },
+    columnStyles: { 2: { halign: "right" } },
+  });
+  y = doc.lastAutoTable.finalY + 10;
+
+  // Lista de itens (com quantidade e total) do relatorio ativo
+  ensureSpace(30);
+  const itemListIsActive = !needsItemList;
+  const itemRows = itemListIsActive ? currentData.rows : itemListData.rows;
+  const itemListLabel = itemListIsActive ? r.label : "Por Categoria";
+  doc.setFontSize(12); doc.setFont(undefined, "bold");
+  doc.text(`Itens do período — ${itemListLabel}`, 14, y);
+  y += 2;
+  doc.autoTable({
+    startY: y,
+    head: [["Item", "Quantidade", "Total"]],
+    body: itemRows.length ? itemRows.map((row) => [row.label, String(row.count), money(row.total)]) : [["Sem lançamentos no período.", "", ""]],
+    theme: "grid", styles: { fontSize: 9 }, headStyles: { fillColor: [94, 138, 47] },
+    columnStyles: { 1: { halign: "right" }, 2: { halign: "right" } },
+  });
+
+  const filename = `relatorio-myfinance-${periodStart}-a-${periodEnd}.pdf`;
+  doc.save(filename);
+  showToast("PDF gerado.");
 }
 
 // ---------------------------------------------------------------------
