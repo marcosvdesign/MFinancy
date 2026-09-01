@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { isValidSessionCookie, SESSION_COOKIE_NAME } from "./lib/auth";
+import { getUserIdFromSessionCookie, SESSION_COOKIE_NAME, USER_ID_HEADER } from "./lib/auth";
 
-// Caminhos que nao exigem login: a propria tela de login, o endpoint que
-// verifica a senha, e os arquivos estaticos que a tela de login usa.
-const PUBLIC_PATHS = ["/login", "/login.html", "/api/login", "/style.css", "/favicon.ico"];
+// Caminhos que nao exigem login: as proprias telas de login/cadastro, os
+// endpoints que as atendem, e os arquivos estaticos que elas usam.
+const PUBLIC_PATHS = [
+  "/login", "/login.html", "/api/login",
+  "/signup", "/signup.html", "/api/signup",
+  "/style.css", "/favicon.ico",
+];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -13,9 +17,9 @@ export async function middleware(request: NextRequest) {
   }
 
   const cookie = request.cookies.get(SESSION_COOKIE_NAME)?.value;
-  const valid = await isValidSessionCookie(cookie);
+  const userId = await getUserIdFromSessionCookie(cookie);
 
-  if (!valid) {
+  if (!userId) {
     if (pathname.startsWith("/api/")) {
       return NextResponse.json({ error: "Não autenticado" }, { status: 401 });
     }
@@ -23,7 +27,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl);
   }
 
-  return NextResponse.next();
+  // Repassa o usuario ja autenticado pra rota de API por header interno,
+  // pra ela nao precisar reler/reverificar o cookie por conta propria.
+  const headers = new Headers(request.headers);
+  headers.set(USER_ID_HEADER, userId);
+  return NextResponse.next({ request: { headers } });
 }
 
 export const config = {

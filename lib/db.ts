@@ -106,19 +106,56 @@ function csvField(value: string): string {
   return value;
 }
 
-async function log(action: string, entity: string, summary: string): Promise<void> {
-  await sql.query(`INSERT INTO activity_log (id, action, entity, summary) VALUES ($1,$2,$3,$4)`, [
+async function log(userId: string, action: string, entity: string, summary: string): Promise<void> {
+  await sql.query(`INSERT INTO activity_log (id, user_id, action, entity, summary) VALUES ($1,$2,$3,$4,$5)`, [
     newId(),
+    userId,
     action,
     entity,
     summary,
   ]);
 }
 
-async function profileAccountIds(profileId?: string | null): Promise<string[] | null> {
+async function profileAccountIds(userId: string, profileId?: string | null): Promise<string[] | null> {
   if (!profileId || profileId === "all") return null;
-  const { rows } = await sql.query(`SELECT id FROM accounts WHERE profile_id = $1`, [profileId]);
+  const { rows } = await sql.query(`SELECT id FROM accounts WHERE profile_id = $1 AND user_id = $2`, [profileId, userId]);
   return rows.map((r: any) => r.id);
+}
+
+// ---------------------------------------------------------------------
+// Usuários (multiusuário)
+// ---------------------------------------------------------------------
+
+export interface User {
+  id: string;
+  email: string;
+  password_hash: string;
+  display_name: string;
+}
+
+export async function getUserByEmail(email: string): Promise<User | null> {
+  const { rows } = await sql.query(`SELECT * FROM users WHERE email = $1`, [email.trim().toLowerCase()]);
+  return (rows[0] as User) || null;
+}
+
+export async function getUserById(id: string): Promise<User | null> {
+  const { rows } = await sql.query(`SELECT * FROM users WHERE id = $1`, [id]);
+  return (rows[0] as User) || null;
+}
+
+/** Cria um usuário novo (cadastro) com uma conta já semeada com os perfis e
+ * categorias padrão — mesma ideia da versão single-tenant, só que isolada
+ * por usuário e com IDs novos (ver seedDefaultData). */
+export async function createUser(email: string, passwordHash: string, displayName: string): Promise<User> {
+  const id = newId();
+  const normalizedEmail = email.trim().toLowerCase();
+  const { rows } = await sql.query(
+    `INSERT INTO users (id, email, password_hash, display_name) VALUES ($1,$2,$3,$4) RETURNING *`,
+    [id, normalizedEmail, passwordHash, displayName || ""]
+  );
+  const user = rows[0] as User;
+  await seedDefaultData(user.id);
+  return user;
 }
 
 // ---------------------------------------------------------------------
@@ -131,23 +168,24 @@ export interface Profile {
   color: string;
 }
 
-export async function listProfiles(): Promise<Profile[]> {
-  const { rows } = await sql.query(`SELECT * FROM profiles ORDER BY name`);
+export async function listProfiles(userId: string): Promise<Profile[]> {
+  const { rows } = await sql.query(`SELECT * FROM profiles WHERE user_id = $1 ORDER BY name`, [userId]);
   return rows as Profile[];
 }
 
-export async function createProfile(payload: any): Promise<Profile> {
+export async function createProfile(userId: string, payload: any): Promise<Profile> {
   const id = newId();
-  const { rows } = await sql.query(`INSERT INTO profiles (id, name, color) VALUES ($1,$2,$3) RETURNING *`, [
+  const { rows } = await sql.query(`INSERT INTO profiles (id, user_id, name, color) VALUES ($1,$2,$3,$4) RETURNING *`, [
     id,
+    userId,
     String(payload.name).trim(),
     payload.color || "#2f6fed",
   ]);
-  await log("created", "profile", `Perfil "${rows[0].name}" criado`);
+  await log(userId, "created", "profile", `Perfil "${rows[0].name}" criado`);
   return rows[0] as Profile;
 }
 
-export async function updateProfile(id: string, payload: any): Promise<Profile | null> {
+export async function updateProfile(userId: string, id: string, payload: any): Promise<Profile | null> {
   const sets: string[] = [];
   const params: any[] = [];
   if (payload.name !== undefined) {
@@ -159,28 +197,31 @@ export async function updateProfile(id: string, payload: any): Promise<Profile |
     sets.push(`color = $${params.length}`);
   }
   if (!sets.length) {
-    const { rows } = await sql.query(`SELECT * FROM profiles WHERE id=$1`, [id]);
+    const { rows } = await sql.query(`SELECT * FROM profiles WHERE id=$1 AND user_id=$2`, [id, userId]);
     return (rows[0] as Profile) || null;
   }
-  params.push(id);
-  const { rows } = await sql.query(`UPDATE profiles SET ${sets.join(", ")} WHERE id = $${params.length} RETURNING *`, params);
+  params.push(id, userId);
+  const { rows } = await sql.query(
+    `UPDATE profiles SET ${sets.join(", ")} WHERE id = $${params.length - 1} AND user_id = $${params.length} RETURNING *`,
+    params
+  );
   if (!rows[0]) return null;
-  await log("updated", "profile", `Perfil "${rows[0].name}" atualizado`);
+  await log(userId, "updated", "profile", `Perfil "${rows[0].name}" atualizado`);
   return rows[0] as Profile;
 }
 
-export async function deleteProfile(id: string): Promise<{ ok: true } | { error: string } | null> {
-  const { rows: countRows } = await sql.query(`SELECT COUNT(*)::int AS c FROM profiles`);
+export async function deleteProfile(userId: string, id: string): Promise<{ ok: true } | { error: string } | null> {
+  const { rows: countRows } = await sql.query(`SELECT COUNT(*)::int AS c FROM profiles WHERE user_id=$1`, [userId]);
   if (countRows[0].c <= 1) return { error: "É preciso manter ao menos um perfil." };
 
-  const { rows: existing } = await sql.query(`SELECT name FROM profiles WHERE id=$1`, [id]);
+  const { rows: existing } = await sql.query(`SELECT name FROM profiles WHERE id=$1 AND user_id=$2`, [id, userId]);
   if (!existing[0]) return null;
 
-  const { rows: inUse } = await sql.query(`SELECT 1 FROM accounts WHERE profile_id=$1 LIMIT 1`, [id]);
+  const { rows: inUse } = await sql.query(`SELECT 1 FROM accounts WHERE profile_id=$1 AND user_id=$2 LIMIT 1`, [id, userId]);
   if (inUse.length) return { error: "Existem contas vinculadas a este perfil. Mova ou exclua as contas antes." };
 
-  await sql.query(`DELETE FROM profiles WHERE id=$1`, [id]);
-  await log("deleted", "profile", `Perfil "${existing[0].name}" excluído`);
+  await sql.query(`DELETE FROM profiles WHERE id=$1 AND user_id=$2`, [id, userId]);
+  await log(userId, "deleted", "profile", `Perfil "${existing[0].name}" excluído`);
   return { ok: true };
 }
 
@@ -211,56 +252,56 @@ function mapAccount(row: any): Account {
   };
 }
 
-export async function accountBalance(accountId: string): Promise<number> {
+export async function accountBalance(userId: string, accountId: string): Promise<number> {
   const { rows } = await sql.query(
     `SELECT
        a.initial_balance
        + COALESCE((SELECT SUM(CASE WHEN t."group"='recebimento' THEN t.amount ELSE -t.amount END)
-                   FROM transactions t WHERE t.account_id = a.id AND t.status='pago'), 0)
-       + COALESCE((SELECT SUM(amount) FROM transfers WHERE to_account_id = a.id), 0)
-       - COALESCE((SELECT SUM(amount) FROM transfers WHERE from_account_id = a.id), 0)
+                   FROM transactions t WHERE t.account_id = a.id AND t.status='pago' AND t.user_id = $2), 0)
+       + COALESCE((SELECT SUM(amount) FROM transfers WHERE to_account_id = a.id AND user_id = $2), 0)
+       - COALESCE((SELECT SUM(amount) FROM transfers WHERE from_account_id = a.id AND user_id = $2), 0)
        AS balance
-     FROM accounts a WHERE a.id = $1`,
-    [accountId]
+     FROM accounts a WHERE a.id = $1 AND a.user_id = $2`,
+    [accountId, userId]
   );
   if (!rows[0]) return 0;
   return round2(Number(rows[0].balance));
 }
 
-async function listAccountsBasic(): Promise<Account[]> {
-  const { rows } = await sql.query(`SELECT * FROM accounts ORDER BY name`);
+async function listAccountsBasic(userId: string): Promise<Account[]> {
+  const { rows } = await sql.query(`SELECT * FROM accounts WHERE user_id = $1 ORDER BY name`, [userId]);
   return rows.map(mapAccount);
 }
 
-export async function listAccounts(profileId?: string | null): Promise<Account[]> {
+export async function listAccounts(userId: string, profileId?: string | null): Promise<Account[]> {
   const { rows } =
     profileId && profileId !== "all"
-      ? await sql.query(`SELECT * FROM accounts WHERE profile_id = $1 ORDER BY name`, [profileId])
-      : await sql.query(`SELECT * FROM accounts ORDER BY name`);
+      ? await sql.query(`SELECT * FROM accounts WHERE profile_id = $1 AND user_id = $2 ORDER BY name`, [profileId, userId])
+      : await sql.query(`SELECT * FROM accounts WHERE user_id = $1 ORDER BY name`, [userId]);
   const accounts = rows.map(mapAccount);
-  for (const acc of accounts) acc.balance = await accountBalance(acc.id);
+  for (const acc of accounts) acc.balance = await accountBalance(userId, acc.id);
   return accounts;
 }
 
-export async function createAccount(payload: any): Promise<Account | { error: string }> {
+export async function createAccount(userId: string, payload: any): Promise<Account | { error: string }> {
   let profileId = payload.profile_id;
   if (!profileId) {
-    const { rows } = await sql.query(`SELECT id FROM profiles ORDER BY name LIMIT 1`);
+    const { rows } = await sql.query(`SELECT id FROM profiles WHERE user_id = $1 ORDER BY name LIMIT 1`, [userId]);
     profileId = rows[0]?.id;
   }
   if (!profileId) return { error: "Cadastre um perfil antes de criar uma conta." };
 
   const id = newId();
   const { rows } = await sql.query(
-    `INSERT INTO accounts (id, profile_id, name, type, initial_balance, color) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-    [id, profileId, String(payload.name).trim(), payload.type || "corrente", round2(Number(payload.initial_balance || 0)), payload.color || "#1565c0"]
+    `INSERT INTO accounts (id, user_id, profile_id, name, type, initial_balance, color) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+    [id, userId, profileId, String(payload.name).trim(), payload.type || "corrente", round2(Number(payload.initial_balance || 0)), payload.color || "#1565c0"]
   );
   const acc = mapAccount(rows[0]);
-  await log("created", "account", `Conta "${acc.name}" criada`);
+  await log(userId, "created", "account", `Conta "${acc.name}" criada`);
   return acc;
 }
 
-export async function updateAccount(id: string, payload: any): Promise<Account | null> {
+export async function updateAccount(userId: string, id: string, payload: any): Promise<Account | null> {
   const sets: string[] = [];
   const params: any[] = [];
   if (payload.name !== undefined) { params.push(payload.name); sets.push(`name = $${params.length}`); }
@@ -272,34 +313,37 @@ export async function updateAccount(id: string, payload: any): Promise<Account |
 
   // So pode haver uma conta principal por vez -- ao marcar esta, desmarca as demais.
   if (payload.is_primary === true) {
-    await sql.query(`UPDATE accounts SET is_primary = false WHERE id != $1`, [id]);
+    await sql.query(`UPDATE accounts SET is_primary = false WHERE id != $1 AND user_id = $2`, [id, userId]);
   }
 
   if (!sets.length) {
-    const { rows } = await sql.query(`SELECT * FROM accounts WHERE id=$1`, [id]);
+    const { rows } = await sql.query(`SELECT * FROM accounts WHERE id=$1 AND user_id=$2`, [id, userId]);
     return rows[0] ? mapAccount(rows[0]) : null;
   }
-  params.push(id);
-  const { rows } = await sql.query(`UPDATE accounts SET ${sets.join(", ")} WHERE id = $${params.length} RETURNING *`, params);
+  params.push(id, userId);
+  const { rows } = await sql.query(
+    `UPDATE accounts SET ${sets.join(", ")} WHERE id = $${params.length - 1} AND user_id = $${params.length} RETURNING *`,
+    params
+  );
   if (!rows[0]) return null;
   const acc = mapAccount(rows[0]);
-  await log("updated", "account", `Conta "${acc.name}" atualizada`);
+  await log(userId, "updated", "account", `Conta "${acc.name}" atualizada`);
   return acc;
 }
 
-export async function deleteAccount(id: string): Promise<{ ok: true } | { error: string } | null> {
-  const { rows: existing } = await sql.query(`SELECT name FROM accounts WHERE id=$1`, [id]);
+export async function deleteAccount(userId: string, id: string): Promise<{ ok: true } | { error: string } | null> {
+  const { rows: existing } = await sql.query(`SELECT name FROM accounts WHERE id=$1 AND user_id=$2`, [id, userId]);
   if (!existing[0]) return null;
 
   const { rows: inUse } = await sql.query(
-    `SELECT 1 FROM transactions WHERE account_id=$1
-     UNION ALL SELECT 1 FROM transfers WHERE from_account_id=$1 OR to_account_id=$1 LIMIT 1`,
-    [id]
+    `SELECT 1 FROM transactions WHERE account_id=$1 AND user_id=$2
+     UNION ALL SELECT 1 FROM transfers WHERE (from_account_id=$1 OR to_account_id=$1) AND user_id=$2 LIMIT 1`,
+    [id, userId]
   );
   if (inUse.length) return { error: "Existem lançamentos ou transferências nessa conta. Exclua-os antes." };
 
-  await sql.query(`DELETE FROM accounts WHERE id=$1`, [id]);
-  await log("deleted", "account", `Conta "${existing[0].name}" excluída`);
+  await sql.query(`DELETE FROM accounts WHERE id=$1 AND user_id=$2`, [id, userId]);
+  await log(userId, "deleted", "account", `Conta "${existing[0].name}" excluída`);
   return { ok: true };
 }
 
@@ -318,49 +362,52 @@ function mapCategory(row: any): Category {
   return { id: row.id, name: row.name, group: row.group, color: row.color };
 }
 
-export async function listCategories(group?: string | null): Promise<Category[]> {
+export async function listCategories(userId: string, group?: string | null): Promise<Category[]> {
   const { rows } = group
-    ? await sql.query(`SELECT * FROM categories WHERE "group" = $1 ORDER BY name`, [group])
-    : await sql.query(`SELECT * FROM categories ORDER BY name`);
+    ? await sql.query(`SELECT * FROM categories WHERE "group" = $1 AND user_id = $2 ORDER BY name`, [group, userId])
+    : await sql.query(`SELECT * FROM categories WHERE user_id = $1 ORDER BY name`, [userId]);
   return rows.map(mapCategory);
 }
 
-export async function createCategory(payload: any): Promise<Category> {
+export async function createCategory(userId: string, payload: any): Promise<Category> {
   const id = newId();
   const { rows } = await sql.query(
-    `INSERT INTO categories (id, name, "group", color) VALUES ($1,$2,$3,$4) RETURNING *`,
-    [id, String(payload.name).trim(), payload.group || "despesa_variavel", payload.color || "#546e7a"]
+    `INSERT INTO categories (id, user_id, name, "group", color) VALUES ($1,$2,$3,$4,$5) RETURNING *`,
+    [id, userId, String(payload.name).trim(), payload.group || "despesa_variavel", payload.color || "#546e7a"]
   );
   const cat = mapCategory(rows[0]);
-  await log("created", "category", `Categoria "${cat.name}" criada`);
+  await log(userId, "created", "category", `Categoria "${cat.name}" criada`);
   return cat;
 }
 
-export async function updateCategory(id: string, payload: any): Promise<Category | null> {
+export async function updateCategory(userId: string, id: string, payload: any): Promise<Category | null> {
   const sets: string[] = [];
   const params: any[] = [];
   if (payload.name !== undefined) { params.push(payload.name); sets.push(`name = $${params.length}`); }
   if (payload.group !== undefined) { params.push(payload.group); sets.push(`"group" = $${params.length}`); }
   if (payload.color !== undefined) { params.push(payload.color); sets.push(`color = $${params.length}`); }
   if (!sets.length) {
-    const { rows } = await sql.query(`SELECT * FROM categories WHERE id=$1`, [id]);
+    const { rows } = await sql.query(`SELECT * FROM categories WHERE id=$1 AND user_id=$2`, [id, userId]);
     return rows[0] ? mapCategory(rows[0]) : null;
   }
-  params.push(id);
-  const { rows } = await sql.query(`UPDATE categories SET ${sets.join(", ")} WHERE id = $${params.length} RETURNING *`, params);
+  params.push(id, userId);
+  const { rows } = await sql.query(
+    `UPDATE categories SET ${sets.join(", ")} WHERE id = $${params.length - 1} AND user_id = $${params.length} RETURNING *`,
+    params
+  );
   if (!rows[0]) return null;
   const cat = mapCategory(rows[0]);
-  await log("updated", "category", `Categoria "${cat.name}" atualizada`);
+  await log(userId, "updated", "category", `Categoria "${cat.name}" atualizada`);
   return cat;
 }
 
-export async function deleteCategory(id: string): Promise<{ ok: true } | { error: string } | null> {
-  const { rows: existing } = await sql.query(`SELECT name FROM categories WHERE id=$1`, [id]);
+export async function deleteCategory(userId: string, id: string): Promise<{ ok: true } | { error: string } | null> {
+  const { rows: existing } = await sql.query(`SELECT name FROM categories WHERE id=$1 AND user_id=$2`, [id, userId]);
   if (!existing[0]) return null;
-  const { rows: inUse } = await sql.query(`SELECT 1 FROM transactions WHERE category_id=$1 LIMIT 1`, [id]);
+  const { rows: inUse } = await sql.query(`SELECT 1 FROM transactions WHERE category_id=$1 AND user_id=$2 LIMIT 1`, [id, userId]);
   if (inUse.length) return { error: "Existem lançamentos usando essa categoria." };
-  await sql.query(`DELETE FROM categories WHERE id=$1`, [id]);
-  await log("deleted", "category", `Categoria "${existing[0].name}" excluída`);
+  await sql.query(`DELETE FROM categories WHERE id=$1 AND user_id=$2`, [id, userId]);
+  await log(userId, "deleted", "category", `Categoria "${existing[0].name}" excluída`);
   return { ok: true };
 }
 
@@ -378,56 +425,61 @@ function mapContact(row: any): Contact {
   return { id: row.id, name: row.name, notes: row.notes };
 }
 
-export async function listContacts(): Promise<Contact[]> {
-  const { rows } = await sql.query(`SELECT * FROM contacts ORDER BY name`);
+export async function listContacts(userId: string): Promise<Contact[]> {
+  const { rows } = await sql.query(`SELECT * FROM contacts WHERE user_id = $1 ORDER BY name`, [userId]);
   return rows.map(mapContact);
 }
 
-export async function createContact(payload: any): Promise<Contact> {
+export async function createContact(userId: string, payload: any): Promise<Contact> {
   const id = newId();
-  const { rows } = await sql.query(`INSERT INTO contacts (id, name, notes) VALUES ($1,$2,$3) RETURNING *`, [
+  const { rows } = await sql.query(`INSERT INTO contacts (id, user_id, name, notes) VALUES ($1,$2,$3,$4) RETURNING *`, [
     id,
+    userId,
     String(payload.name).trim(),
     payload.notes || "",
   ]);
   const c = mapContact(rows[0]);
-  await log("created", "contact", `Contato "${c.name}" criado`);
+  await log(userId, "created", "contact", `Contato "${c.name}" criado`);
   return c;
 }
 
-export async function updateContact(id: string, payload: any): Promise<Contact | null> {
+export async function updateContact(userId: string, id: string, payload: any): Promise<Contact | null> {
   const sets: string[] = [];
   const params: any[] = [];
   if (payload.name !== undefined) { params.push(payload.name); sets.push(`name = $${params.length}`); }
   if (payload.notes !== undefined) { params.push(payload.notes); sets.push(`notes = $${params.length}`); }
   if (!sets.length) {
-    const { rows } = await sql.query(`SELECT * FROM contacts WHERE id=$1`, [id]);
+    const { rows } = await sql.query(`SELECT * FROM contacts WHERE id=$1 AND user_id=$2`, [id, userId]);
     return rows[0] ? mapContact(rows[0]) : null;
   }
-  params.push(id);
-  const { rows } = await sql.query(`UPDATE contacts SET ${sets.join(", ")} WHERE id = $${params.length} RETURNING *`, params);
+  params.push(id, userId);
+  const { rows } = await sql.query(
+    `UPDATE contacts SET ${sets.join(", ")} WHERE id = $${params.length - 1} AND user_id = $${params.length} RETURNING *`,
+    params
+  );
   if (!rows[0]) return null;
   const c = mapContact(rows[0]);
-  await log("updated", "contact", `Contato "${c.name}" atualizado`);
+  await log(userId, "updated", "contact", `Contato "${c.name}" atualizado`);
   return c;
 }
 
-export async function deleteContact(id: string): Promise<{ ok: true } | { error: string } | null> {
-  const { rows: existing } = await sql.query(`SELECT name FROM contacts WHERE id=$1`, [id]);
+export async function deleteContact(userId: string, id: string): Promise<{ ok: true } | { error: string } | null> {
+  const { rows: existing } = await sql.query(`SELECT name FROM contacts WHERE id=$1 AND user_id=$2`, [id, userId]);
   if (!existing[0]) return null;
-  const { rows: inUse } = await sql.query(`SELECT 1 FROM transactions WHERE contact_id=$1 LIMIT 1`, [id]);
+  const { rows: inUse } = await sql.query(`SELECT 1 FROM transactions WHERE contact_id=$1 AND user_id=$2 LIMIT 1`, [id, userId]);
   if (inUse.length) return { error: "Existem lançamentos vinculados a este contato." };
-  await sql.query(`DELETE FROM contacts WHERE id=$1`, [id]);
-  await log("deleted", "contact", `Contato "${existing[0].name}" excluído`);
+  await sql.query(`DELETE FROM contacts WHERE id=$1 AND user_id=$2`, [id, userId]);
+  await log(userId, "deleted", "contact", `Contato "${existing[0].name}" excluído`);
   return { ok: true };
 }
 
-export async function contactsAging() {
+export async function contactsAging(userId: string) {
   const today = todayStr();
   const { rows } = await sql.query(
     `SELECT t.contact_id, c.name, t."group", t.amount, t.due_date
      FROM transactions t JOIN contacts c ON c.id = t.contact_id
-     WHERE t.status = 'pendente' AND t.contact_id IS NOT NULL`
+     WHERE t.status = 'pendente' AND t.contact_id IS NOT NULL AND t.user_id = $1`,
+    [userId]
   );
 
   type Entry = { id: string; name: string; total: number; count: number; buckets: { ate_30: number; "30_60": number; mais_60: number } };
@@ -490,36 +542,36 @@ export interface CostCenter {
   name: string;
 }
 
-export async function listCostCenters(): Promise<CostCenter[]> {
-  const { rows } = await sql.query(`SELECT * FROM cost_centers ORDER BY name`);
+export async function listCostCenters(userId: string): Promise<CostCenter[]> {
+  const { rows } = await sql.query(`SELECT * FROM cost_centers WHERE user_id = $1 ORDER BY name`, [userId]);
   return rows as CostCenter[];
 }
 
-export async function createCostCenter(payload: any): Promise<CostCenter> {
+export async function createCostCenter(userId: string, payload: any): Promise<CostCenter> {
   const id = newId();
-  const { rows } = await sql.query(`INSERT INTO cost_centers (id, name) VALUES ($1,$2) RETURNING *`, [id, String(payload.name).trim()]);
-  await log("created", "cost_center", `Centro de custo "${rows[0].name}" criado`);
+  const { rows } = await sql.query(`INSERT INTO cost_centers (id, user_id, name) VALUES ($1,$2,$3) RETURNING *`, [id, userId, String(payload.name).trim()]);
+  await log(userId, "created", "cost_center", `Centro de custo "${rows[0].name}" criado`);
   return rows[0] as CostCenter;
 }
 
-export async function updateCostCenter(id: string, payload: any): Promise<CostCenter | null> {
+export async function updateCostCenter(userId: string, id: string, payload: any): Promise<CostCenter | null> {
   if (payload.name === undefined) {
-    const { rows } = await sql.query(`SELECT * FROM cost_centers WHERE id=$1`, [id]);
+    const { rows } = await sql.query(`SELECT * FROM cost_centers WHERE id=$1 AND user_id=$2`, [id, userId]);
     return (rows[0] as CostCenter) || null;
   }
-  const { rows } = await sql.query(`UPDATE cost_centers SET name=$1 WHERE id=$2 RETURNING *`, [String(payload.name).trim(), id]);
+  const { rows } = await sql.query(`UPDATE cost_centers SET name=$1 WHERE id=$2 AND user_id=$3 RETURNING *`, [String(payload.name).trim(), id, userId]);
   if (!rows[0]) return null;
-  await log("updated", "cost_center", `Centro de custo "${rows[0].name}" atualizado`);
+  await log(userId, "updated", "cost_center", `Centro de custo "${rows[0].name}" atualizado`);
   return rows[0] as CostCenter;
 }
 
-export async function deleteCostCenter(id: string): Promise<{ ok: true } | { error: string } | null> {
-  const { rows: existing } = await sql.query(`SELECT name FROM cost_centers WHERE id=$1`, [id]);
+export async function deleteCostCenter(userId: string, id: string): Promise<{ ok: true } | { error: string } | null> {
+  const { rows: existing } = await sql.query(`SELECT name FROM cost_centers WHERE id=$1 AND user_id=$2`, [id, userId]);
   if (!existing[0]) return null;
-  const { rows: inUse } = await sql.query(`SELECT 1 FROM transactions WHERE cost_center_id=$1 LIMIT 1`, [id]);
+  const { rows: inUse } = await sql.query(`SELECT 1 FROM transactions WHERE cost_center_id=$1 AND user_id=$2 LIMIT 1`, [id, userId]);
   if (inUse.length) return { error: "Existem lançamentos usando este centro de custo." };
-  await sql.query(`DELETE FROM cost_centers WHERE id=$1`, [id]);
-  await log("deleted", "cost_center", `Centro de custo "${existing[0].name}" excluído`);
+  await sql.query(`DELETE FROM cost_centers WHERE id=$1 AND user_id=$2`, [id, userId]);
+  await log(userId, "deleted", "cost_center", `Centro de custo "${existing[0].name}" excluído`);
   return { ok: true };
 }
 
@@ -533,45 +585,49 @@ export interface Tag {
   color: string;
 }
 
-export async function listTags(): Promise<Tag[]> {
-  const { rows } = await sql.query(`SELECT * FROM tags ORDER BY name`);
+export async function listTags(userId: string): Promise<Tag[]> {
+  const { rows } = await sql.query(`SELECT * FROM tags WHERE user_id = $1 ORDER BY name`, [userId]);
   return rows as Tag[];
 }
 
-export async function createTag(payload: any): Promise<Tag> {
+export async function createTag(userId: string, payload: any): Promise<Tag> {
   const id = newId();
-  const { rows } = await sql.query(`INSERT INTO tags (id, name, color) VALUES ($1,$2,$3) RETURNING *`, [
+  const { rows } = await sql.query(`INSERT INTO tags (id, user_id, name, color) VALUES ($1,$2,$3,$4) RETURNING *`, [
     id,
+    userId,
     String(payload.name).trim(),
     payload.color || "#78909c",
   ]);
-  await log("created", "tag", `Tag "${rows[0].name}" criada`);
+  await log(userId, "created", "tag", `Tag "${rows[0].name}" criada`);
   return rows[0] as Tag;
 }
 
-export async function updateTag(id: string, payload: any): Promise<Tag | null> {
+export async function updateTag(userId: string, id: string, payload: any): Promise<Tag | null> {
   const sets: string[] = [];
   const params: any[] = [];
   if (payload.name !== undefined) { params.push(payload.name); sets.push(`name = $${params.length}`); }
   if (payload.color !== undefined) { params.push(payload.color); sets.push(`color = $${params.length}`); }
   if (!sets.length) {
-    const { rows } = await sql.query(`SELECT * FROM tags WHERE id=$1`, [id]);
+    const { rows } = await sql.query(`SELECT * FROM tags WHERE id=$1 AND user_id=$2`, [id, userId]);
     return (rows[0] as Tag) || null;
   }
-  params.push(id);
-  const { rows } = await sql.query(`UPDATE tags SET ${sets.join(", ")} WHERE id = $${params.length} RETURNING *`, params);
+  params.push(id, userId);
+  const { rows } = await sql.query(
+    `UPDATE tags SET ${sets.join(", ")} WHERE id = $${params.length - 1} AND user_id = $${params.length} RETURNING *`,
+    params
+  );
   if (!rows[0]) return null;
-  await log("updated", "tag", `Tag "${rows[0].name}" atualizada`);
+  await log(userId, "updated", "tag", `Tag "${rows[0].name}" atualizada`);
   return rows[0] as Tag;
 }
 
-export async function deleteTag(id: string): Promise<{ ok: true } | { error: string } | null> {
-  const { rows: existing } = await sql.query(`SELECT name FROM tags WHERE id=$1`, [id]);
+export async function deleteTag(userId: string, id: string): Promise<{ ok: true } | { error: string } | null> {
+  const { rows: existing } = await sql.query(`SELECT name FROM tags WHERE id=$1 AND user_id=$2`, [id, userId]);
   if (!existing[0]) return null;
-  const { rows: inUse } = await sql.query(`SELECT 1 FROM transactions WHERE $1 = ANY(tag_ids) LIMIT 1`, [id]);
+  const { rows: inUse } = await sql.query(`SELECT 1 FROM transactions WHERE $1 = ANY(tag_ids) AND user_id=$2 LIMIT 1`, [id, userId]);
   if (inUse.length) return { error: "Existem lançamentos usando esta tag." };
-  await sql.query(`DELETE FROM tags WHERE id=$1`, [id]);
-  await log("deleted", "tag", `Tag "${existing[0].name}" excluída`);
+  await sql.query(`DELETE FROM tags WHERE id=$1 AND user_id=$2`, [id, userId]);
+  await log(userId, "deleted", "tag", `Tag "${existing[0].name}" excluída`);
   return { ok: true };
 }
 
@@ -640,12 +696,12 @@ export interface TransactionFilters {
   recurrence_group_id?: string;
 }
 
-async function getTransactionById(id: string): Promise<Transaction | null> {
-  const { rows } = await sql.query(`SELECT * FROM transactions WHERE id = $1`, [id]);
+async function getTransactionById(userId: string, id: string): Promise<Transaction | null> {
+  const { rows } = await sql.query(`SELECT * FROM transactions WHERE id = $1 AND user_id = $2`, [id, userId]);
   return rows[0] ? mapTransaction(rows[0]) : null;
 }
 
-export async function listTransactions(filters: TransactionFilters): Promise<Transaction[]> {
+export async function listTransactions(userId: string, filters: TransactionFilters): Promise<Transaction[]> {
   const conditions: string[] = [];
   const params: any[] = [];
   function add(cond: string, value: any) {
@@ -653,6 +709,7 @@ export async function listTransactions(filters: TransactionFilters): Promise<Tra
     conditions.push(cond.replace("?", `$${params.length}`));
   }
 
+  add("t.user_id = ?", userId);
   if (filters.start) add("t.due_date >= ?", filters.start);
   if (filters.end) add("t.due_date <= ?", filters.end);
   if (filters.account_id) add("t.account_id = ?", filters.account_id);
@@ -712,19 +769,19 @@ function buildBaseFields(payload: any): BaseTransactionFields {
   };
 }
 
-async function insertTransactionRow(t: BaseTransactionFields & {
+async function insertTransactionRow(userId: string, t: BaseTransactionFields & {
   id: string; due_date: string; installment_group_id: string | null; installment_number: number | null;
   installment_total: number | null; recurrence_group_id: string | null; recurrence_frequency: string | null;
 }): Promise<Transaction> {
   const { rows } = await sql.query(
     `INSERT INTO transactions
-       (id, description, amount, "group", account_id, category_id, contact_id, cost_center_id, tag_ids,
+       (id, user_id, description, amount, "group", account_id, category_id, contact_id, cost_center_id, tag_ids,
         notes, status, due_date, paid_date, installment_group_id, installment_number, installment_total,
         recurrence_group_id, recurrence_frequency)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
      RETURNING *`,
     [
-      t.id, t.description, t.amount, t.group, t.account_id, t.category_id, t.contact_id, t.cost_center_id,
+      t.id, userId, t.description, t.amount, t.group, t.account_id, t.category_id, t.contact_id, t.cost_center_id,
       t.tag_ids, t.notes, t.status, t.due_date, t.paid_date, t.installment_group_id, t.installment_number,
       t.installment_total, t.recurrence_group_id, t.recurrence_frequency,
     ]
@@ -754,7 +811,7 @@ export interface InstallmentScheduleEntry {
   status?: string;
 }
 
-export async function createTransaction(payload: any): Promise<Transaction[]> {
+export async function createTransaction(userId: string, payload: any): Promise<Transaction[]> {
   const base = buildBaseFields(payload);
   const created: Transaction[] = [];
   const installments = payload.installments;
@@ -769,7 +826,7 @@ export async function createTransaction(payload: any): Promise<Transaction[]> {
     for (let i = 0; i < total; i++) {
       const entry = schedule[i];
       const status = entry.status || "pendente";
-      const row = await insertTransactionRow({
+      const row = await insertTransactionRow(userId, {
         ...base,
         id: newId(),
         due_date: entry.due_date,
@@ -788,7 +845,7 @@ export async function createTransaction(payload: any): Promise<Transaction[]> {
     const total = Number(installments.total);
     const groupId = newId();
     for (let i = 0; i < total; i++) {
-      const row = await insertTransactionRow({
+      const row = await insertTransactionRow(userId, {
         ...base,
         id: newId(),
         due_date: addMonths(payload.due_date, i),
@@ -808,7 +865,7 @@ export async function createTransaction(payload: any): Promise<Transaction[]> {
     const step = FREQUENCY_STEP[frequency] || FREQUENCY_STEP.mensal;
     const groupId = newId();
     for (let i = 0; i < occurrences; i++) {
-      const row = await insertTransactionRow({
+      const row = await insertTransactionRow(userId, {
         ...base,
         id: newId(),
         due_date: step(payload.due_date, i),
@@ -823,7 +880,7 @@ export async function createTransaction(payload: any): Promise<Transaction[]> {
       created.push(row);
     }
   } else {
-    const row = await insertTransactionRow({
+    const row = await insertTransactionRow(userId, {
       ...base,
       id: newId(),
       due_date: payload.due_date,
@@ -836,7 +893,7 @@ export async function createTransaction(payload: any): Promise<Transaction[]> {
     created.push(row);
   }
 
-  await log("created", "transaction", `Lançamento "${created[0].description}" criado (${created.length} ocorrência(s))`);
+  await log(userId, "created", "transaction", `Lançamento "${created[0].description}" criado (${created.length} ocorrência(s))`);
   return created;
 }
 
@@ -851,7 +908,7 @@ const CASCADABLE_FIELDS = [
   "description", "amount", "account_id", "category_id", "contact_id", "cost_center_id", "tag_ids", "notes",
 ];
 
-async function applyFieldsToTransaction(id: string, fields: string[], payload: any): Promise<Transaction | null> {
+async function applyFieldsToTransaction(userId: string, id: string, fields: string[], payload: any): Promise<Transaction | null> {
   const sets: string[] = [];
   const params: any[] = [];
   for (const field of fields) {
@@ -862,14 +919,17 @@ async function applyFieldsToTransaction(id: string, fields: string[], payload: a
       sets.push(`${col} = $${params.length}`);
     }
   }
-  if (!sets.length) return getTransactionById(id);
-  params.push(id);
-  const { rows } = await sql.query(`UPDATE transactions SET ${sets.join(", ")} WHERE id = $${params.length} RETURNING *`, params);
+  if (!sets.length) return getTransactionById(userId, id);
+  params.push(id, userId);
+  const { rows } = await sql.query(
+    `UPDATE transactions SET ${sets.join(", ")} WHERE id = $${params.length - 1} AND user_id = $${params.length} RETURNING *`,
+    params
+  );
   return rows[0] ? mapTransaction(rows[0]) : null;
 }
 
-export async function updateTransaction(id: string, payload: any, scope: string = "single"): Promise<Transaction | null> {
-  const existing = await getTransactionById(id);
+export async function updateTransaction(userId: string, id: string, payload: any, scope: string = "single"): Promise<Transaction | null> {
+  const existing = await getTransactionById(userId, id);
   if (!existing) return null;
 
   // Se o status esta mudando pra "pago" sem uma data de pagamento explicita
@@ -888,52 +948,52 @@ export async function updateTransaction(id: string, payload: any, scope: string 
   const groupKey = existing.recurrence_group_id ? "recurrence_group_id" : existing.installment_group_id ? "installment_group_id" : null;
   const groupId = groupKey ? (existing as any)[groupKey] : null;
 
-  const updated = await applyFieldsToTransaction(id, EDITABLE_FIELDS, payload);
+  const updated = await applyFieldsToTransaction(userId, id, EDITABLE_FIELDS, payload);
   let affected = 1;
 
   if ((scope === "future" || scope === "all") && groupId && groupKey) {
     const { rows: siblings } = await sql.query(
-      `SELECT id, due_date FROM transactions WHERE ${groupKey} = $1 AND id != $2`,
-      [groupId, id]
+      `SELECT id, due_date FROM transactions WHERE ${groupKey} = $1 AND id != $2 AND user_id = $3`,
+      [groupId, id, userId]
     );
     for (const sib of siblings) {
       if (scope === "future" && sib.due_date < originalDueDate) continue;
-      await applyFieldsToTransaction(sib.id, CASCADABLE_FIELDS, payload);
+      await applyFieldsToTransaction(userId, sib.id, CASCADABLE_FIELDS, payload);
       affected++;
     }
   }
 
   const suffix = scope === "single" || affected === 1 ? "" : ` (${affected} ocorrências)`;
-  await log("updated", "transaction", `Lançamento "${updated?.description}" atualizado${suffix}`);
+  await log(userId, "updated", "transaction", `Lançamento "${updated?.description}" atualizado${suffix}`);
   return updated;
 }
 
-export async function payTransaction(id: string, paidDate: string | null, paid: boolean): Promise<Transaction | null> {
+export async function payTransaction(userId: string, id: string, paidDate: string | null, paid: boolean): Promise<Transaction | null> {
   const { rows } = paid
-    ? await sql.query(`UPDATE transactions SET status='pago', paid_date=$1 WHERE id=$2 RETURNING *`, [paidDate || todayStr(), id])
-    : await sql.query(`UPDATE transactions SET status='pendente', paid_date=NULL WHERE id=$1 RETURNING *`, [id]);
+    ? await sql.query(`UPDATE transactions SET status='pago', paid_date=$1 WHERE id=$2 AND user_id=$3 RETURNING *`, [paidDate || todayStr(), id, userId])
+    : await sql.query(`UPDATE transactions SET status='pendente', paid_date=NULL WHERE id=$1 AND user_id=$2 RETURNING *`, [id, userId]);
   if (!rows[0]) return null;
   const t = mapTransaction(rows[0]);
-  await log(paid ? "paid" : "unpaid", "transaction", `Lançamento "${t.description}" ${paid ? "marcado como pago" : "reaberto como pendente"}`);
+  await log(userId, paid ? "paid" : "unpaid", "transaction", `Lançamento "${t.description}" ${paid ? "marcado como pago" : "reaberto como pendente"}`);
   return t;
 }
 
-export async function deleteTransaction(id: string, scope: string = "single"): Promise<{ ok: true } | null> {
-  const existing = await getTransactionById(id);
+export async function deleteTransaction(userId: string, id: string, scope: string = "single"): Promise<{ ok: true } | null> {
+  const existing = await getTransactionById(userId, id);
   if (!existing) return null;
 
   if (scope === "single" || (!existing.recurrence_group_id && !existing.installment_group_id)) {
-    await sql.query(`DELETE FROM transactions WHERE id = $1`, [id]);
+    await sql.query(`DELETE FROM transactions WHERE id = $1 AND user_id = $2`, [id, userId]);
   } else {
     const groupKey = existing.recurrence_group_id ? "recurrence_group_id" : "installment_group_id";
     const groupId = existing.recurrence_group_id || existing.installment_group_id;
     if (scope === "future") {
-      await sql.query(`DELETE FROM transactions WHERE ${groupKey} = $1 AND due_date >= $2`, [groupId, existing.due_date]);
+      await sql.query(`DELETE FROM transactions WHERE ${groupKey} = $1 AND due_date >= $2 AND user_id = $3`, [groupId, existing.due_date, userId]);
     } else {
-      await sql.query(`DELETE FROM transactions WHERE ${groupKey} = $1`, [groupId]);
+      await sql.query(`DELETE FROM transactions WHERE ${groupKey} = $1 AND user_id = $2`, [groupId, userId]);
     }
   }
-  await log("deleted", "transaction", `Lançamento "${existing.description}" excluído (escopo: ${scope})`);
+  await log(userId, "deleted", "transaction", `Lançamento "${existing.description}" excluído (escopo: ${scope})`);
   return { ok: true };
 }
 
@@ -941,8 +1001,8 @@ export async function deleteTransaction(id: string, scope: string = "single"): P
  * parcelada: a propria transacao vira a parcela 1, e as demais linhas do
  * cronograma sao criadas como novas transacoes do mesmo grupo. So funciona
  * em lancamentos que ainda nao pertencem a nenhum grupo. */
-export async function convertToInstallments(transactionId: string, schedule: InstallmentScheduleEntry[]): Promise<Transaction[] | { error: string }> {
-  const existing = await getTransactionById(transactionId);
+export async function convertToInstallments(userId: string, transactionId: string, schedule: InstallmentScheduleEntry[]): Promise<Transaction[] | { error: string }> {
+  const existing = await getTransactionById(userId, transactionId);
   if (!existing) return { error: "Lançamento não encontrado." };
   if (existing.installment_group_id || existing.recurrence_group_id) {
     return { error: "Este lançamento já faz parte de um grupo." };
@@ -958,15 +1018,15 @@ export async function convertToInstallments(transactionId: string, schedule: Ins
   const { rows } = await sql.query(
     `UPDATE transactions SET due_date=$1, amount=$2, status=$3, paid_date=$4,
        installment_group_id=$5, installment_number=1, installment_total=$6
-     WHERE id=$7 RETURNING *`,
-    [first.due_date, round2(Number(first.amount)), firstStatus, firstStatus === "pago" ? first.due_date : null, groupId, total, transactionId]
+     WHERE id=$7 AND user_id=$8 RETURNING *`,
+    [first.due_date, round2(Number(first.amount)), firstStatus, firstStatus === "pago" ? first.due_date : null, groupId, total, transactionId, userId]
   );
   results.push(mapTransaction(rows[0]));
 
   for (let i = 1; i < total; i++) {
     const entry = schedule[i];
     const status = entry.status || "pendente";
-    const row = await insertTransactionRow({
+    const row = await insertTransactionRow(userId, {
       description: existing.description,
       amount: round2(Number(entry.amount)),
       group: existing.group,
@@ -989,7 +1049,7 @@ export async function convertToInstallments(transactionId: string, schedule: Ins
     results.push(row);
   }
 
-  await log("updated", "transaction", `Lançamento "${existing.description}" transformado em parcelamento (${total}x)`);
+  await log(userId, "updated", "transaction", `Lançamento "${existing.description}" transformado em parcelamento (${total}x)`);
   return results;
 }
 
@@ -997,8 +1057,8 @@ export async function convertToInstallments(transactionId: string, schedule: Ins
  * (mesmo valor/descricao, repetido de acordo com a frequencia). Espelha a
  * ramificacao de recorrencia de createTransaction, so que a partir de uma
  * transacao ja existente em vez de um payload novo. */
-export async function convertToRecurrence(transactionId: string, frequency: string, occurrences: number): Promise<Transaction[] | { error: string }> {
-  const existing = await getTransactionById(transactionId);
+export async function convertToRecurrence(userId: string, transactionId: string, frequency: string, occurrences: number): Promise<Transaction[] | { error: string }> {
+  const existing = await getTransactionById(userId, transactionId);
   if (!existing) return { error: "Lançamento não encontrado." };
   if (existing.installment_group_id || existing.recurrence_group_id) {
     return { error: "Este lançamento já faz parte de um grupo." };
@@ -1011,13 +1071,13 @@ export async function convertToRecurrence(transactionId: string, frequency: stri
   const results: Transaction[] = [];
 
   const { rows } = await sql.query(
-    `UPDATE transactions SET recurrence_group_id=$1, recurrence_frequency=$2 WHERE id=$3 RETURNING *`,
-    [groupId, frequency, transactionId]
+    `UPDATE transactions SET recurrence_group_id=$1, recurrence_frequency=$2 WHERE id=$3 AND user_id=$4 RETURNING *`,
+    [groupId, frequency, transactionId, userId]
   );
   results.push(mapTransaction(rows[0]));
 
   for (let i = 1; i < total; i++) {
-    const row = await insertTransactionRow({
+    const row = await insertTransactionRow(userId, {
       description: existing.description,
       amount: existing.amount,
       group: existing.group,
@@ -1040,7 +1100,7 @@ export async function convertToRecurrence(transactionId: string, frequency: stri
     results.push(row);
   }
 
-  await log("updated", "transaction", `Lançamento "${existing.description}" transformado em recorrência (${total}x)`);
+  await log(userId, "updated", "transaction", `Lançamento "${existing.description}" transformado em recorrência (${total}x)`);
   return results;
 }
 
@@ -1053,14 +1113,14 @@ export interface BulkActionResult {
   errors: string[];
 }
 
-export async function bulkAction(ids: string[], action: string, params: any = {}): Promise<BulkActionResult> {
+export async function bulkAction(userId: string, ids: string[], action: string, params: any = {}): Promise<BulkActionResult> {
   if (!Array.isArray(ids) || !ids.length) return { affected: 0, errors: ["Nenhum lançamento selecionado."] };
   const errors: string[] = [];
   let affected = 0;
 
   if (action === "delete") {
     for (const id of ids) {
-      const result = await deleteTransaction(id, "single");
+      const result = await deleteTransaction(userId, id, "single");
       if (result) affected++; else errors.push(`Lançamento ${id} não encontrado.`);
     }
     return { affected, errors };
@@ -1069,7 +1129,7 @@ export async function bulkAction(ids: string[], action: string, params: any = {}
   if (action === "mark_paid" || action === "mark_unpaid") {
     const paid = action === "mark_paid";
     for (const id of ids) {
-      const result = await pay_transaction_safe(id, paid);
+      const result = await pay_transaction_safe(userId, id, paid);
       if (result) affected++; else errors.push(`Lançamento ${id} não encontrado.`);
     }
     return { affected, errors };
@@ -1080,10 +1140,10 @@ export async function bulkAction(ids: string[], action: string, params: any = {}
     if (!GROUPS.includes(targetGroup)) return { affected: 0, errors: ["Grupo de destino inválido."] };
     for (const id of ids) {
       // Mudar de grupo invalida a categoria antiga (e especifica de outro grupo).
-      const { rows } = await sql.query(`UPDATE transactions SET "group" = $1, category_id = NULL WHERE id = $2 RETURNING id`, [targetGroup, id]);
+      const { rows } = await sql.query(`UPDATE transactions SET "group" = $1, category_id = NULL WHERE id = $2 AND user_id = $3 RETURNING id`, [targetGroup, id, userId]);
       if (rows[0]) affected++; else errors.push(`Lançamento ${id} não encontrado.`);
     }
-    await log("updated", "transaction", `${affected} lançamento(s) movido(s) para ${GROUP_LABELS[targetGroup as Group] || targetGroup}`);
+    await log(userId, "updated", "transaction", `${affected} lançamento(s) movido(s) para ${GROUP_LABELS[targetGroup as Group] || targetGroup}`);
     return { affected, errors };
   }
 
@@ -1094,12 +1154,12 @@ export async function bulkAction(ids: string[], action: string, params: any = {}
     const baseMonth = now.getUTCMonth() + 1;
     const ref = addMonthsYM(baseYear, baseMonth, targetMonth);
     for (const id of ids) {
-      const t = await getTransactionById(id);
+      const t = await getTransactionById(userId, id);
       if (!t) { errors.push(`Lançamento ${id} não encontrado.`); continue; }
       const day = Number(t.due_date.slice(8, 10));
       const daysInMonth = new Date(Date.UTC(ref.year, ref.month, 0)).getUTCDate();
       const newDueDate = `${ref.year}-${pad(ref.month)}-${pad(Math.min(day, daysInMonth))}`;
-      await insertTransactionRow({
+      await insertTransactionRow(userId, {
         description: t.description, amount: t.amount, group: t.group, account_id: t.account_id,
         category_id: t.category_id, contact_id: t.contact_id, cost_center_id: t.cost_center_id,
         tag_ids: t.tag_ids || [], notes: t.notes, status: "pendente", paid_date: null,
@@ -1108,15 +1168,15 @@ export async function bulkAction(ids: string[], action: string, params: any = {}
       });
       affected++;
     }
-    await log("created", "transaction", `${affected} lançamento(s) duplicado(s)`);
+    await log(userId, "created", "transaction", `${affected} lançamento(s) duplicado(s)`);
     return { affected, errors };
   }
 
   return { affected: 0, errors: [`Ação desconhecida: ${action}`] };
 }
 
-async function pay_transaction_safe(id: string, paid: boolean): Promise<boolean> {
-  const result = await payTransaction(id, null, paid);
+async function pay_transaction_safe(userId: string, id: string, paid: boolean): Promise<boolean> {
+  const result = await payTransaction(userId, id, null, paid);
   return !!result;
 }
 
@@ -1144,38 +1204,38 @@ function mapTransfer(row: any): Transfer {
   };
 }
 
-export async function listTransfers(profileId?: string | null): Promise<Transfer[]> {
+export async function listTransfers(userId: string, profileId?: string | null): Promise<Transfer[]> {
   const { rows } =
     profileId && profileId !== "all"
       ? await sql.query(
           `SELECT * FROM transfers
-           WHERE from_account_id IN (SELECT id FROM accounts WHERE profile_id=$1)
-              OR to_account_id IN (SELECT id FROM accounts WHERE profile_id=$1)
+           WHERE user_id=$1 AND (from_account_id IN (SELECT id FROM accounts WHERE profile_id=$2)
+              OR to_account_id IN (SELECT id FROM accounts WHERE profile_id=$2))
            ORDER BY date DESC`,
-          [profileId]
+          [userId, profileId]
         )
-      : await sql.query(`SELECT * FROM transfers ORDER BY date DESC`);
+      : await sql.query(`SELECT * FROM transfers WHERE user_id=$1 ORDER BY date DESC`, [userId]);
   return rows.map(mapTransfer);
 }
 
-export async function createTransfer(payload: any): Promise<Transfer | { error: string }> {
+export async function createTransfer(userId: string, payload: any): Promise<Transfer | { error: string }> {
   if (payload.from_account_id === payload.to_account_id) {
     return { error: "Escolha contas diferentes para a transferência." };
   }
   const id = newId();
   const { rows } = await sql.query(
-    `INSERT INTO transfers (id, from_account_id, to_account_id, amount, date, notes) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-    [id, payload.from_account_id, payload.to_account_id, round2(Number(payload.amount)), payload.date || todayStr(), payload.notes || ""]
+    `INSERT INTO transfers (id, user_id, from_account_id, to_account_id, amount, date, notes) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
+    [id, userId, payload.from_account_id, payload.to_account_id, round2(Number(payload.amount)), payload.date || todayStr(), payload.notes || ""]
   );
   const tr = mapTransfer(rows[0]);
-  await log("created", "transfer", `Transferência de ${tr.amount} criada`);
+  await log(userId, "created", "transfer", `Transferência de ${tr.amount} criada`);
   return tr;
 }
 
-export async function deleteTransfer(id: string): Promise<{ ok: true } | null> {
-  const { rows } = await sql.query(`DELETE FROM transfers WHERE id = $1 RETURNING id`, [id]);
+export async function deleteTransfer(userId: string, id: string): Promise<{ ok: true } | null> {
+  const { rows } = await sql.query(`DELETE FROM transfers WHERE id = $1 AND user_id = $2 RETURNING id`, [id, userId]);
   if (!rows[0]) return null;
-  await log("deleted", "transfer", "Transferência excluída");
+  await log(userId, "deleted", "transfer", "Transferência excluída");
   return { ok: true };
 }
 
@@ -1183,56 +1243,56 @@ export async function deleteTransfer(id: string): Promise<{ ok: true } | null> {
 // Dashboard
 // ---------------------------------------------------------------------
 
-async function sumRealizado(group: string, start: string, end: string, accountIds: string[] | null): Promise<number> {
+async function sumRealizado(userId: string, group: string, start: string, end: string, accountIds: string[] | null): Promise<number> {
   const { rows } = accountIds
     ? await sql.query(
         `SELECT COALESCE(SUM(amount),0)::float8 AS total FROM transactions
-         WHERE "group"=$1 AND status='pago' AND paid_date IS NOT NULL AND paid_date BETWEEN $2 AND $3 AND account_id = ANY($4::text[])`,
-        [group, start, end, accountIds]
+         WHERE "group"=$1 AND status='pago' AND paid_date IS NOT NULL AND paid_date BETWEEN $2 AND $3 AND account_id = ANY($4::text[]) AND user_id = $5`,
+        [group, start, end, accountIds, userId]
       )
     : await sql.query(
         `SELECT COALESCE(SUM(amount),0)::float8 AS total FROM transactions
-         WHERE "group"=$1 AND status='pago' AND paid_date IS NOT NULL AND paid_date BETWEEN $2 AND $3`,
-        [group, start, end]
+         WHERE "group"=$1 AND status='pago' AND paid_date IS NOT NULL AND paid_date BETWEEN $2 AND $3 AND user_id = $4`,
+        [group, start, end, userId]
       );
   return round2(Number(rows[0].total));
 }
 
-async function sumPrevisto(group: string, start: string, end: string, accountIds: string[] | null): Promise<number> {
+async function sumPrevisto(userId: string, group: string, start: string, end: string, accountIds: string[] | null): Promise<number> {
   const { rows } = accountIds
     ? await sql.query(
         `SELECT COALESCE(SUM(amount),0)::float8 AS total FROM transactions
-         WHERE "group"=$1 AND status='pendente' AND due_date BETWEEN $2 AND $3 AND account_id = ANY($4::text[])`,
-        [group, start, end, accountIds]
+         WHERE "group"=$1 AND status='pendente' AND due_date BETWEEN $2 AND $3 AND account_id = ANY($4::text[]) AND user_id = $5`,
+        [group, start, end, accountIds, userId]
       )
     : await sql.query(
         `SELECT COALESCE(SUM(amount),0)::float8 AS total FROM transactions
-         WHERE "group"=$1 AND status='pendente' AND due_date BETWEEN $2 AND $3`,
-        [group, start, end]
+         WHERE "group"=$1 AND status='pendente' AND due_date BETWEEN $2 AND $3 AND user_id = $4`,
+        [group, start, end, userId]
       );
   return round2(Number(rows[0].total));
 }
 
-async function sumExpenseRealizado(start: string, end: string, accountIds: string[] | null): Promise<number> {
+async function sumExpenseRealizado(userId: string, start: string, end: string, accountIds: string[] | null): Promise<number> {
   let total = 0;
-  for (const g of EXPENSE_GROUPS) total += await sumRealizado(g, start, end, accountIds);
+  for (const g of EXPENSE_GROUPS) total += await sumRealizado(userId, g, start, end, accountIds);
   return round2(total);
 }
 
-async function sumExpensePrevisto(start: string, end: string, accountIds: string[] | null): Promise<number> {
+async function sumExpensePrevisto(userId: string, start: string, end: string, accountIds: string[] | null): Promise<number> {
   let total = 0;
-  for (const g of EXPENSE_GROUPS) total += await sumPrevisto(g, start, end, accountIds);
+  for (const g of EXPENSE_GROUPS) total += await sumPrevisto(userId, g, start, end, accountIds);
   return round2(total);
 }
 
-async function dre(start: string, end: string, accountIds: string[] | null) {
-  const receitaBruta = await sumRealizado("recebimento", start, end, accountIds);
-  const impostos = await sumRealizado("impostos", start, end, accountIds);
+async function dre(userId: string, start: string, end: string, accountIds: string[] | null) {
+  const receitaBruta = await sumRealizado(userId, "recebimento", start, end, accountIds);
+  const impostos = await sumRealizado(userId, "impostos", start, end, accountIds);
   const lucroBruto = round2(receitaBruta - impostos);
-  const despesasVariaveis = await sumRealizado("despesa_variavel", start, end, accountIds);
+  const despesasVariaveis = await sumRealizado(userId, "despesa_variavel", start, end, accountIds);
   const lucroOperacional = round2(lucroBruto - despesasVariaveis);
-  const despesasFixas = await sumRealizado("despesa_fixa", start, end, accountIds);
-  const gastosPessoal = await sumRealizado("pessoas", start, end, accountIds);
+  const despesasFixas = await sumRealizado(userId, "despesa_fixa", start, end, accountIds);
+  const gastosPessoal = await sumRealizado(userId, "pessoas", start, end, accountIds);
   const resultadoLiquido = round2(lucroOperacional - despesasFixas - gastosPessoal);
   return {
     receita_bruta: receitaBruta,
@@ -1246,7 +1306,7 @@ async function dre(start: string, end: string, accountIds: string[] | null) {
   };
 }
 
-export async function dashboardData(profileId?: string | null, year?: number, month?: number, accountId?: string | null) {
+export async function dashboardData(userId: string, profileId?: string | null, year?: number, month?: number, accountId?: string | null) {
   const now = new Date();
   const y = year || now.getUTCFullYear();
   const m = month || now.getUTCMonth() + 1;
@@ -1254,34 +1314,34 @@ export async function dashboardData(profileId?: string | null, year?: number, mo
   // Se um account_id especifico foi passado, ele tem prioridade sobre o
   // perfil -- restringe todos os calculos so aquela conta (usado pelo
   // seletor de conta na tela de Lancamentos).
-  const accountIds = accountId ? [accountId] : await profileAccountIds(profileId);
+  const accountIds = accountId ? [accountId] : await profileAccountIds(userId, profileId);
 
   const { rows: accountRows } = accountIds
-    ? await sql.query(`SELECT * FROM accounts WHERE id = ANY($1::text[]) ORDER BY name`, [accountIds])
-    : await sql.query(`SELECT * FROM accounts ORDER BY name`);
+    ? await sql.query(`SELECT * FROM accounts WHERE id = ANY($1::text[]) AND user_id = $2 ORDER BY name`, [accountIds, userId])
+    : await sql.query(`SELECT * FROM accounts WHERE user_id = $1 ORDER BY name`, [userId]);
   const accounts = accountRows.map(mapAccount);
   let saldoAtual = 0;
   const saldoPorConta = [];
   for (const acc of accounts) {
-    const bal = await accountBalance(acc.id);
+    const bal = await accountBalance(userId, acc.id);
     saldoAtual += bal;
     saldoPorConta.push({ id: acc.id, name: acc.name, color: acc.color, balance: bal, is_primary: acc.is_primary });
   }
   saldoAtual = round2(saldoAtual);
 
-  const { rows: profileRows } = await sql.query(`SELECT * FROM profiles ORDER BY name`);
+  const { rows: profileRows } = await sql.query(`SELECT * FROM profiles WHERE user_id = $1 ORDER BY name`, [userId]);
   const saldoPorPerfil = [];
   for (const p of profileRows) {
-    const { rows: pAccounts } = await sql.query(`SELECT id FROM accounts WHERE profile_id=$1`, [p.id]);
+    const { rows: pAccounts } = await sql.query(`SELECT id FROM accounts WHERE profile_id=$1 AND user_id=$2`, [p.id, userId]);
     let bal = 0;
-    for (const a of pAccounts) bal += await accountBalance(a.id);
+    for (const a of pAccounts) bal += await accountBalance(userId, a.id);
     saldoPorPerfil.push({ id: p.id, name: p.name, color: p.color, balance: round2(bal) });
   }
 
-  const realizadoReceitas = await sumRealizado("recebimento", start, end, accountIds);
-  const realizadoDespesas = await sumExpenseRealizado(start, end, accountIds);
-  const faltaReceitas = await sumPrevisto("recebimento", start, end, accountIds);
-  const faltaDespesas = await sumExpensePrevisto(start, end, accountIds);
+  const realizadoReceitas = await sumRealizado(userId, "recebimento", start, end, accountIds);
+  const realizadoDespesas = await sumExpenseRealizado(userId, start, end, accountIds);
+  const faltaReceitas = await sumPrevisto(userId, "recebimento", start, end, accountIds);
+  const faltaDespesas = await sumExpensePrevisto(userId, start, end, accountIds);
   const previstoTotalReceitas = round2(realizadoReceitas + faltaReceitas);
   const previstoTotalDespesas = round2(realizadoDespesas + faltaDespesas);
   const percentReceitas = previstoTotalReceitas ? round1((realizadoReceitas / previstoTotalReceitas) * 100) : 0;
@@ -1290,27 +1350,27 @@ export async function dashboardData(profileId?: string | null, year?: number, mo
   const todayIso = todayStr();
   const limite = addDays(todayIso, 30);
 
-  const catRowsAll = await listCategories();
+  const catRowsAll = await listCategories(userId);
   const catById: Record<string, string> = Object.fromEntries(catRowsAll.map((c) => [c.id, c.name]));
 
-  const proxParams: any[] = [todayIso, limite];
-  let proxQuery = `SELECT * FROM transactions WHERE status='pendente' AND due_date BETWEEN $1 AND $2`;
-  if (accountIds) { proxParams.push(accountIds); proxQuery += ` AND account_id = ANY($3::text[])`; }
+  const proxParams: any[] = [todayIso, limite, userId];
+  let proxQuery = `SELECT * FROM transactions WHERE status='pendente' AND due_date BETWEEN $1 AND $2 AND user_id = $3`;
+  if (accountIds) { proxParams.push(accountIds); proxQuery += ` AND account_id = ANY($4::text[])`; }
   proxQuery += ` ORDER BY due_date ASC LIMIT 10`;
   const { rows: proxRows } = await sql.query(proxQuery, proxParams);
   const proximosVencimentos = proxRows.map((r: any) => ({ ...mapTransaction(r), category_name: r.category_id ? catById[r.category_id] : null }));
 
-  const vencParams: any[] = [todayIso];
-  let vencQuery = `SELECT * FROM transactions WHERE status='pendente' AND due_date < $1`;
-  if (accountIds) { vencParams.push(accountIds); vencQuery += ` AND account_id = ANY($2::text[])`; }
+  const vencParams: any[] = [todayIso, userId];
+  let vencQuery = `SELECT * FROM transactions WHERE status='pendente' AND due_date < $1 AND user_id = $2`;
+  if (accountIds) { vencParams.push(accountIds); vencQuery += ` AND account_id = ANY($3::text[])`; }
   vencQuery += ` ORDER BY due_date ASC`;
   const { rows: vencRows } = await sql.query(vencQuery, vencParams);
   const vencidas = vencRows.map((r: any) => ({ ...mapTransaction(r), category_name: r.category_id ? catById[r.category_id] : null }));
   const totalVencidas = round2(vencidas.reduce((s: number, t: any) => s + (groupType(t.group) === "despesa" ? t.amount : -t.amount), 0));
 
-  const agendaParams: any[] = [start, end];
-  let agendaQuery = `SELECT due_date, "group" FROM transactions WHERE due_date BETWEEN $1 AND $2`;
-  if (accountIds) { agendaParams.push(accountIds); agendaQuery += ` AND account_id = ANY($3::text[])`; }
+  const agendaParams: any[] = [start, end, userId];
+  let agendaQuery = `SELECT due_date, "group" FROM transactions WHERE due_date BETWEEN $1 AND $2 AND user_id = $3`;
+  if (accountIds) { agendaParams.push(accountIds); agendaQuery += ` AND account_id = ANY($4::text[])`; }
   const { rows: agendaTxRows } = await sql.query(agendaQuery, agendaParams);
   const agenda: Record<number, { recebimento: boolean; despesa: boolean; transferencia: boolean }> = {};
   for (const row of agendaTxRows) {
@@ -1319,7 +1379,7 @@ export async function dashboardData(profileId?: string | null, year?: number, mo
     if (row.group === "recebimento") agenda[day].recebimento = true;
     else agenda[day].despesa = true;
   }
-  const { rows: trRows } = await sql.query(`SELECT date, from_account_id, to_account_id FROM transfers WHERE date BETWEEN $1 AND $2`, [start, end]);
+  const { rows: trRows } = await sql.query(`SELECT date, from_account_id, to_account_id FROM transfers WHERE date BETWEEN $1 AND $2 AND user_id = $3`, [start, end, userId]);
   for (const row of trRows) {
     if (accountIds && !accountIds.includes(row.from_account_id) && !accountIds.includes(row.to_account_id)) continue;
     const day = Number(row.date.slice(8, 10));
@@ -1335,10 +1395,10 @@ export async function dashboardData(profileId?: string | null, year?: number, mo
   for (let offset = -3; offset <= 2; offset++) {
     const ref = addMonthsYM(y, m, offset);
     const [mStart, mEnd] = monthBounds(ref.year, ref.month);
-    const r = await sumRealizado("recebimento", mStart, mEnd, accountIds);
-    const d = await sumExpenseRealizado(mStart, mEnd, accountIds);
-    const previstoR = round2(r + (await sumPrevisto("recebimento", mStart, mEnd, accountIds)));
-    const previstoD = round2(d + (await sumExpensePrevisto(mStart, mEnd, accountIds)));
+    const r = await sumRealizado(userId, "recebimento", mStart, mEnd, accountIds);
+    const d = await sumExpenseRealizado(userId, mStart, mEnd, accountIds);
+    const previstoR = round2(r + (await sumPrevisto(userId, "recebimento", mStart, mEnd, accountIds)));
+    const previstoD = round2(d + (await sumExpensePrevisto(userId, mStart, mEnd, accountIds)));
     comparativoMensal.push({
       label: `${mesesPt[ref.month - 1]}/${String(ref.year).slice(2)}`,
       receitas: r, despesas: d,
@@ -1350,8 +1410,8 @@ export async function dashboardData(profileId?: string | null, year?: number, mo
   const [pStart, pEnd] = monthBounds(prevRef.year, prevRef.month);
   const comparativoGrupos = [];
   for (const g of ["recebimento", ...EXPENSE_GROUPS] as Group[]) {
-    const cur = await sumRealizado(g, start, end, accountIds);
-    const prev = await sumRealizado(g, pStart, pEnd, accountIds);
+    const cur = await sumRealizado(userId, g, start, end, accountIds);
+    const prev = await sumRealizado(userId, g, pStart, pEnd, accountIds);
     comparativoGrupos.push({ group: g, label: GROUP_LABELS[g], atual: cur, anterior: prev });
   }
 
@@ -1373,24 +1433,24 @@ export async function dashboardData(profileId?: string | null, year?: number, mo
     comparativo_mensal: comparativoMensal,
     comparativo_grupos: comparativoGrupos,
     agenda,
-    dre: await dre(start, end, accountIds),
+    dre: await dre(userId, start, end, accountIds),
     month: m,
     year: y,
   };
 }
 
-export async function dashboardDay(dateIso: string, profileId?: string | null) {
-  const accountIds = await profileAccountIds(profileId);
-  const catRowsAll = await listCategories();
+export async function dashboardDay(userId: string, dateIso: string, profileId?: string | null) {
+  const accountIds = await profileAccountIds(userId, profileId);
+  const catRowsAll = await listCategories(userId);
   const catById: Record<string, string> = Object.fromEntries(catRowsAll.map((c) => [c.id, c.name]));
 
-  const txParams: any[] = [dateIso];
-  let txQuery = `SELECT * FROM transactions WHERE due_date = $1`;
-  if (accountIds) { txParams.push(accountIds); txQuery += ` AND account_id = ANY($2::text[])`; }
+  const txParams: any[] = [dateIso, userId];
+  let txQuery = `SELECT * FROM transactions WHERE due_date = $1 AND user_id = $2`;
+  if (accountIds) { txParams.push(accountIds); txQuery += ` AND account_id = ANY($3::text[])`; }
   const { rows: txRows } = await sql.query(txQuery, txParams);
   const transactions = txRows.map((r: any) => ({ ...mapTransaction(r), category_name: r.category_id ? catById[r.category_id] : null }));
 
-  const { rows: trRows } = await sql.query(`SELECT * FROM transfers WHERE date = $1`, [dateIso]);
+  const { rows: trRows } = await sql.query(`SELECT * FROM transfers WHERE date = $1 AND user_id = $2`, [dateIso, userId]);
   const transfers = (accountIds ? trRows.filter((r: any) => accountIds.includes(r.from_account_id) || accountIds.includes(r.to_account_id)) : trRows).map(
     mapTransfer
   );
@@ -1430,20 +1490,20 @@ export interface ReportFilters extends TransactionFilters {
   year?: string;
 }
 
-export async function reportsData(report: string, filters: ReportFilters) {
+export async function reportsData(userId: string, report: string, filters: ReportFilters) {
   const todayIso = todayStr();
   const start = filters.start || firstDayOfMonthStr();
   const end = filters.end || todayIso;
   const f: ReportFilters = { ...filters, start, end };
 
-  const items = await listTransactions(f);
+  const items = await listTransactions(userId, f);
 
   const [categories, contacts, costCenters, tags, accounts] = await Promise.all([
-    listCategories(),
-    listContacts(),
-    listCostCenters(),
-    listTags(),
-    listAccountsBasic(),
+    listCategories(userId),
+    listContacts(userId),
+    listCostCenters(userId),
+    listTags(userId),
+    listAccountsBasic(userId),
   ]);
   const catById: Record<string, string> = Object.fromEntries(categories.map((c) => [c.id, c.name]));
   const contactById: Record<string, string> = Object.fromEntries(contacts.map((c) => [c.id, c.name]));
@@ -1531,7 +1591,7 @@ export async function reportsData(report: string, filters: ReportFilters) {
 
   if (report === "historico" || report === "extrato") {
     const fSemData: TransactionFilters = { ...f, start: undefined, end: undefined, status: "pago" };
-    const candidates = await listTransactions(fSemData);
+    const candidates = await listTransactions(userId, fSemData);
     const pagos = candidates.filter((t) => t.paid_date && t.paid_date >= start && t.paid_date <= end);
 
     if (report === "historico") {
@@ -1548,8 +1608,8 @@ export async function reportsData(report: string, filters: ReportFilters) {
       running = round2(running + delta);
       return { ...enrich(t), delta: round2(delta), running_balance: running };
     });
-    const accountIds = await profileAccountIds(filters.profile_id);
-    const { rows: trRows } = await sql.query(`SELECT * FROM transfers WHERE date BETWEEN $1 AND $2`, [start, end]);
+    const accountIds = await profileAccountIds(userId, filters.profile_id);
+    const { rows: trRows } = await sql.query(`SELECT * FROM transfers WHERE date BETWEEN $1 AND $2 AND user_id = $3`, [start, end, userId]);
     const transfers = (accountIds ? trRows.filter((r: any) => accountIds.includes(r.from_account_id) || accountIds.includes(r.to_account_id)) : trRows).map(
       (tr: any) => ({ ...mapTransfer(tr), from_name: accById[tr.from_account_id] || "", to_name: accById[tr.to_account_id] || "" })
     );
@@ -1557,41 +1617,41 @@ export async function reportsData(report: string, filters: ReportFilters) {
   }
 
   if (report === "dre") {
-    const accountIds = await profileAccountIds(filters.profile_id);
-    return { kind: "dre", dre: await dre(start, end, accountIds), start, end };
+    const accountIds = await profileAccountIds(userId, filters.profile_id);
+    return { kind: "dre", dre: await dre(userId, start, end, accountIds), start, end };
   }
 
   if (report === "performance_mensal") {
     const year = Number(filters.year) || new Date().getUTCFullYear();
-    const accountIds = await profileAccountIds(filters.profile_id);
+    const accountIds = await profileAccountIds(userId, filters.profile_id);
     const mesesPt = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
     const rows = [];
     for (let mo = 1; mo <= 12; mo++) {
       const [mS, mE] = monthBounds(year, mo);
-      const r = await sumRealizado("recebimento", mS, mE, accountIds);
-      const d = await sumExpenseRealizado(mS, mE, accountIds);
+      const r = await sumRealizado(userId, "recebimento", mS, mE, accountIds);
+      const d = await sumExpenseRealizado(userId, mS, mE, accountIds);
       rows.push({ label: `${mesesPt[mo - 1]}/${String(year).slice(2)}`, receitas: r, despesas: d });
     }
     return { kind: "performance", rows, year };
   }
 
   if (report === "performance_anual") {
-    const accountIds = await profileAccountIds(filters.profile_id);
-    const { rows: yearRows } = await sql.query(`SELECT DISTINCT substring(due_date, 1, 4) AS y FROM transactions ORDER BY y`);
+    const accountIds = await profileAccountIds(userId, filters.profile_id);
+    const { rows: yearRows } = await sql.query(`SELECT DISTINCT substring(due_date, 1, 4) AS y FROM transactions WHERE user_id = $1 ORDER BY y`, [userId]);
     const years = yearRows.length ? yearRows.map((r: any) => Number(r.y)) : [new Date().getUTCFullYear()];
     const rows = [];
     for (const y2 of years) {
       const yStart = `${y2}-01-01`;
       const yEnd = `${y2}-12-31`;
-      const r = await sumRealizado("recebimento", yStart, yEnd, accountIds);
-      const d = await sumExpenseRealizado(yStart, yEnd, accountIds);
+      const r = await sumRealizado(userId, "recebimento", yStart, yEnd, accountIds);
+      const d = await sumExpenseRealizado(userId, yStart, yEnd, accountIds);
       rows.push({ label: String(y2), receitas: r, despesas: d });
     }
     return { kind: "performance", rows };
   }
 
   if (report === "saldos") {
-    const accounts2 = await listAccounts(filters.profile_id);
+    const accounts2 = await listAccounts(userId, filters.profile_id);
     return { kind: "saldos", accounts: accounts2, total: round2(accounts2.reduce((s, a) => s + (a.balance || 0), 0)) };
   }
 
@@ -1616,13 +1676,13 @@ export interface ActivityLogEntry {
   summary: string;
 }
 
-export async function listActivityLog(filters: { start?: string; end?: string; search?: string }): Promise<ActivityLogEntry[]> {
-  const conditions: string[] = [];
-  const params: any[] = [];
+export async function listActivityLog(userId: string, filters: { start?: string; end?: string; search?: string }): Promise<ActivityLogEntry[]> {
+  const conditions: string[] = ["user_id = $1"];
+  const params: any[] = [userId];
   if (filters.start) { params.push(filters.start); conditions.push(`ts::date >= $${params.length}`); }
   if (filters.end) { params.push(filters.end); conditions.push(`ts::date <= $${params.length}`); }
   if (filters.search) { params.push(`%${filters.search}%`); conditions.push(`summary ILIKE $${params.length}`); }
-  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const where = `WHERE ${conditions.join(" AND ")}`;
   const { rows } = await sql.query(`SELECT * FROM activity_log ${where} ORDER BY ts DESC LIMIT 500`, params);
   return rows.map((r: any) => ({
     id: r.id,
@@ -1637,75 +1697,105 @@ export async function listActivityLog(filters: { start?: string; end?: string; s
 // Configuracoes / export / wipe
 // ---------------------------------------------------------------------
 
-export async function getSettings() {
-  const { rows } = await sql.query(`SELECT * FROM settings WHERE id = 1`);
+export async function getSettings(userId: string) {
+  const { rows } = await sql.query(`SELECT * FROM settings WHERE user_id = $1`, [userId]);
   const row = rows[0];
+  if (!row) return { display_name: "Você", prefs: { default_profile_view: "all", confirm_paid_date: true } };
   return { display_name: row.display_name, prefs: row.prefs };
 }
 
-export async function updateSettings(payload: any) {
-  const current = await getSettings();
+export async function updateSettings(userId: string, payload: any) {
+  const current = await getSettings(userId);
   const newDisplayName = payload.display_name !== undefined ? payload.display_name : current.display_name;
   const newPrefs = payload.prefs && typeof payload.prefs === "object" ? { ...current.prefs, ...payload.prefs } : current.prefs;
-  await sql.query(`UPDATE settings SET display_name = $1, prefs = $2 WHERE id = 1`, [newDisplayName, JSON.stringify(newPrefs)]);
+  await sql.query(
+    `INSERT INTO settings (user_id, display_name, prefs) VALUES ($1,$2,$3)
+     ON CONFLICT (user_id) DO UPDATE SET display_name = $2, prefs = $3`,
+    [userId, newDisplayName, JSON.stringify(newPrefs)]
+  );
   return { display_name: newDisplayName, prefs: newPrefs };
 }
 
 const SUMMARY_TABLES = ["accounts", "transactions", "transfers", "categories", "contacts", "cost_centers", "tags", "activity_log"] as const;
 
-export async function dataSummary(): Promise<Record<string, number>> {
+export async function dataSummary(userId: string): Promise<Record<string, number>> {
   const result: Record<string, number> = {};
   for (const t of SUMMARY_TABLES) {
-    const { rows } = await sql.query(`SELECT COUNT(*)::int AS c FROM ${t}`);
+    const { rows } = await sql.query(`SELECT COUNT(*)::int AS c FROM ${t} WHERE user_id = $1`, [userId]);
     result[t] = rows[0].c;
   }
   return result;
 }
 
-export async function wipeAllData(confirmText: string): Promise<{ ok: true } | { error: string }> {
+/** Semeia perfis e categorias padrão pra um usuário novo (cadastro) ou pra
+ * recriar do zero (Apagar tudo). Usa IDs novos (UUID) em vez das strings
+ * literais da versão single-tenant original ('pessoal', 'cat-salario', ...)
+ * porque agora essas colunas são PK globais — duas pessoas não podem ter
+ * uma linha com o mesmo id. */
+export async function seedDefaultData(userId: string): Promise<void> {
+  const pessoalId = newId();
+  const profissionalId = newId();
+  await sql.query(
+    `INSERT INTO profiles (id, user_id, name, color) VALUES ($1,$2,'Pessoal','#2f6fed'), ($3,$2,'Profissional','#1f9d55')`,
+    [pessoalId, userId, profissionalId]
+  );
+
+  const defaultCategories: [string, string, string][] = [
+    ["Salário", "recebimento", "#2e7d32"],
+    ["Vendas / Serviços", "recebimento", "#388e3c"],
+    ["Outros recebimentos", "recebimento", "#66bb6a"],
+    ["Aluguel / Moradia", "despesa_fixa", "#c62828"],
+    ["Internet / Telefonia", "despesa_fixa", "#8d6e63"],
+    ["Assinaturas", "despesa_fixa", "#6d4c41"],
+    ["Alimentação", "despesa_variavel", "#e64a19"],
+    ["Transporte", "despesa_variavel", "#ef6c00"],
+    ["Lazer", "despesa_variavel", "#8e24aa"],
+    ["Outras despesas", "despesa_variavel", "#546e7a"],
+    ["Funcionários", "pessoas", "#5c6bc0"],
+    ["Prestadores de serviço", "pessoas", "#7e57c2"],
+    ["Impostos e taxas", "impostos", "#455a64"],
+  ];
+  for (const [name, group, color] of defaultCategories) {
+    await sql.query(`INSERT INTO categories (id, user_id, name, "group", color) VALUES ($1,$2,$3,$4,$5)`, [newId(), userId, name, group, color]);
+  }
+
+  await sql.query(
+    `INSERT INTO settings (user_id, display_name, prefs) VALUES ($1,'Você','{"default_profile_view":"all","confirm_paid_date":true}')
+     ON CONFLICT (user_id) DO NOTHING`,
+    [userId]
+  );
+}
+
+export async function wipeAllData(userId: string, confirmText: string): Promise<{ ok: true } | { error: string }> {
   if (confirmText !== "EXCLUIR") return { error: 'Digite "EXCLUIR" para confirmar.' };
 
-  await sql.query(`TRUNCATE transactions, transfers, activity_log`);
-  await sql.query(`DELETE FROM accounts`);
-  await sql.query(`DELETE FROM contacts`);
-  await sql.query(`DELETE FROM cost_centers`);
-  await sql.query(`DELETE FROM tags`);
-  await sql.query(`DELETE FROM categories`);
-  await sql.query(`DELETE FROM profiles`);
+  await sql.query(`DELETE FROM transactions WHERE user_id = $1`, [userId]);
+  await sql.query(`DELETE FROM transfers WHERE user_id = $1`, [userId]);
+  await sql.query(`DELETE FROM activity_log WHERE user_id = $1`, [userId]);
+  await sql.query(`DELETE FROM accounts WHERE user_id = $1`, [userId]);
+  await sql.query(`DELETE FROM contacts WHERE user_id = $1`, [userId]);
+  await sql.query(`DELETE FROM cost_centers WHERE user_id = $1`, [userId]);
+  await sql.query(`DELETE FROM tags WHERE user_id = $1`, [userId]);
+  await sql.query(`DELETE FROM categories WHERE user_id = $1`, [userId]);
+  await sql.query(`DELETE FROM profiles WHERE user_id = $1`, [userId]);
+  await sql.query(`DELETE FROM settings WHERE user_id = $1`, [userId]);
 
-  await sql.query(`INSERT INTO profiles (id, name, color) VALUES ('pessoal','Pessoal','#2f6fed'), ('profissional','Profissional','#1f9d55')`);
-  await sql.query(`UPDATE settings SET display_name = 'Você', prefs = '{"default_profile_view":"all","confirm_paid_date":true}' WHERE id = 1`);
-  await sql.query(`
-    INSERT INTO categories (id, name, "group", color) VALUES
-    ('cat-salario','Salário','recebimento','#2e7d32'),
-    ('cat-vendas','Vendas / Serviços','recebimento','#388e3c'),
-    ('cat-outros-receb','Outros recebimentos','recebimento','#66bb6a'),
-    ('cat-aluguel','Aluguel / Moradia','despesa_fixa','#c62828'),
-    ('cat-internet','Internet / Telefonia','despesa_fixa','#8d6e63'),
-    ('cat-assinaturas','Assinaturas','despesa_fixa','#6d4c41'),
-    ('cat-alimentacao','Alimentação','despesa_variavel','#e64a19'),
-    ('cat-transporte','Transporte','despesa_variavel','#ef6c00'),
-    ('cat-lazer','Lazer','despesa_variavel','#8e24aa'),
-    ('cat-outras-desp','Outras despesas','despesa_variavel','#546e7a'),
-    ('cat-funcionarios','Funcionários','pessoas','#5c6bc0'),
-    ('cat-prestadores','Prestadores de serviço','pessoas','#7e57c2'),
-    ('cat-impostos','Impostos e taxas','impostos','#455a64')
-  `);
+  await seedDefaultData(userId);
 
-  await log("wiped", "all", "Todos os dados foram apagados e recriados do zero.");
+  await log(userId, "wiped", "all", "Todos os dados foram apagados e recriados do zero.");
   return { ok: true };
 }
 
-export async function exportJson(filters: TransactionFilters): Promise<string> {
-  const items = await listTransactions(filters);
+export async function exportJson(userId: string, filters: TransactionFilters): Promise<string> {
+  const items = await listTransactions(userId, filters);
   const [profilesRes, accounts, categories, contacts, costCenters, tags, transfersRes] = await Promise.all([
-    sql.query(`SELECT * FROM profiles`),
-    listAccountsBasic(),
-    listCategories(),
-    listContacts(),
-    listCostCenters(),
-    listTags(),
-    sql.query(`SELECT * FROM transfers`),
+    sql.query(`SELECT * FROM profiles WHERE user_id = $1`, [userId]),
+    listAccountsBasic(userId),
+    listCategories(userId),
+    listContacts(userId),
+    listCostCenters(userId),
+    listTags(userId),
+    sql.query(`SELECT * FROM transfers WHERE user_id = $1`, [userId]),
   ]);
   const payload = {
     exported_at: new Date().toISOString(),
@@ -1722,9 +1812,9 @@ export async function exportJson(filters: TransactionFilters): Promise<string> {
   return JSON.stringify(payload, null, 2);
 }
 
-export async function exportCsv(filters: TransactionFilters): Promise<string> {
-  const items = await listTransactions(filters);
-  const [categories, contacts, accounts] = await Promise.all([listCategories(), listContacts(), listAccountsBasic()]);
+export async function exportCsv(userId: string, filters: TransactionFilters): Promise<string> {
+  const items = await listTransactions(userId, filters);
+  const [categories, contacts, accounts] = await Promise.all([listCategories(userId), listContacts(userId), listAccountsBasic(userId)]);
   const catById: Record<string, string> = Object.fromEntries(categories.map((c) => [c.id, c.name]));
   const contactById: Record<string, string> = Object.fromEntries(contacts.map((c) => [c.id, c.name]));
   const accById: Record<string, string> = Object.fromEntries(accounts.map((a) => [a.id, a.name]));
@@ -1791,39 +1881,39 @@ function excelDateToIso(d: Date): string {
   return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
 }
 
-async function findOrCreateCategory(name: string, group: string): Promise<string> {
+async function findOrCreateCategory(userId: string, name: string, group: string): Promise<string> {
   const trimmed = name.trim();
-  const { rows } = await sql.query(`SELECT id FROM categories WHERE lower(name) = lower($1) AND "group" = $2 LIMIT 1`, [trimmed, group]);
+  const { rows } = await sql.query(`SELECT id FROM categories WHERE lower(name) = lower($1) AND "group" = $2 AND user_id = $3 LIMIT 1`, [trimmed, group, userId]);
   if (rows[0]) return rows[0].id;
   const id = newId();
-  await sql.query(`INSERT INTO categories (id, name, "group", color) VALUES ($1,$2,$3,'#546e7a')`, [id, trimmed, group]);
+  await sql.query(`INSERT INTO categories (id, user_id, name, "group", color) VALUES ($1,$2,$3,$4,'#546e7a')`, [id, userId, trimmed, group]);
   return id;
 }
 
-async function findOrCreateContact(name: string): Promise<string> {
+async function findOrCreateContact(userId: string, name: string): Promise<string> {
   const trimmed = name.trim();
-  const { rows } = await sql.query(`SELECT id FROM contacts WHERE lower(name) = lower($1) LIMIT 1`, [trimmed]);
+  const { rows } = await sql.query(`SELECT id FROM contacts WHERE lower(name) = lower($1) AND user_id = $2 LIMIT 1`, [trimmed, userId]);
   if (rows[0]) return rows[0].id;
   const id = newId();
-  await sql.query(`INSERT INTO contacts (id, name, notes) VALUES ($1,$2,'')`, [id, trimmed]);
+  await sql.query(`INSERT INTO contacts (id, user_id, name, notes) VALUES ($1,$2,$3,'')`, [id, userId, trimmed]);
   return id;
 }
 
-async function findOrCreateCostCenter(name: string): Promise<string> {
+async function findOrCreateCostCenter(userId: string, name: string): Promise<string> {
   const trimmed = name.trim();
-  const { rows } = await sql.query(`SELECT id FROM cost_centers WHERE lower(name) = lower($1) LIMIT 1`, [trimmed]);
+  const { rows } = await sql.query(`SELECT id FROM cost_centers WHERE lower(name) = lower($1) AND user_id = $2 LIMIT 1`, [trimmed, userId]);
   if (rows[0]) return rows[0].id;
   const id = newId();
-  await sql.query(`INSERT INTO cost_centers (id, name) VALUES ($1,$2)`, [id, trimmed]);
+  await sql.query(`INSERT INTO cost_centers (id, user_id, name) VALUES ($1,$2,$3)`, [id, userId, trimmed]);
   return id;
 }
 
-async function findOrCreateTag(name: string): Promise<string> {
+async function findOrCreateTag(userId: string, name: string): Promise<string> {
   const trimmed = name.trim();
-  const { rows } = await sql.query(`SELECT id FROM tags WHERE lower(name) = lower($1) LIMIT 1`, [trimmed]);
+  const { rows } = await sql.query(`SELECT id FROM tags WHERE lower(name) = lower($1) AND user_id = $2 LIMIT 1`, [trimmed, userId]);
   if (rows[0]) return rows[0].id;
   const id = newId();
-  await sql.query(`INSERT INTO tags (id, name, color) VALUES ($1,$2,'#78909c')`, [id, trimmed]);
+  await sql.query(`INSERT INTO tags (id, user_id, name, color) VALUES ($1,$2,$3,'#78909c')`, [id, userId, trimmed]);
   return id;
 }
 
@@ -1865,14 +1955,14 @@ function toIsoDate(value: string | number | Date | undefined): string | null {
  * NUNCA cria ou altera perfis/contas -- so usa a conta bancaria ja
  * existente de cada perfil. Cria categorias/contatos/centros de
  * custo/tags que ainda nao existirem (por nome). */
-export async function importZenplyRows(rows: ZenplyImportRow[]): Promise<ImportSummary> {
-  const profiles = await listProfiles();
+export async function importZenplyRows(userId: string, rows: ZenplyImportRow[]): Promise<ImportSummary> {
+  const profiles = await listProfiles(userId);
   const profileByName: Record<string, string> = {};
   for (const p of profiles) profileByName[normalizeText(p.name)] = p.id;
 
   const accountByProfile: Record<string, string> = {};
   for (const p of profiles) {
-    const { rows: accRows } = await sql.query(`SELECT id FROM accounts WHERE profile_id = $1 ORDER BY name LIMIT 1`, [p.id]);
+    const { rows: accRows } = await sql.query(`SELECT id FROM accounts WHERE profile_id = $1 AND user_id = $2 ORDER BY name LIMIT 1`, [p.id, userId]);
     if (accRows[0]) accountByProfile[p.id] = accRows[0].id;
   }
 
@@ -1904,13 +1994,13 @@ export async function importZenplyRows(rows: ZenplyImportRow[]): Promise<ImportS
       const isPago = r.Pago ? normalizeText(r.Pago) === "sim" : false;
       const paidDate = isPago ? toIsoDate(r["Data Pagamento"]) || dueDate : null;
 
-      const categoryId = r.Categoria ? await findOrCreateCategory(String(r.Categoria), group) : null;
-      const contactId = r["Recebido de/Pago a"] ? await findOrCreateContact(String(r["Recebido de/Pago a"])) : null;
-      const costCenterId = r["Centro de Custo"] ? await findOrCreateCostCenter(String(r["Centro de Custo"])) : null;
+      const categoryId = r.Categoria ? await findOrCreateCategory(userId, String(r.Categoria), group) : null;
+      const contactId = r["Recebido de/Pago a"] ? await findOrCreateContact(userId, String(r["Recebido de/Pago a"])) : null;
+      const costCenterId = r["Centro de Custo"] ? await findOrCreateCostCenter(userId, String(r["Centro de Custo"])) : null;
       const tagIds: string[] = [];
       if (r.Tags) {
         for (const tagName of String(r.Tags).split(",").map((s) => s.trim()).filter(Boolean)) {
-          tagIds.push(await findOrCreateTag(tagName));
+          tagIds.push(await findOrCreateTag(userId, tagName));
         }
       }
 
@@ -1920,7 +2010,7 @@ export async function importZenplyRows(rows: ZenplyImportRow[]): Promise<ImportS
         r["Forma de Pagamento"] ? `Pagamento: ${r["Forma de Pagamento"]}` : null,
       ].filter(Boolean);
 
-      await insertTransactionRow({
+      await insertTransactionRow(userId, {
         id: newId(),
         description: descricao || "(sem descrição)",
         amount: valor,
@@ -1946,21 +2036,21 @@ export async function importZenplyRows(rows: ZenplyImportRow[]): Promise<ImportS
     }
   }
 
-  await log("created", "transaction", `Importação de planilha: ${imported} lançamento(s) criado(s), ${errors.length} erro(s)`);
+  await log(userId, "created", "transaction", `Importação de planilha: ${imported} lançamento(s) criado(s), ${errors.length} erro(s)`);
   return { imported, skipped: rows.length - imported - errors.length, errors };
 }
 
 /** Gera as linhas (mesmo layout do backup do Zenply) para exportar como
  * planilha. A montagem do arquivo .xlsx em si acontece na rota da API. */
-export async function buildZenplyExportRows(filters: TransactionFilters) {
-  const items = await listTransactions(filters);
+export async function buildZenplyExportRows(userId: string, filters: TransactionFilters) {
+  const items = await listTransactions(userId, filters);
   const [categories, contacts, costCenters, tags, accounts, profiles] = await Promise.all([
-    listCategories(),
-    listContacts(),
-    listCostCenters(),
-    listTags(),
-    listAccountsBasic(),
-    listProfiles(),
+    listCategories(userId),
+    listContacts(userId),
+    listCostCenters(userId),
+    listTags(userId),
+    listAccountsBasic(userId),
+    listProfiles(userId),
   ]);
   const catById: Record<string, string> = Object.fromEntries(categories.map((c) => [c.id, c.name]));
   const contactById: Record<string, string> = Object.fromEntries(contacts.map((c) => [c.id, c.name]));

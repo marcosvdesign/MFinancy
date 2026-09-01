@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import * as XLSX from "xlsx";
 import { jsonError, withErrorHandling } from "@/lib/handler";
+import { getUserId } from "@/lib/auth";
 import * as db from "@/lib/db";
 
 export async function POST(request: NextRequest) {
   return withErrorHandling(async () => {
+    const userId = getUserId(request);
     const form = await request.formData();
     const file = form.get("file");
     if (!file || typeof file === "string") {
@@ -17,7 +19,7 @@ export async function POST(request: NextRequest) {
     const sheet = workbook.Sheets[sheetName];
     const rows = XLSX.utils.sheet_to_json<db.ZenplyImportRow>(sheet, { defval: "" });
 
-    const summary = await db.importZenplyRows(rows);
+    const summary = await db.importZenplyRows(userId, rows);
     return NextResponse.json(summary);
   });
 }

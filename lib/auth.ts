@@ -1,22 +1,24 @@
 /**
- * Autenticacao simples por senha unica (uso pessoal, um usuario).
+ * Autenticacao multiusuario (e-mail + senha).
  *
- * Nao ha tabela de usuarios nem senha hasheada em banco: a senha correta
- * fica só na variável de ambiente APP_PASSWORD (você define no Vercel).
- * Ao acertar a senha, geramos um cookie assinado (HMAC-SHA256 via Web
- * Crypto, compatível com Edge Runtime) que o middleware valida em toda
- * requisição. Não há "esqueci minha senha" nem múltiplos usuários — é um
- * cadeado simples para o seu app pessoal.
+ * Cada usuario tem sua propria linha na tabela `users`, com a senha
+ * guardada como hash (bcryptjs — puro JS, sem binding nativo, funciona
+ * em qualquer runtime). O cookie de sessao carrega o ID do usuario
+ * logado, assinado com HMAC-SHA256 (Web Crypto, compativel com Edge
+ * Runtime) usando a mesma variavel de ambiente que antes era a senha
+ * unica do app (APP_PASSWORD) — ela continua existindo so como segredo
+ * de assinatura, nunca mais comparada com nada que o usuario digita.
  */
 
-const COOKIE_NAME = "financas_session";
-const SESSION_VALUE = "ok";
+import bcrypt from "bcryptjs";
 
-function getSecret(): string {
+const COOKIE_NAME = "financas_session";
+
+function getSigningSecret(): string {
   const secret = process.env.APP_PASSWORD;
   if (!secret) {
     throw new Error(
-      "Variável de ambiente APP_PASSWORD não configurada. Defina-a nas configurações do projeto no Vercel."
+      "Variável de ambiente APP_PASSWORD não configurada. Ela agora serve só de segredo pra assinar a sessão (não é mais senha de ninguém) — defina-a nas configurações do projeto no Vercel."
     );
   }
   return secret;
@@ -35,30 +37,53 @@ async function hmac(message: string, secret: string): Promise<string> {
   return Buffer.from(signature).toString("hex");
 }
 
-export async function checkPassword(password: string): Promise<boolean> {
-  const secret = getSecret();
-  return password === secret;
+export function hashPassword(password: string): string {
+  return bcrypt.hashSync(password, 10);
 }
 
-/** Gera o valor do cookie de sessão (assinado, não pode ser forjado sem a senha). */
-export async function createSessionCookieValue(): Promise<string> {
-  const secret = getSecret();
-  const signature = await hmac(SESSION_VALUE, secret);
-  return `${SESSION_VALUE}.${signature}`;
+export function verifyPassword(password: string, hash: string): boolean {
+  return bcrypt.compareSync(password, hash);
 }
 
-/** Verifica se um valor de cookie é uma sessão válida. */
-export async function isValidSessionCookie(value: string | undefined): Promise<boolean> {
-  if (!value) return false;
-  const [payload, signature] = value.split(".");
-  if (!payload || !signature) return false;
+/** Gera o valor do cookie de sessão pra um usuário específico (assinado,
+ * não pode ser forjado sem o segredo do servidor). */
+export async function createSessionCookieValue(userId: string): Promise<string> {
+  const secret = getSigningSecret();
+  const signature = await hmac(userId, secret);
+  return `${userId}.${signature}`;
+}
+
+/** Verifica o cookie de sessão e devolve o ID do usuário logado, ou null
+ * se o cookie estiver ausente, malformado ou com assinatura inválida. */
+export async function getUserIdFromSessionCookie(value: string | undefined): Promise<string | null> {
+  if (!value) return null;
+  const idx = value.lastIndexOf(".");
+  if (idx < 0) return null;
+  const userId = value.slice(0, idx);
+  const signature = value.slice(idx + 1);
+  if (!userId || !signature) return null;
   try {
-    const secret = getSecret();
-    const expected = await hmac(SESSION_VALUE, secret);
-    return payload === SESSION_VALUE && signature === expected;
+    const secret = getSigningSecret();
+    const expected = await hmac(userId, secret);
+    return signature === expected ? userId : null;
   } catch {
-    return false;
+    return null;
   }
+}
+
+/** Header interno usado pelo middleware pra repassar o usuário já
+ * autenticado pras rotas de API, sem cada uma precisar reler/reverificar
+ * o cookie por conta própria. */
+export const USER_ID_HEADER = "x-myfinance-user-id";
+
+/** Lê o ID do usuário autenticado a partir do header que o middleware já
+ * validou e injetou na request. Lança erro se não houver (rota de API
+ * chamada sem passar pelo middleware, ou sessão inválida — não deveria
+ * acontecer, já que toda rota de API exige sessão). */
+export function getUserId(request: { headers: { get(name: string): string | null } }): string {
+  const userId = request.headers.get(USER_ID_HEADER);
+  if (!userId) throw new Error("Não autenticado");
+  return userId;
 }
 
 export const SESSION_COOKIE_NAME = COOKIE_NAME;

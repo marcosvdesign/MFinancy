@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Entrar — MyFinance</title>
+<title>Criar conta — MyFinance</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&display=swap" rel="stylesheet" />
@@ -35,6 +35,7 @@
     font-weight: 600; font-size: 14px; cursor: pointer;
   }
   .login-card button:hover { background: var(--primary-dark); }
+  .login-card button:disabled { opacity: 0.6; cursor: default; }
   .login-error { color: var(--red); font-size: 13px; margin: -8px 0 14px 0; display: none; }
   .login-error.show { display: block; }
   .login-signup-link { text-align: center; font-size: 13px; color: var(--text-muted, #8a93a6); margin-top: 16px; }
@@ -45,18 +46,51 @@
 <body>
   <div class="login-card">
     <div class="login-brand"><span class="brand-dot"></span><span>MyFinance</span></div>
-    <p class="login-error" id="loginError">E-mail ou senha incorretos. Tente novamente.</p>
-    <form method="POST" action="/api/login">
-      <input type="email" name="email" placeholder="E-mail" autofocus required />
-      <input type="password" name="password" placeholder="Senha" required />
-      <button type="submit">Entrar</button>
+    <p class="login-error" id="signupError"></p>
+    <form id="signupForm">
+      <input type="text" name="display_name" placeholder="Seu nome" autofocus required />
+      <input type="email" name="email" placeholder="E-mail" required />
+      <input type="password" name="password" placeholder="Senha (mín. 6 caracteres)" minlength="6" required />
+      <button type="submit" id="signupSubmit">Criar conta</button>
     </form>
-    <p class="login-signup-link">Ainda não tem conta? <a href="/signup">Cadastre-se</a></p>
+    <p class="login-signup-link">Já tem conta? <a href="/login">Entrar</a></p>
   </div>
   <script>
-    if (new URLSearchParams(location.search).get("error")) {
-      document.getElementById("loginError").classList.add("show");
-    }
+    var form = document.getElementById("signupForm");
+    var errorEl = document.getElementById("signupError");
+    var submitBtn = document.getElementById("signupSubmit");
+    form.addEventListener("submit", async function (ev) {
+      ev.preventDefault();
+      errorEl.classList.remove("show");
+      submitBtn.disabled = true;
+      submitBtn.textContent = "Criando...";
+      var formData = new FormData(form);
+      var payload = {
+        display_name: formData.get("display_name"),
+        email: formData.get("email"),
+        password: formData.get("password"),
+      };
+      try {
+        var res = await fetch("/api/signup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        if (res.ok) {
+          location.href = "/";
+          return;
+        }
+        var data = await res.json().catch(function () { return {}; });
+        errorEl.textContent = data.error || "Não foi possível criar a conta. Tente novamente.";
+        errorEl.classList.add("show");
+      } catch (e) {
+        errorEl.textContent = "Erro de conexão. Tente novamente.";
+        errorEl.classList.add("show");
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = "Criar conta";
+      }
+    });
   </script>
 </body>
 </html>

@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withErrorHandling } from "@/lib/handler";
+import { getUserId } from "@/lib/auth";
 import * as db from "@/lib/db";
 
 export async function GET(request: NextRequest) {
   return withErrorHandling(async () => {
+    const userId = getUserId(request);
     const sp = request.nextUrl.searchParams;
     const filters: db.TransactionFilters = {
       start: sp.get("start") || undefined,
@@ -21,13 +23,14 @@ export async function GET(request: NextRequest) {
       installment_group_id: sp.get("installment_group_id") || undefined,
       recurrence_group_id: sp.get("recurrence_group_id") || undefined,
     };
-    return NextResponse.json(await db.listTransactions(filters));
+    return NextResponse.json(await db.listTransactions(userId, filters));
   });
 }
 
 export async function POST(request: NextRequest) {
   return withErrorHandling(async () => {
+    const userId = getUserId(request);
     const payload = await request.json();
-    return NextResponse.json(await db.createTransaction(payload), { status: 201 });
+    return NextResponse.json(await db.createTransaction(userId, payload), { status: 201 });
   });
 }

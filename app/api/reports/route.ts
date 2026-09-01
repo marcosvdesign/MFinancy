@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { withErrorHandling } from "@/lib/handler";
+import { getUserId } from "@/lib/auth";
 import * as db from "@/lib/db";
 
 export async function GET(request: NextRequest) {
   return withErrorHandling(async () => {
+    const userId = getUserId(request);
     const sp = request.nextUrl.searchParams;
     const report = sp.get("report") || "despesas_receitas";
     const filters: db.ReportFilters = {
@@ -21,6 +23,6 @@ export async function GET(request: NextRequest) {
       profile_id: sp.get("profile_id") || undefined,
       year: sp.get("year") || undefined,
     };
-    return NextResponse.json(await db.reportsData(report, filters));
+    return NextResponse.json(await db.reportsData(userId, report, filters));
   });
 }
