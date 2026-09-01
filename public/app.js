@@ -171,22 +171,36 @@ function refreshCurrentView() {
 // Dropdown customizado (usado no seletor de perfil da barra lateral)
 // ---------------------------------------------------------------------
 
+let profileSelectItems = [];
 function setProfileOptions(items) {
-  const menu = document.getElementById("profileSelectMenu");
-  menu.innerHTML = items.map((item) => `
+  profileSelectItems = items;
+  const current = items.find((i) => i.value === state.activeProfile);
+  document.getElementById("profileSelectLabel").textContent = current ? current.label : items[0]?.label || "";
+}
+
+/** Renderiza a lista de perfis no container global de dropdown (fora do
+ * stacking context da barra lateral, que cria o seu proprio por causa do
+ * backdrop-filter -- sem isso, o popup-shield ficava por cima do menu e
+ * engolia todo clique nas opcoes, impedindo trocar de perfil). Mesmo
+ * padrao ja usado pelo seletor de conta em Lancamentos (openLancAccountMenu). */
+function openProfileMenu() {
+  const menu = document.getElementById("globalDropdownMenu");
+  menu.innerHTML = profileSelectItems.map((item) => `
     <div class="custom-select-option ${item.value === state.activeProfile ? "selected" : ""}" data-value="${item.value}">
       <span>${escapeHtml(item.label)}</span><span class="check">✓</span>
     </div>`).join("");
   menu.querySelectorAll(".custom-select-option").forEach((opt) => {
-    opt.addEventListener("click", () => {
+    opt.addEventListener("click", (e) => {
+      e.stopPropagation();
       state.activeProfile = opt.dataset.value;
-      document.getElementById("profileSelectLabel").textContent = items.find((i) => i.value === opt.dataset.value)?.label || "";
-      closeCustomSelect();
+      document.getElementById("profileSelectLabel").textContent = profileSelectItems.find((i) => i.value === opt.dataset.value)?.label || "";
+      closeGlobalDropdown();
       switchTab(state.tab);
     });
   });
-  const current = items.find((i) => i.value === state.activeProfile);
-  document.getElementById("profileSelectLabel").textContent = current ? current.label : items[0]?.label || "";
+  positionGlobalDropdown(document.getElementById("profileSelectTrigger"));
+  document.getElementById("profileSelectWrap").classList.add("open");
+  menu._openedBy = document.getElementById("profileSelectTrigger");
 }
 
 function closeCustomSelect() {
@@ -196,11 +210,12 @@ function closeCustomSelect() {
 
 document.getElementById("profileSelectTrigger").addEventListener("click", (e) => {
   e.stopPropagation();
-  const wrap = document.getElementById("profileSelectWrap");
-  const willOpen = document.getElementById("profileSelectMenu").classList.contains("hidden");
+  const trigger = document.getElementById("profileSelectTrigger");
+  const menu = document.getElementById("globalDropdownMenu");
+  const willOpen = menu.classList.contains("hidden") || menu._openedBy !== trigger;
   closeCustomSelect();
   closeGlobalDropdown();
-  if (willOpen) { wrap.classList.add("open"); document.getElementById("profileSelectMenu").classList.remove("hidden"); }
+  if (willOpen) openProfileMenu();
 });
 document.addEventListener("click", closeCustomSelect);
 
