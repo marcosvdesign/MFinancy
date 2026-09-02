@@ -1762,6 +1762,7 @@ function parcelasTableHtml(rows) {
         <tbody>${body}</tbody>
       </table>
     </div>
+    <button type="button" class="btn-secondary" id="pf_add_row" style="margin-top:8px;">+ Adicionar parcela</button>
     <div class="parcelas-total-row"><span>Total</span><span id="pf_total_value">${formatCurrency(total)}</span></div>
   `;
 }
@@ -1797,6 +1798,17 @@ function openParcelasPopup(defaults, existing, onSave, onCancel) {
       rows.forEach((r, i) => { r.number = i + 1; });
       renderTable();
     }));
+    document.getElementById("pf_add_row")?.addEventListener("click", () => {
+      const step = FREQ_STEP_JS[pState.frequencia] || FREQ_STEP_JS.mensal;
+      const last = rows[rows.length - 1];
+      const nextDate = last ? step(last.due_date, 1) : (pState.startDate || todayIso());
+      const nextAmount = last ? last.amount : (pState.valorModo === "total" ? 0 : pState.valorParcela);
+      rows.push({ due_date: nextDate, amount: nextAmount, status: "pendente" });
+      rows.forEach((r, i) => { r.number = i + 1; });
+      const numeroInput = document.getElementById("pf_numero");
+      if (numeroInput) numeroInput.value = rows.length;
+      renderTable();
+    });
   }
 
   openModal2("Parcelas", `
@@ -1906,7 +1918,10 @@ function transactionFormHtml(t, presetGroup) {
         <select id="f_cost_center_id"><option value="">-</option>${costCenters}</select>
       </div>
     </div>
-    ${isEdit && t.installment_group_id ? `<div class="card-sub" id="installmentInfoBox" style="margin-bottom:14px;">Carregando informações do parcelamento...</div>` : ""}
+    ${isEdit && t.installment_group_id ? `
+      <div class="card-sub" id="installmentInfoBox" style="margin-bottom:10px;">Carregando informações do parcelamento...</div>
+      <button type="button" class="btn-secondary" id="btnEditParcelas" style="margin-bottom:14px;">Editar parcelas</button>
+    ` : ""}
     ${isEdit && t.recurrence_group_id ? `<div class="card-sub" style="margin-bottom:14px;">Repetição: ${FREQ_LABELS_PT[t.recurrence_frequency] || t.recurrence_frequency}</div>` : ""}
 
     <div class="form-row" id="statusFieldRow">
@@ -2044,13 +2059,40 @@ function openTransactionModal(t, scope) {
   }
 
   if (t && t.installment_group_id) {
+    let installmentSiblings = null;
     api("GET", "/api/transactions?" + qs({ installment_group_id: t.installment_group_id }))
       .then((siblings) => {
+        installmentSiblings = siblings.slice().sort((a, b) => (a.installment_number || 0) - (b.installment_number || 0));
         const total = siblings.reduce((s, s2) => s + Number(s2.amount || 0), 0);
         const box = document.getElementById("installmentInfoBox");
         if (box) box.textContent = `Parcela ${t.installment_number} de ${t.installment_total} — total do parcelamento: ${formatCurrency(total)}`;
       })
       .catch(() => {});
+
+    document.getElementById("btnEditParcelas")?.addEventListener("click", () => {
+      if (!installmentSiblings) return showToast("Aguarde carregar as parcelas...", true);
+      const rows = installmentSiblings.map((s) => ({
+        id: s.id, number: s.installment_number, due_date: s.due_date, amount: s.amount, status: s.status,
+      }));
+      const defaults = { amount: t.amount, due_date: t.due_date };
+      const existing = {
+        rows,
+        valorModo: "parcela",
+        valorParcela: rows[0]?.amount ?? t.amount,
+        valorTotal: rows.reduce((s, r) => s + Number(r.amount || 0), 0),
+        frequencia: "mensal",
+      };
+      openParcelasPopup(defaults, existing, async (result) => {
+        try {
+          await api("PUT", `/api/transactions/${t.id}/installments`, {
+            schedule: result.rows.map((r) => ({ id: r.id, due_date: r.due_date, amount: r.amount, status: r.status })),
+          });
+          showToast("Parcelas atualizadas.");
+          closeModal();
+          refreshCurrentView();
+        } catch (e) { showToast(e.message, true); }
+      }, () => {});
+    });
   }
 
   document.getElementById("btnSaveTransaction").addEventListener("click", async () => {

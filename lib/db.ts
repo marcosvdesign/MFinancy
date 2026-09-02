@@ -1053,6 +1053,88 @@ export async function convertToInstallments(userId: string, transactionId: strin
   return results;
 }
 
+export interface InstallmentEditEntry extends InstallmentScheduleEntry {
+  id?: string;
+}
+
+/** Atualiza o cronograma de um parcelamento JA EXISTENTE (ao contrario de
+ * convertToInstallments, que so funciona em lancamento avulso). Cada linha
+ * do novo cronograma com `id` atualiza a parcela correspondente; sem `id`
+ * vira uma parcela nova; parcelas antigas que sumiram do cronograma sao
+ * excluidas. Numera/renumera installment_number e installment_total pra
+ * todo o grupo de acordo com a ordem enviada. */
+export async function updateInstallmentSchedule(
+  userId: string,
+  transactionId: string,
+  schedule: InstallmentEditEntry[]
+): Promise<Transaction[] | { error: string }> {
+  const existing = await getTransactionById(userId, transactionId);
+  if (!existing) return { error: "Lançamento não encontrado." };
+  if (!existing.installment_group_id) return { error: "Este lançamento não faz parte de um parcelamento." };
+  if (!Array.isArray(schedule) || schedule.length < 1) return { error: "Informe ao menos uma parcela." };
+
+  const groupId = existing.installment_group_id;
+  const { rows: memberRows } = await sql.query(
+    `SELECT id FROM transactions WHERE installment_group_id=$1 AND user_id=$2`,
+    [groupId, userId]
+  );
+  const memberIds = new Set(memberRows.map((r: any) => r.id as string));
+
+  const total = schedule.length;
+  const keepIds = new Set<string>();
+  const results: Transaction[] = [];
+
+  for (let i = 0; i < total; i++) {
+    const entry = schedule[i];
+    const status = entry.status || "pendente";
+    const amount = round2(Number(entry.amount));
+    const paidDate = status === "pago" ? entry.due_date : null;
+
+    if (entry.id && memberIds.has(entry.id)) {
+      keepIds.add(entry.id);
+      const { rows } = await sql.query(
+        `UPDATE transactions SET due_date=$1, amount=$2, status=$3, paid_date=$4,
+           installment_number=$5, installment_total=$6
+         WHERE id=$7 AND user_id=$8 RETURNING *`,
+        [entry.due_date, amount, status, paidDate, i + 1, total, entry.id, userId]
+      );
+      results.push(mapTransaction(rows[0]));
+    } else {
+      const row = await insertTransactionRow(userId, {
+        description: existing.description,
+        amount,
+        group: existing.group,
+        account_id: existing.account_id,
+        category_id: existing.category_id,
+        contact_id: existing.contact_id,
+        cost_center_id: existing.cost_center_id,
+        tag_ids: existing.tag_ids || [],
+        notes: existing.notes,
+        status,
+        paid_date: paidDate,
+        id: newId(),
+        due_date: entry.due_date,
+        installment_group_id: groupId,
+        installment_number: i + 1,
+        installment_total: total,
+        recurrence_group_id: null,
+        recurrence_frequency: null,
+      });
+      results.push(row);
+    }
+  }
+
+  // Parcelas antigas que nao aparecem mais no cronograma enviado sao excluidas.
+  const toDelete = [...memberIds].filter((id) => !keepIds.has(id));
+  if (toDelete.length) {
+    await sql.query(`DELETE FROM transactions WHERE id = ANY($1::text[]) AND user_id = $2`, [toDelete, userId]);
+  }
+
+  await log(userId, "updated", "transaction", `Parcelas de "${existing.description}" editadas (${total}x)`);
+  results.sort((a, b) => (a.installment_number || 0) - (b.installment_number || 0));
+  return results;
+}
+
 /** Transforma um lancamento avulso ja existente em uma serie recorrente
  * (mesmo valor/descricao, repetido de acordo com a frequencia). Espelha a
  * ramificacao de recorrencia de createTransaction, so que a partir de uma
