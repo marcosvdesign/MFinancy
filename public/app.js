@@ -14,17 +14,28 @@ const MESES_ABR = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 /* Familia de icones do app: estilo outline, linhas espessas, cantos
  * arredondados (stroke-linecap/linejoin "round"). SVGs inline, sem
  * biblioteca externa. */
+// Regra do sistema de icones: todo path/circle com stroke leva
+// vector-effect="non-scaling-stroke", pra espessura do traco ficar
+// visualmente constante em pixels reais, nao importa o tamanho que o
+// icone seja exibido (sem isso, um icone reaproveitado em dois tamanhos
+// bem diferentes -- ex.: troféu pequeno no badge x grande na celebracao
+// -- parece ter traços de espessuras diferentes entre si).
 const ICONS = {
-  sun: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 2.5v2.5M12 19v2.5M4.2 4.2l1.8 1.8M18 18l1.8 1.8M2.5 12H5M19 12h2.5M4.2 19.8L6 18M18 6l1.8-1.8"/></svg>',
-  moon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8.5 8.5 0 1110.2 4a7 7 0 009.8 10.5z"/></svg>',
-  eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.8-7 10-7 10 7 10 7-3.8 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>',
-  eyeOff: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18"/><path d="M10.6 5.2A10.8 10.8 0 0112 5c6.2 0 10 7 10 7a17.9 17.9 0 01-3.4 4.3M6.5 6.6C4 8.3 2 12 2 12s3.8 7 10 7a10.4 10.4 0 004.2-.9"/><path d="M9.9 9.9a3 3 0 004.2 4.2"/></svg>',
-  starFilled: '<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M12 3l2.6 5.9 6.4.6-4.9 4.3 1.5 6.3L12 16.9 6.4 20.1l1.5-6.3-4.9-4.3 6.4-.6z"/></svg>',
-  starOutline: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"><path d="M12 3l2.6 5.9 6.4.6-4.9 4.3 1.5 6.3L12 16.9 6.4 20.1l1.5-6.3-4.9-4.3 6.4-.6z"/></svg>',
-  chevronDown: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>',
-  trophy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 01-10 0V4z"/><path d="M7 5H4a1 1 0 00-1 1v1a4 4 0 004 4M17 5h3a1 1 0 011 1v1a4 4 0 01-4 4"/></svg>',
-  alertTriangle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5L2.5 20h19L12 3.5z"/><path d="M12 10v4.5"/><circle cx="12" cy="17.5" r="0.6" fill="currentColor" stroke="none"/></svg>',
-  repeat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2l4 4-4 4"/><path d="M3 11V9a4 4 0 014-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>',
+  sun: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.5" vector-effect="non-scaling-stroke"/><path d="M12 2.5v2.5M12 19v2.5M4.2 4.2l1.8 1.8M18 18l1.8 1.8M2.5 12H5M19 12h2.5M4.2 19.8L6 18M18 6l1.8-1.8" vector-effect="non-scaling-stroke"/></svg>',
+  moon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8.5 8.5 0 1110.2 4a7 7 0 009.8 10.5z" vector-effect="non-scaling-stroke"/></svg>',
+  eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.8-7 10-7 10 7 10 7-3.8 7-10 7-10-7-10-7z" vector-effect="non-scaling-stroke"/><circle cx="12" cy="12" r="3" vector-effect="non-scaling-stroke"/></svg>',
+  eyeOff: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18" vector-effect="non-scaling-stroke"/><path d="M10.6 5.2A10.8 10.8 0 0112 5c6.2 0 10 7 10 7a17.9 17.9 0 01-3.4 4.3M6.5 6.6C4 8.3 2 12 2 12s3.8 7 10 7a10.4 10.4 0 004.2-.9" vector-effect="non-scaling-stroke"/><path d="M9.9 9.9a3 3 0 004.2 4.2" vector-effect="non-scaling-stroke"/></svg>',
+  starFilled: '<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M12 3l2.6 5.9 6.4.6-4.9 4.3 1.5 6.3L12 16.9 6.4 20.1l1.5-6.3-4.9-4.3 6.4-.6z" vector-effect="non-scaling-stroke"/></svg>',
+  starOutline: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"><path d="M12 3l2.6 5.9 6.4.6-4.9 4.3 1.5 6.3L12 16.9 6.4 20.1l1.5-6.3-4.9-4.3 6.4-.6z" vector-effect="non-scaling-stroke"/></svg>',
+  chevronDown: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6" vector-effect="non-scaling-stroke"/></svg>',
+  trophy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 01-10 0V4z" vector-effect="non-scaling-stroke"/><path d="M7 5H4a1 1 0 00-1 1v1a4 4 0 004 4M17 5h3a1 1 0 011 1v1a4 4 0 01-4 4" vector-effect="non-scaling-stroke"/></svg>',
+  alertTriangle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5L2.5 20h19L12 3.5z" vector-effect="non-scaling-stroke"/><path d="M12 10v4.5" vector-effect="non-scaling-stroke"/><circle cx="12" cy="17.5" r="0.6" fill="currentColor" stroke="none"/></svg>',
+  repeat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2l4 4-4 4" vector-effect="non-scaling-stroke"/><path d="M3 11V9a4 4 0 014-4h14" vector-effect="non-scaling-stroke"/><path d="M7 22l-4-4 4-4" vector-effect="non-scaling-stroke"/><path d="M21 13v2a4 4 0 01-4 4H3" vector-effect="non-scaling-stroke"/></svg>',
+  checkCircle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" vector-effect="non-scaling-stroke"/><path d="M8.5 12.5l2.5 2.5 5-5" vector-effect="non-scaling-stroke"/></svg>',
+  chevronUp: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6" vector-effect="non-scaling-stroke"/></svg>',
+  pencil: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l4.5-1L19 8.5a2 2 0 000-2.8l-.7-.7a2 2 0 00-2.8 0L5 15.5 4 20z" vector-effect="non-scaling-stroke"/></svg>',
+  trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2M6 7l1 13a1 1 0 001 1h8a1 1 0 001-1l1-13" vector-effect="non-scaling-stroke"/></svg>',
+  plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14" vector-effect="non-scaling-stroke"/></svg>',
 };
 
 function round2(n) { return Math.round((n + Number.EPSILON) * 100) / 100; }
@@ -662,7 +673,7 @@ async function loadDashboard() {
             <div class="meta">${escapeHtml(t.category_name || "Sem categoria")} · venceu ${formatDateBR(t.due_date)}</div></div>
           <div class="negative">${formatCurrency(t.amount)}</div>
         </div>`).join("")
-    : `<div class="empty-state">Nenhuma conta vencida 👍</div>`;
+    : `<div class="empty-state empty-state-icon">${ICONS.checkCircle}<span>Nenhuma conta vencida</span></div>`;
 
   document.getElementById("dreDashboard").innerHTML = renderDreHtml(data.dre);
 
@@ -690,19 +701,25 @@ async function loadDashboard() {
 // Meta financeira (dashboard)
 // ---------------------------------------------------------------------
 
-/** Mostra o progresso da meta financeira de acordo com o saldo atual real
- * (nao muda com o mes selecionado no dashboard, ja que saldo_atual sempre
- * reflete o saldo de hoje). "Alcançada" quando o saldo atinge o valor da
- * meta; "atrasada" quando o prazo passou sem alcançar. */
-function renderMetaPanel() {
-  const content = document.getElementById("metaContent");
-  if (!content) return;
-  const goal = state.settings?.prefs?.goal;
-  if (!goal || !goal.name) {
-    content.innerHTML = `<div class="card-sub">Nenhuma meta definida ainda. Clique em "Editar meta" para criar uma.</div>`;
-    return;
-  }
-  const saldo = state.lastDashboardData ? state.lastDashboardData.saldo_atual : 0;
+/** Cada meta tem um "escopo" -- o saldo contra o qual ela e comparada:
+ * saldo geral (todas as contas), o saldo de um perfil, ou o saldo de uma
+ * conta especifica. Sempre busca as contas na hora (nao usa
+ * state.lastDashboardData), pra nao depender do filtro de perfil que
+ * estiver ativo no momento no Dashboard. */
+function metaScopeLabel(scope) {
+  if (!scope || scope.type === "all") return "Saldo geral";
+  if (scope.type === "profile") return "Perfil: " + (state.profiles.find((p) => p.id === scope.id)?.name || "?");
+  if (scope.type === "account") return "Conta: " + (state.accounts.find((a) => a.id === scope.id)?.name || "?");
+  return "Saldo geral";
+}
+function metaScopeBalance(scope, accounts) {
+  if (!scope || scope.type === "all") return accounts.reduce((s, a) => s + Number(a.balance || 0), 0);
+  if (scope.type === "profile") return accounts.filter((a) => a.profile_id === scope.id).reduce((s, a) => s + Number(a.balance || 0), 0);
+  if (scope.type === "account") return Number(accounts.find((a) => a.id === scope.id)?.balance || 0);
+  return 0;
+}
+
+function goalCardHtml(goal, saldo) {
   const target = Number(goal.target_amount) || 0;
   const pct = target > 0 ? Math.max(0, Math.min(100, Math.round((saldo / target) * 1000) / 10)) : 0;
   const today = todayIso();
@@ -713,67 +730,127 @@ function renderMetaPanel() {
   if (achieved) statusHtml = `<div class="meta-status meta-status-achieved">${ICONS.trophy}<span>Meta alcançada</span></div>`;
   else if (overdue) statusHtml = `<div class="meta-status meta-status-overdue">${ICONS.alertTriangle}<span>Meta atrasada</span></div>`;
 
-  content.innerHTML = `
-    <div class="meta-name">${escapeHtml(goal.name)}</div>
-    <div class="card-sub" style="margin-bottom:10px;">Prazo: ${goal.deadline ? formatDateBR(goal.deadline) : "-"}</div>
-    <div class="progress-bar"><div class="progress-fill ${achieved ? "progress-fill-green" : overdue ? "progress-fill-red" : "progress-fill-green"}" style="width:${pct}%;"></div></div>
-    <div class="mini-row" style="padding:6px 0;"><span>Saldo atual</span><b>${formatCurrency(saldo)}</b></div>
-    <div class="mini-row" style="padding:6px 0; border-bottom:none;"><span>Meta</span><b>${formatCurrency(target)}</b></div>
-    ${statusHtml}
-    <button type="button" class="btn-primary" id="btnResgatarMeta" style="margin-top:10px; width:100%;" ${achieved ? "" : "disabled"}>Resgatar meta?</button>
-    <div id="metaTrophyBox" class="meta-trophy-box hidden">${ICONS.trophy}<span>Parabéns, meta resgatada!</span></div>
+  return `
+    <div class="meta-card" data-goal-id="${goal.id}">
+      <div class="meta-card-head">
+        <div>
+          <div class="meta-name">${escapeHtml(goal.name)}</div>
+          <div class="card-sub">Prazo: ${goal.deadline ? formatDateBR(goal.deadline) : "-"} · ${escapeHtml(metaScopeLabel(goal.scope))}</div>
+        </div>
+        <div class="meta-card-actions">
+          <button type="button" class="icon-btn meta-edit-btn" title="Editar meta">${ICONS.pencil}</button>
+          <button type="button" class="icon-btn meta-delete-btn" title="Remover meta">${ICONS.trash}</button>
+        </div>
+      </div>
+      <div class="progress-bar"><div class="progress-fill ${overdue ? "progress-fill-red" : "progress-fill-green"}" style="width:${pct}%;"></div></div>
+      <div class="mini-row" style="padding:6px 0;"><span>Saldo atual</span><b>${formatCurrency(saldo)}</b></div>
+      <div class="mini-row" style="padding:6px 0; border-bottom:none;"><span>Meta</span><b>${formatCurrency(target)}</b></div>
+      ${statusHtml}
+      <button type="button" class="btn-primary meta-resgatar-btn" style="margin-top:10px; width:100%;" ${achieved ? "" : "disabled"}>Resgatar meta</button>
+      <div class="meta-trophy-box hidden">${ICONS.trophy}<span>Parabéns, meta resgatada!</span></div>
+    </div>
   `;
-  document.getElementById("btnResgatarMeta")?.addEventListener("click", () => {
-    if (!achieved) return;
-    document.getElementById("metaTrophyBox")?.classList.remove("hidden");
-    showToast("Parabéns! Meta resgatada.");
+}
+
+/** Mostra o progresso de todas as metas financeiras cadastradas. Busca as
+ * contas na hora (em vez de usar state.lastDashboardData) pra cada meta
+ * poder ser comparada com o saldo certo (geral, de perfil ou de conta)
+ * independente do filtro de perfil ativo no Dashboard. */
+async function renderMetaPanel() {
+  const content = document.getElementById("metaContent");
+  if (!content) return;
+  const goals = state.settings?.prefs?.goals || [];
+  if (!goals.length) {
+    content.innerHTML = `<div class="card-sub">Nenhuma meta definida ainda. Clique em "+ Nova meta" para criar uma.</div>`;
+    return;
+  }
+  let accounts;
+  try { accounts = await api("GET", "/api/accounts"); } catch (e) { return showToast(e.message, true); }
+
+  content.innerHTML = goals.map((goal) => goalCardHtml(goal, metaScopeBalance(goal.scope, accounts))).join("");
+
+  content.querySelectorAll(".meta-card").forEach((card) => {
+    const goalId = card.dataset.goalId;
+    const goal = goals.find((g) => g.id === goalId);
+    card.querySelector(".meta-edit-btn")?.addEventListener("click", () => openMetaEditPopup(goal));
+    card.querySelector(".meta-delete-btn")?.addEventListener("click", async () => {
+      if (!(await appConfirm(`Remover a meta "${goal.name}"?`))) return;
+      await saveGoals(goals.filter((g) => g.id !== goalId));
+      showToast("Meta removida.");
+    });
+    card.querySelector(".meta-resgatar-btn")?.addEventListener("click", (e) => {
+      if (e.currentTarget.disabled) return;
+      card.querySelector(".meta-trophy-box")?.classList.remove("hidden");
+      showToast("Parabéns! Meta resgatada.");
+    });
   });
 }
 
-function openMetaEditPopup() {
-  const goal = state.settings?.prefs?.goal || {};
-  openModal2("Meta financeira", `
-    <div class="form-row"><label>Nome da meta</label><input type="text" id="meta_name" placeholder="Ex: Reserva de emergência" value="${escapeHtml(goal.name || "")}" /></div>
+async function saveGoals(goals) {
+  try {
+    const updated = await api("PUT", "/api/settings", { prefs: { goals } });
+    state.settings = updated;
+    await renderMetaPanel();
+  } catch (e) { showToast(e.message, true); }
+}
+
+function metaScopeSelectOptions(selected) {
+  const sel = selected || { type: "all" };
+  const isSelected = (type, id) => sel.type === type && (type === "all" || sel.id === id);
+  let html = `<option value="all" ${isSelected("all") ? "selected" : ""}>Saldo geral (todas as contas)</option>`;
+  if (state.profiles.length) {
+    html += `<optgroup label="Perfil">${state.profiles.map((p) =>
+      `<option value="profile:${p.id}" ${isSelected("profile", p.id) ? "selected" : ""}>${escapeHtml(p.name)}</option>`
+    ).join("")}</optgroup>`;
+  }
+  if (state.accounts.length) {
+    html += `<optgroup label="Conta">${state.accounts.map((a) =>
+      `<option value="account:${a.id}" ${isSelected("account", a.id) ? "selected" : ""}>${escapeHtml(accountLabel(a))}</option>`
+    ).join("")}</optgroup>`;
+  }
+  return html;
+}
+
+/** `goal` informado = editar meta existente; omitido = criar uma nova. */
+function openMetaEditPopup(goal) {
+  const isEdit = !!goal;
+  openModal2(isEdit ? "Editar meta" : "Nova meta", `
+    <div class="form-row"><label>Nome da meta</label><input type="text" id="meta_name" placeholder="Ex: Reserva de emergência" value="${escapeHtml(goal?.name || "")}" /></div>
     <div class="form-row"><label>Valor da meta (R$)</label>
       <div class="value-input-wrap">
-        <input type="text" id="meta_amount" value="${goal.target_amount ? toMaskedString(goal.target_amount) : ""}" />
+        <input type="text" id="meta_amount" value="${goal?.target_amount ? toMaskedString(goal.target_amount) : ""}" />
         <button type="button" class="calc-trigger" data-calc-target="meta_amount">🖩</button>
       </div>
     </div>
-    <div class="form-row"><label>Prazo da meta</label><input type="date" id="meta_deadline" value="${goal.deadline || ""}" /></div>
+    <div class="form-row"><label>Prazo da meta</label><input type="date" id="meta_deadline" value="${goal?.deadline || ""}" /></div>
+    <div class="form-row"><label>Relacionar a</label>
+      <select id="meta_scope">${metaScopeSelectOptions(goal?.scope)}</select>
+    </div>
     <div class="form-actions">
-      ${goal.name ? `<button class="btn-secondary" id="meta_clear" style="margin-right:auto;">Remover meta</button>` : ""}
       <button class="btn-secondary" id="meta_cancel">Cancelar</button>
       <button class="btn-primary" id="meta_save">Salvar</button>
     </div>
   `);
   attachCustomDatePicker("meta_deadline");
   maskCurrencyInput(document.getElementById("meta_amount"));
+  styleSelectAsCustomDropdown("meta_scope");
   document.getElementById("meta_cancel").addEventListener("click", closeModal2);
-  document.getElementById("meta_clear")?.addEventListener("click", async () => {
-    try {
-      const updated = await api("PUT", "/api/settings", { prefs: { goal: null } });
-      state.settings = updated;
-      closeModal2();
-      renderMetaPanel();
-      showToast("Meta removida.");
-    } catch (e) { showToast(e.message, true); }
-  });
   document.getElementById("meta_save").addEventListener("click", async () => {
     const name = document.getElementById("meta_name").value.trim();
     const target_amount = parseMaskedCurrency(document.getElementById("meta_amount").value);
     const deadline = document.getElementById("meta_deadline").value;
+    const scopeValue = document.getElementById("meta_scope").value;
+    const [scopeType, scopeId] = scopeValue.includes(":") ? scopeValue.split(":") : [scopeValue, null];
     if (!name || !target_amount || !deadline) return showToast("Preencha nome, valor e prazo.", true);
-    try {
-      const updated = await api("PUT", "/api/settings", { prefs: { goal: { name, target_amount, deadline } } });
-      state.settings = updated;
-      closeModal2();
-      renderMetaPanel();
-      showToast("Meta salva.");
-    } catch (e) { showToast(e.message, true); }
+    const goals = state.settings?.prefs?.goals || [];
+    const newGoal = { id: goal?.id || crypto.randomUUID(), name, target_amount, deadline, scope: { type: scopeType, id: scopeId } };
+    const newGoals = isEdit ? goals.map((g) => (g.id === goal.id ? newGoal : g)) : [...goals, newGoal];
+    closeModal2();
+    await saveGoals(newGoals);
+    showToast("Meta salva.");
   });
 }
-document.getElementById("btnEditMeta")?.addEventListener("click", openMetaEditPopup);
+document.getElementById("btnEditMeta")?.addEventListener("click", () => openMetaEditPopup());
 
 /** Uma linha do "Comparativo mês anterior": valor atual + variação (seta,
  * valor, %) + barra de progresso mostrando a intensidade da variação. */
@@ -1652,6 +1729,43 @@ document.addEventListener("click", (e) => {
   if (!e.target.closest("#datePickerPopup") && !e.target.closest(".cell-date") && !e.target.closest(".custom-date-display")) closeDatePickerPopup();
 });
 
+/** Envolve um <input type="number"> com um par de botoes proprios
+ * (subir/descer), no lugar das setas nativas do navegador -- essas nao
+ * seguem o tema escuro do app. O <input> continua sendo a fonte da
+ * verdade; os botoes so leem/escrevem nele e disparam input+change. */
+function attachNumberSpinner(inputOrId) {
+  const input = typeof inputOrId === "string" ? document.getElementById(inputOrId) : inputOrId;
+  if (!input || input.dataset.spinnerStyled) return;
+  input.dataset.spinnerStyled = "1";
+
+  const wrap = document.createElement("div");
+  wrap.className = "number-input-wrap";
+  input.parentNode.insertBefore(wrap, input);
+  wrap.appendChild(input);
+
+  const controls = document.createElement("div");
+  controls.className = "number-spinner-controls";
+  controls.innerHTML = `
+    <button type="button" class="number-spinner-btn" data-dir="up">${ICONS.chevronUp}</button>
+    <button type="button" class="number-spinner-btn" data-dir="down">${ICONS.chevronDown}</button>
+  `;
+  wrap.appendChild(controls);
+
+  controls.querySelectorAll(".number-spinner-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const step = Number(input.step) || 1;
+      const min = input.min !== "" ? Number(input.min) : -Infinity;
+      const max = input.max !== "" ? Number(input.max) : Infinity;
+      let val = Number(input.value) || 0;
+      val = btn.dataset.dir === "up" ? val + step : val - step;
+      val = Math.min(max, Math.max(min, val));
+      input.value = val;
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+  });
+}
+
 /** Converte um <input type="date"> nativo num campo de texto com a
  * estilizacao do app: mostra dd/mm/aaaa, abre o calendario padrao ao
  * clicar, e tambem aceita digitacao manual nesse formato. O <input>
@@ -1977,6 +2091,7 @@ function openRepetirPopup(existing, onSave, onCancel) {
       <button class="btn-primary" id="rf_save">Salvar</button>
     </div>
   `);
+  attachNumberSpinner("rf_occurrences");
   document.getElementById("rf_cancel").addEventListener("click", () => { closeModal2(); onCancel?.(); });
   document.getElementById("rf_save").addEventListener("click", () => {
     const frequency = document.querySelector('input[name="rf_freq"]:checked').value;
@@ -2171,6 +2286,7 @@ function openParcelasPopup(defaults, existing, onSave, onCancel) {
   renderTable();
 
   maskCurrencyInput(document.getElementById("pf_valor"));
+  attachNumberSpinner("pf_numero");
   styleSelectAsCustomDropdown("pf_modo");
   styleSelectAsCustomDropdown("pf_frequencia");
   document.getElementById("pf_modo").addEventListener("change", (e) => {

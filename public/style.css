@@ -315,6 +315,8 @@ nav { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
 .mini-row .desc { font-weight: 600; }
 .mini-row .meta { color: var(--text-muted); font-size: 12px; }
 .empty-state { color: var(--text-muted); font-size: 13px; padding: 14px 0; text-align: center; }
+.empty-state-icon { display: flex; align-items: center; justify-content: center; gap: 7px; }
+.empty-state-icon svg { width: 16px; height: 16px; color: var(--green); flex-shrink: 0; }
 
 .compare-item { padding: 9px 0; border-bottom: 1px solid var(--border); }
 .compare-item:last-child { border-bottom: none; }
@@ -508,6 +510,17 @@ nav { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
 
 /* ---------- Meta financeira (dashboard) ---------- */
 
+.meta-card { border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+.meta-card + .meta-card { margin-top: 12px; }
+.meta-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.meta-card-actions { display: flex; gap: 2px; flex-shrink: 0; }
+.icon-btn {
+  border: none; background: transparent; cursor: pointer; padding: 5px; border-radius: 6px;
+  color: var(--text-muted); display: inline-flex; align-items: center; justify-content: center;
+}
+.icon-btn svg { width: 15px; height: 15px; }
+.icon-btn:hover { background: var(--hover-tint); color: var(--text); }
+.meta-delete-btn:hover { color: var(--red); }
 .meta-name { font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 2px; }
 .meta-status {
   display: flex; align-items: center; gap: 8px; margin-top: 10px; padding: 9px 12px;
@@ -753,6 +766,29 @@ nav { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
   font-size: 15px; padding: 0 10px; color: var(--text-muted); flex-shrink: 0;
 }
 .calc-trigger:hover { background: var(--hover-tint); color: var(--primary); }
+
+/* ---------- Spinner customizado (input type=number) ---------- */
+/* Esconde as setas nativas do navegador (cinza/branco, fora do tema
+   escuro) e usa um par de botões proprios ao lado, no mesmo padrao visual
+   do botao de calculadora ao lado do campo de valor. */
+
+input[type="number"] { -moz-appearance: textfield; }
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+.number-input-wrap { display: flex; gap: 6px; align-items: stretch; }
+.number-input-wrap input { flex: 1; }
+.number-spinner-controls {
+  display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: 8px;
+  overflow: hidden; flex-shrink: 0;
+}
+.number-spinner-btn {
+  border: none; background: var(--surface); color: var(--text-muted); cursor: pointer;
+  padding: 0 8px; display: flex; align-items: center; justify-content: center; flex: 1;
+}
+.number-spinner-btn:not(:last-child) { border-bottom: 1px solid var(--border); }
+.number-spinner-btn:hover { background: var(--hover-tint); color: var(--primary); }
+.number-spinner-btn svg { width: 9px; height: 9px; }
 
 .calc-popup {
   position: fixed; z-index: 80;
