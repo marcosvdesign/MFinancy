@@ -69,6 +69,22 @@ const state = {
 // Helpers gerais
 // ---------------------------------------------------------------------
 
+/** Os popups/menus flutuantes fecham quando o usuario clica "fora" deles
+ * (ouvindo "click" no document). Mas o evento "click" carrega o alvo de
+ * onde o mouse SOLTOU -- se o usuario comeca a selecionar um texto dentro
+ * de um campo do popup (arrastando o mouse) e solta um pouco depois da
+ * borda, o clique "conta" como fora e fecha o popup no meio da selecao.
+ * Por isso guardamos onde o mouse DESCEU (mousedown, fase de captura, sempre
+ * dispara antes de qualquer stopPropagation em fase de bubble) e usamos
+ * esse alvo -- em vez do alvo do "click" -- pra decidir se foi realmente
+ * fora do popup. */
+let _lastMouseDownTarget = null;
+document.addEventListener("mousedown", (e) => { _lastMouseDownTarget = e.target; }, true);
+function isOutside(e, ...selectors) {
+  const target = _lastMouseDownTarget || e.target;
+  return !selectors.some((sel) => target.closest(sel));
+}
+
 function formatCurrency(v) {
   return (v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
@@ -375,11 +391,12 @@ function positionGlobalDropdown(triggerEl) {
   const rect = triggerEl.getBoundingClientRect();
   const menuWidth = Math.max(rect.width, 170);
   menu.style.minWidth = `${menuWidth}px`;
-  menu.style.top = `${rect.bottom + 6}px`;
-  let left = rect.left;
-  if (left + menuWidth > window.innerWidth - 8) left = window.innerWidth - menuWidth - 8;
-  menu.style.left = `${Math.max(8, left)}px`;
+  // Precisa estar visivel ANTES de medir/posicionar (positionFloatingElement
+  // le offsetWidth/offsetHeight, que ficam 0 com display:none) -- senao a
+  // logica de virar pra cima quando nao ha espaco embaixo nunca dispara e a
+  // lista pode sair da tela por baixo.
   menu.classList.remove("hidden");
+  positionFloatingElement(menu, triggerEl, { fallbackWidth: menuWidth });
 }
 function closeGlobalDropdown() {
   const menu = document.getElementById("globalDropdownMenu");
@@ -388,7 +405,7 @@ function closeGlobalDropdown() {
   if (menu._openedBy) menu._openedBy.closest(".custom-select")?.classList.remove("open");
   menu._openedBy = null;
 }
-document.addEventListener("click", closeGlobalDropdown);
+document.addEventListener("click", (e) => { if (isOutside(e, "#globalDropdownMenu")) closeGlobalDropdown(); });
 // Scroll na pagina por tras fecha o menu (evita ele ficar "grudado" no
 // lugar errado); mas rolar a PROPRIA lista de opcoes (quando ela tem
 // mais itens do que cabe, com overflow-y:auto) tambem dispara "scroll"
@@ -511,7 +528,9 @@ function openModal(title, bodyHtml) {
 }
 function closeModal() { document.getElementById("modalOverlay").classList.add("hidden"); }
 document.getElementById("modalClose").addEventListener("click", closeModal);
-document.getElementById("modalOverlay").addEventListener("click", (e) => { if (e.target.id === "modalOverlay") closeModal(); });
+document.getElementById("modalOverlay").addEventListener("click", (e) => {
+  if (e.target.id === "modalOverlay" && (_lastMouseDownTarget?.id === "modalOverlay")) closeModal();
+});
 
 // Esc fecha o popup Adicionar/Editar lancamento -- o modal2 (Parcelas,
 // Repetir, escolha de escopo) fecha primeiro, por estar empilhado por cima.
@@ -1015,7 +1034,7 @@ function renderMonthYearPicker(triggerEl) {
 }
 function closeMonthYearPicker() { document.getElementById("monthYearPickerPopup")?.classList.add("hidden"); }
 document.addEventListener("click", (e) => {
-  if (!e.target.closest("#monthYearPickerPopup") && !e.target.closest(".month-label-clickable")) closeMonthYearPicker();
+  if (isOutside(e, "#monthYearPickerPopup", ".month-label-clickable")) closeMonthYearPicker();
 });
 document.getElementById("btnToggleSaldoPerfil").addEventListener("click", () => {
   document.getElementById("saldoPorPerfil").classList.toggle("hidden");
@@ -1784,7 +1803,7 @@ function renderDatePicker() {
 }
 function closeDatePickerPopup() { document.getElementById("datePickerPopup")?.classList.add("hidden"); }
 document.addEventListener("click", (e) => {
-  if (!e.target.closest("#datePickerPopup") && !e.target.closest(".cell-date") && !e.target.closest(".custom-date-display")) closeDatePickerPopup();
+  if (isOutside(e, "#datePickerPopup", ".cell-date", ".custom-date-display")) closeDatePickerPopup();
 });
 
 /** Envolve um <input type="number"> com um par de botoes proprios
@@ -1927,7 +1946,7 @@ function attachCustomColorPicker(inputId) {
 }
 function closeColorPickerPopup() { document.getElementById("colorPickerPopup")?.classList.add("hidden"); }
 document.addEventListener("click", (e) => {
-  if (!e.target.closest("#colorPickerPopup") && !e.target.closest(".custom-color-swatch")) closeColorPickerPopup();
+  if (isOutside(e, "#colorPickerPopup", ".custom-color-swatch")) closeColorPickerPopup();
 });
 
 // ---- Popup de escolha (contato / categoria), com busca e "+ novo" ----
@@ -1999,7 +2018,7 @@ function openPickerPopup(triggerEl, t, kind) {
 }
 function closePickerPopup() { document.getElementById("pickerPopup")?.classList.add("hidden"); }
 document.addEventListener("click", (e) => {
-  if (!e.target.closest("#pickerPopup") && !e.target.closest(".cell-contact") && !e.target.closest(".cell-category")) closePickerPopup();
+  if (isOutside(e, "#pickerPopup", ".cell-contact", ".cell-category")) closePickerPopup();
 });
 
 async function handleTogglePago(checkbox, items) {
@@ -2077,7 +2096,7 @@ document.getElementById("searchPopupInput")?.addEventListener("keydown", (e) => 
   if (e.key === "Escape") { closeSearchPopup(); }
 });
 document.addEventListener("click", (e) => {
-  if (!e.target.closest("#searchPopup") && !e.target.closest("#btnSearchToggle")) {
+  if (isOutside(e, "#searchPopup", "#btnSearchToggle")) {
     const popup = document.getElementById("searchPopup");
     if (popup && !popup.classList.contains("hidden")) applySearchPopup();
   }
@@ -2102,7 +2121,9 @@ function openModal2(title, bodyHtml) {
 }
 function closeModal2() { document.getElementById("modalOverlay2").classList.add("hidden"); }
 document.getElementById("modalClose2")?.addEventListener("click", closeModal2);
-document.getElementById("modalOverlay2")?.addEventListener("click", (e) => { if (e.target.id === "modalOverlay2") closeModal2(); });
+document.getElementById("modalOverlay2")?.addEventListener("click", (e) => {
+  if (e.target.id === "modalOverlay2" && (_lastMouseDownTarget?.id === "modalOverlay2")) closeModal2();
+});
 
 // Datas: mesma matematica (UTC) usada no backend, pra gerar exatamente as
 // mesmas datas que o servidor geraria.
@@ -3918,7 +3939,7 @@ document.addEventListener("click", (e) => {
     if (targetInput) openCalcPopup(trigger, targetInput);
     return;
   }
-  if (!e.target.closest("#calcPopup")) closeCalcPopup();
+  if (isOutside(e, "#calcPopup")) closeCalcPopup();
 });
 
 document.getElementById("calcPopup")?.addEventListener("click", (e) => {
