@@ -255,39 +255,46 @@
         <button class="subtab subtab-transfer" data-group="transferencias"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h14l-3.5-3.5M20 17H6l3.5 3.5"/></svg> Transferências</button>
       </div>
 
+      <div class="filters">
+        <select id="filterPeriodo">
+          <option value="mes_atual">Este mês</option>
+          <option value="mes_passado">Mês passado</option>
+          <option value="ano_atual">Este ano</option>
+          <option value="tudo">Tudo</option>
+          <option value="mes_especifico" class="hidden">Mês específico</option>
+          <option value="custom">Personalizado</option>
+        </select>
+        <input type="date" id="filterStart" class="hidden" />
+        <span id="filterAteLabel" class="hidden">até</span>
+        <input type="date" id="filterEnd" class="hidden" />
+        <select id="filterStatus">
+          <option value="">Todos os status</option>
+          <option value="pendente">Não pagos</option>
+          <option value="pago">Pagos</option>
+        </select>
+        <input type="text" id="filterSearch" class="hidden" placeholder="Buscar descrição..." />
+        <button type="button" id="btnSearchToggle" class="filter-search-btn" title="Buscar por descrição">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        </button>
+        <button id="btnFiltrar" class="btn-secondary">Filtrar</button>
+        <button class="btn-primary" id="btnNovoLancamento" style="margin-left:auto;">+ Adicionar</button>
+      </div>
+
+      <div class="bulk-toolbar hidden" id="bulkToolbar">
+        <button type="button" class="bulk-toolbar-delete" id="bulkDeleteBtn">Excluir</button>
+        <span id="bulkToolbarSummary">0 transações selecionadas - R$ 0,00</span>
+        <span class="bulk-toolbar-hint">clique com o botão direito para mais opções</span>
+        <button type="button" class="bulk-toolbar-close" id="bulkClearBtn">✕</button>
+      </div>
+
+      <div class="bulk-toolbar hidden" id="transferBulkToolbar">
+        <button type="button" class="bulk-toolbar-delete" id="transferBulkDeleteBtn">Excluir</button>
+        <span id="transferBulkToolbarSummary">0 transferências selecionadas - R$ 0,00</span>
+        <span class="bulk-toolbar-hint">clique com o botão direito para mais opções</span>
+        <button type="button" class="bulk-toolbar-close" id="transferBulkClearBtn">✕</button>
+      </div>
+
       <div id="groupPanel">
-        <div class="filters">
-          <select id="filterPeriodo">
-            <option value="mes_atual">Este mês</option>
-            <option value="mes_passado">Mês passado</option>
-            <option value="ano_atual">Este ano</option>
-            <option value="tudo">Tudo</option>
-            <option value="mes_especifico" class="hidden">Mês específico</option>
-            <option value="custom">Personalizado</option>
-          </select>
-          <input type="date" id="filterStart" class="hidden" />
-          <span id="filterAteLabel" class="hidden">até</span>
-          <input type="date" id="filterEnd" class="hidden" />
-          <select id="filterStatus">
-            <option value="">Todos os status</option>
-            <option value="pendente">Não pagos</option>
-            <option value="pago">Pagos</option>
-          </select>
-          <input type="text" id="filterSearch" class="hidden" placeholder="Buscar descrição..." />
-          <button type="button" id="btnSearchToggle" class="filter-search-btn" title="Buscar por descrição">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
-          </button>
-          <button id="btnFiltrar" class="btn-secondary">Filtrar</button>
-          <button class="btn-primary" id="btnNovoLancamento" style="margin-left:auto;">+ Adicionar</button>
-        </div>
-
-        <div class="bulk-toolbar hidden" id="bulkToolbar">
-          <button type="button" class="bulk-toolbar-delete" id="bulkDeleteBtn">Excluir</button>
-          <span id="bulkToolbarSummary">0 transações selecionadas - R$ 0,00</span>
-          <span class="bulk-toolbar-hint">clique com o botão direito para mais opções</span>
-          <button type="button" class="bulk-toolbar-close" id="bulkClearBtn">✕</button>
-        </div>
-
         <div style="overflow-x:auto;">
         <table class="data-table">
           <thead>
@@ -309,10 +316,23 @@
       </div>
 
       <div id="transfersPanel" class="hidden">
+        <div style="overflow-x:auto;">
         <table class="data-table">
-          <thead><tr><th>Data</th><th>De</th><th>Para</th><th>Valor</th><th>Observações</th><th></th></tr></thead>
+          <thead>
+            <tr>
+              <th style="width:34px;"><input type="checkbox" id="transferSelectAllCheckbox" /></th>
+              <th>Data</th>
+              <th>Descrição</th>
+              <th>Valor</th>
+              <th>Conta de Origem</th>
+              <th>Conta de Destino</th>
+              <th>Pago?</th>
+              <th></th>
+            </tr>
+          </thead>
           <tbody id="transfersBody"></tbody>
         </table>
+        </div>
       </div>
     </section>
 

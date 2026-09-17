@@ -6,8 +6,15 @@ import * as db from "@/lib/db";
 export async function GET(request: NextRequest) {
   return withErrorHandling(async () => {
     const userId = getUserId(request);
-    const profileId = request.nextUrl.searchParams.get("profile_id");
-    return NextResponse.json(await db.listTransfers(userId, profileId));
+    const sp = request.nextUrl.searchParams;
+    const filters: db.TransferFilters = {
+      start: sp.get("start") || undefined,
+      end: sp.get("end") || undefined,
+      status: sp.get("status") || undefined,
+      search: sp.get("search") || undefined,
+      profile_id: sp.get("profile_id") || undefined,
+    };
+    return NextResponse.json(await db.listTransfers(userId, filters));
   });
 }
 

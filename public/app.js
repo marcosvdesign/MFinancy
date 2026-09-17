@@ -58,6 +58,7 @@ const state = {
   lancFilterYear: new Date().getFullYear(),
   lancFilterMonth: new Date().getMonth() + 1,
   selectedTransactionIds: new Set(),
+  selectedTransferIds: new Set(),
   activeReport: { report: "despesas_receitas", side: null, label: "Despesas/Receitas" },
   activeConfig: "perfis",
   categoriesGroup: "recebimento",
@@ -1032,6 +1033,8 @@ document.querySelectorAll("#lancamentosSubtabs .subtab").forEach((btn) => {
     const isTransfer = state.lancamentosGroup === "transferencias";
     document.getElementById("groupPanel").classList.toggle("hidden", isTransfer);
     document.getElementById("transfersPanel").classList.toggle("hidden", !isTransfer);
+    document.getElementById("bulkToolbar").classList.add("hidden");
+    document.getElementById("transferBulkToolbar").classList.add("hidden");
     if (isTransfer) loadTransfers(); else loadTransactionsTable();
   });
 });
@@ -1070,7 +1073,7 @@ function openLancAccountMenu() {
       document.getElementById("lancAccountSelectLabel").textContent = lancAccountItems.find((i) => i.value === opt.dataset.value)?.label || "";
       closeGlobalDropdown();
       loadLancDashboard();
-      loadTransactionsTable();
+      if (state.lancamentosGroup === "transferencias") loadTransfers(); else loadTransactionsTable();
     });
   });
   document.getElementById("btnGerenciarContas")?.addEventListener("click", (e) => {
@@ -1182,7 +1185,7 @@ function applyLancMonthFilter() {
   const sel = document.getElementById("filterPeriodo");
   sel.value = "mes_especifico";
   sel.dispatchEvent(new Event("change", { bubbles: true }));
-  loadTransactionsTable();
+  if (state.lancamentosGroup === "transferencias") loadTransfers(); else loadTransactionsTable();
   loadLancDashboard(); // mini-dashboard acima da lista tambem segue o mes selecionado
 }
 document.getElementById("lancPrevMonth").addEventListener("click", () => {
@@ -1203,6 +1206,7 @@ function loadLancamentos() {
   const active = document.querySelector("#lancamentosSubtabs .subtab.active");
   state.lancamentosGroup = active ? active.dataset.group : "recebimento";
   state.selectedTransactionIds.clear();
+  state.selectedTransferIds.clear();
   updateLancMonthLabel();
   setLancAccountOptions();
   loadLancDashboard();
@@ -2036,7 +2040,9 @@ async function handleTransactionAction(action, id, items, groupId) {
   }
 }
 
-document.getElementById("btnFiltrar").addEventListener("click", loadTransactionsTable);
+document.getElementById("btnFiltrar").addEventListener("click", () => {
+  if (state.lancamentosGroup === "transferencias") loadTransfers(); else loadTransactionsTable();
+});
 
 // ---- Busca por descricao (icone de lupa que abre um popup, poupa espaco
 // na barra de filtros — importante pra ela caber numa unica linha) ----
@@ -2678,54 +2684,146 @@ function openTransactionModal(t, scope) {
   });
 }
 
-document.getElementById("btnNovoLancamento").addEventListener("click", () => openTransactionModal(null));
+document.getElementById("btnNovoLancamento").addEventListener("click", () => {
+  if (state.lancamentosGroup === "transferencias") {
+    document.getElementById("transferAddTrigger")?.click();
+  } else {
+    openTransactionModal(null);
+  }
+});
 
 // ---- Transferencias ----
 
+let _transfersTableReqId = 0;
 async function loadTransfers() {
+  const reqId = ++_transfersTableReqId;
+  const period = computePeriodRange(document.getElementById("filterPeriodo").value);
+  const params = {
+    profile_id: state.activeProfile,
+    start: period.start, end: period.end,
+    status: document.getElementById("filterStatus").value,
+    search: document.getElementById("filterSearch").value,
+  };
   let transfers;
-  try { transfers = await api("GET", "/api/transfers?" + qs({ profile_id: state.activeProfile })); }
+  try { transfers = await api("GET", "/api/transfers?" + qs(params)); }
   catch (e) { return showToast(e.message, true); }
+  if (reqId !== _transfersTableReqId) return;
+
   const accById = Object.fromEntries(state.accounts.map((a) => [a.id, a]));
+  state.lastTransferItems = transfers;
+
+  const visibleIds = new Set(transfers.map((t) => t.id));
+  Array.from(state.selectedTransferIds).forEach((id) => { if (!visibleIds.has(id)) state.selectedTransferIds.delete(id); });
+
+  // Sem uma conta especifica selecionada no filtro de Lancamentos, uma
+  // transferencia nao tem um "lado" natural pra colorir (ela sempre envolve
+  // duas contas) -- so aplica verde/vermelho quando o usuario ja escolheu de
+  // qual conta esta olhando o extrato.
+  const perspectiveAccountId = state.lancamentosAccountId;
+
   const body = document.getElementById("transfersBody");
-  const rowsHtml = transfers.map((tr) => `
-    <tr>
-      <td>${formatDateBR(tr.date)}</td>
-      <td>${escapeHtml(accById[tr.from_account_id]?.name || "-")}</td>
-      <td>${escapeHtml(accById[tr.to_account_id]?.name || "-")}</td>
-      <td>${formatCurrency(tr.amount)}</td>
-      <td>${escapeHtml(tr.notes || "-")}</td>
-      <td><div class="row-actions"><button data-id="${tr.id}" class="btn-danger">Excluir</button></div></td>
-    </tr>`).join("");
-  body.innerHTML = transferInlineRowHtml() + rowsHtml + (transfers.length ? "" : `<tr><td colspan="6"><div class="empty-state">Nenhuma transferência registrada ainda.</div></td></tr>`);
+  const rowsHtml = transfers.map((tr) => {
+    const checked = state.selectedTransferIds.has(tr.id);
+    let colorCls = "";
+    if (perspectiveAccountId) {
+      if (tr.to_account_id === perspectiveAccountId) colorCls = "positive";
+      else if (tr.from_account_id === perspectiveAccountId) colorCls = "negative";
+    }
+    return `
+      <tr data-transfer-row-id="${tr.id}" class="${checked ? "row-selected" : ""}">
+        <td><input type="checkbox" class="row-select-checkbox-transfer" data-id="${tr.id}" ${checked ? "checked" : ""} /></td>
+        <td>${formatDateBR(tr.date)}</td>
+        <td><span class="cell-text">${escapeHtml(tr.notes || "Transferência")}</span></td>
+        <td class="cell-amount ${colorCls}"><span class="cell-text">${formatCurrency(tr.amount)}</span></td>
+        <td>${escapeHtml(accById[tr.from_account_id]?.name || "-")}</td>
+        <td>${escapeHtml(accById[tr.to_account_id]?.name || "-")}</td>
+        <td>
+          <label class="toggle-switch">
+            <input type="checkbox" class="pago-toggle-transfer" data-id="${tr.id}" ${tr.status === "pago" ? "checked" : ""} />
+            <span class="toggle-slider"></span>
+          </label>
+        </td>
+        <td class="row-menu-cell">
+          <button type="button" class="row-menu-trigger" data-transfer-menu-id="${tr.id}" title="Mais opções">▾</button>
+        </td>
+      </tr>`;
+  }).join("");
+
+  body.innerHTML = transferInlineRowHtml() + rowsHtml + (transfers.length ? "" : `<tr><td colspan="8"><div class="empty-state">Nenhuma transferência registrada ainda.</div></td></tr>`);
   wireTransferInlineRow();
-  body.querySelectorAll("button[data-id]").forEach((btn) => {
-    btn.addEventListener("click", async () => {
-      if (!(await appConfirm("Excluir esta transferência?"))) return;
-      try { await api("DELETE", `/api/transfers/${btn.dataset.id}`); showToast("Transferência excluída."); refreshCurrentView(); }
-      catch (e) { showToast(e.message, true); }
+
+  body.querySelectorAll(".pago-toggle-transfer").forEach((chk) => {
+    chk.addEventListener("change", async () => {
+      const next = chk.checked;
+      try {
+        await api("POST", "/api/transfers/bulk", { ids: [chk.dataset.id], action: next ? "mark_paid" : "mark_unpaid" });
+        refreshCurrentView();
+      } catch (e) { chk.checked = !next; showToast(e.message, true); }
     });
   });
+
+  body.querySelectorAll(".row-select-checkbox-transfer").forEach((chk) => {
+    chk.addEventListener("click", (e) => e.stopPropagation());
+    chk.addEventListener("change", () => {
+      if (chk.checked) state.selectedTransferIds.add(chk.dataset.id);
+      else state.selectedTransferIds.delete(chk.dataset.id);
+      chk.closest("tr").classList.toggle("row-selected", chk.checked);
+      updateTransferBulkToolbar();
+      updateTransferSelectAllCheckbox();
+    });
+  });
+
+  body.querySelectorAll("[data-transfer-menu-id]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const id = btn.dataset.transferMenuId;
+      const ids = state.selectedTransferIds.has(id) && state.selectedTransferIds.size > 1
+        ? Array.from(state.selectedTransferIds) : [id];
+      const rect = btn.getBoundingClientRect();
+      openTransferContextMenu(rect.left, rect.bottom + 4, ids);
+    });
+  });
+
+  body.querySelectorAll("tr[data-transfer-row-id]").forEach((tr) => {
+    tr.addEventListener("contextmenu", (e) => {
+      e.preventDefault();
+      const id = tr.dataset.transferRowId;
+      if (!state.selectedTransferIds.has(id)) {
+        state.selectedTransferIds.clear();
+        state.selectedTransferIds.add(id);
+        body.querySelectorAll(".row-select-checkbox-transfer").forEach((c) => { c.checked = state.selectedTransferIds.has(c.dataset.id); });
+        body.querySelectorAll("tr[data-transfer-row-id]").forEach((r) => r.classList.toggle("row-selected", state.selectedTransferIds.has(r.dataset.transferRowId)));
+        updateTransferBulkToolbar();
+        updateTransferSelectAllCheckbox();
+      }
+      openTransferContextMenu(e.clientX, e.clientY, Array.from(state.selectedTransferIds));
+    });
+  });
+
+  updateTransferBulkToolbar();
+  updateTransferSelectAllCheckbox();
 }
 
 function transferInlineRowHtml() {
-  return `<tr class="inline-add-trigger" id="transferAddTrigger"><td colspan="6">+ Nova transferência</td></tr>`;
+  return `<tr class="inline-add-trigger" id="transferAddTrigger"><td colspan="8">+ Nova transferência</td></tr>`;
 }
 
 function transferFormRowHtml() {
   const opts = state.accounts.map((a) => `<option value="${a.id}">${escapeHtml(accountLabel(a))}</option>`).join("");
   return `
     <tr class="inline-add-row" id="transferFormRow">
+      <td></td>
       <td><input type="date" id="ti_date" value="${todayIso()}" /></td>
-      <td><select id="ti_from">${opts}</select></td>
-      <td><select id="ti_to">${opts}</select></td>
+      <td><input type="text" id="ti_notes" placeholder="Observações" /></td>
       <td>
         <div class="value-input-wrap">
           <input type="text" id="ti_amount" placeholder="0,00" />
           <button type="button" class="calc-trigger" data-calc-target="ti_amount">🖩</button>
         </div>
       </td>
-      <td><input type="text" id="ti_notes" placeholder="Observações" /></td>
+      <td><select id="ti_from">${opts}</select></td>
+      <td><select id="ti_to">${opts}</select></td>
+      <td></td>
       <td>
         <div class="inline-add-actions">
           <button type="button" class="inline-confirm" id="ti_confirm">✓</button>
@@ -2758,6 +2856,98 @@ function wireTransferInlineRow() {
         showToast("Transferência registrada.");
         refreshCurrentView();
       } catch (e) { showToast(e.message, true); }
+    });
+  });
+}
+
+// ---- Selecao em massa de transferencias (checkboxes, barra, menu) ----
+
+function updateTransferBulkToolbar() {
+  const toolbar = document.getElementById("transferBulkToolbar");
+  const n = state.selectedTransferIds.size;
+  if (!n) { toolbar.classList.add("hidden"); return; }
+  toolbar.classList.remove("hidden");
+  const items = state.lastTransferItems || [];
+  const total = items.filter((t) => state.selectedTransferIds.has(t.id)).reduce((s, t) => s + Number(t.amount || 0), 0);
+  document.getElementById("transferBulkToolbarSummary").textContent = `${n} ${n === 1 ? "transferência selecionada" : "transferências selecionadas"} - ${formatCurrency(total)}`;
+}
+function updateTransferSelectAllCheckbox() {
+  const all = document.getElementById("transferSelectAllCheckbox");
+  const items = state.lastTransferItems || [];
+  if (!items.length) { all.checked = false; all.indeterminate = false; return; }
+  const selectedCount = items.filter((t) => state.selectedTransferIds.has(t.id)).length;
+  all.checked = selectedCount === items.length;
+  all.indeterminate = selectedCount > 0 && selectedCount < items.length;
+}
+document.getElementById("transferSelectAllCheckbox").addEventListener("change", (e) => {
+  const checked = e.target.checked;
+  const items = state.lastTransferItems || [];
+  items.forEach((t) => { if (checked) state.selectedTransferIds.add(t.id); else state.selectedTransferIds.delete(t.id); });
+  document.querySelectorAll("#transfersBody .row-select-checkbox-transfer").forEach((c) => { c.checked = checked; });
+  document.querySelectorAll("#transfersBody tr[data-transfer-row-id]").forEach((r) => r.classList.toggle("row-selected", checked));
+  updateTransferBulkToolbar();
+});
+document.getElementById("transferBulkClearBtn").addEventListener("click", () => {
+  state.selectedTransferIds.clear();
+  loadTransfers();
+});
+document.getElementById("transferBulkDeleteBtn").addEventListener("click", async () => {
+  const ids = Array.from(state.selectedTransferIds);
+  if (!ids.length) return;
+  if (!(await appConfirm(`Excluir ${ids.length} transferência(s) selecionada(s)?`))) return;
+  try {
+    await api("POST", "/api/transfers/bulk", { ids, action: "delete" });
+    showToast("Transferências excluídas.");
+    state.selectedTransferIds.clear();
+    refreshCurrentView();
+  } catch (e) { showToast(e.message, true); }
+});
+
+function openTransferContextMenu(x, y, ids) {
+  if (!ids.length) return;
+  const menu = document.getElementById("bulkContextMenu");
+  menu.innerHTML = `
+    <div class="bulk-menu-item has-submenu">
+      <span class="row-menu-item">Duplicar itens <span class="submenu-arrow">▸</span></span>
+      <div class="bulk-submenu">
+        <button type="button" class="row-menu-item" data-action="duplicate" data-target="current">no mês atual</button>
+        <button type="button" class="row-menu-item" data-action="duplicate" data-target="next">no próximo mês</button>
+      </div>
+    </div>
+    <div class="bulk-menu-item has-submenu">
+      <span class="row-menu-item">Marcar itens como <span class="submenu-arrow">▸</span></span>
+      <div class="bulk-submenu">
+        <button type="button" class="row-menu-item" data-action="mark_paid">Pago</button>
+        <button type="button" class="row-menu-item" data-action="mark_unpaid">Não pago</button>
+      </div>
+    </div>
+    <button type="button" class="row-menu-item danger" data-action="delete">Excluir itens</button>
+  `;
+  menu.classList.remove("hidden");
+  const fakeTrigger = { getBoundingClientRect: () => ({ left: x, right: x, top: y, bottom: y }) };
+  positionFloatingElement(menu, fakeTrigger, { align: "left", fallbackWidth: 210, gap: 0 });
+  attachSubmenuFlip(menu);
+
+  menu.querySelectorAll("[data-action]").forEach((btn) => {
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      closeBulkContextMenu();
+      const action = btn.dataset.action;
+      try {
+        if (action === "delete") {
+          if (!(await appConfirm(`Excluir ${ids.length} transferência(s)?`))) return;
+          await api("POST", "/api/transfers/bulk", { ids, action: "delete" });
+          showToast("Transferências excluídas.");
+        } else if (action === "mark_paid" || action === "mark_unpaid") {
+          await api("POST", "/api/transfers/bulk", { ids, action });
+          showToast("Status atualizado.");
+        } else if (action === "duplicate") {
+          await api("POST", "/api/transfers/bulk", { ids, action: "duplicate", params: { target: btn.dataset.target } });
+          showToast("Transferências duplicadas.");
+        }
+        state.selectedTransferIds.clear();
+        refreshCurrentView();
+      } catch (err) { showToast(err.message, true); }
     });
   });
 }

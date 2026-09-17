@@ -258,8 +258,8 @@ export async function accountBalance(userId: string, accountId: string): Promise
        a.initial_balance
        + COALESCE((SELECT SUM(CASE WHEN t."group"='recebimento' THEN t.amount ELSE -t.amount END)
                    FROM transactions t WHERE t.account_id = a.id AND t.status='pago' AND t.user_id = $2), 0)
-       + COALESCE((SELECT SUM(amount) FROM transfers WHERE to_account_id = a.id AND user_id = $2), 0)
-       - COALESCE((SELECT SUM(amount) FROM transfers WHERE from_account_id = a.id AND user_id = $2), 0)
+       + COALESCE((SELECT SUM(amount) FROM transfers WHERE to_account_id = a.id AND status='pago' AND user_id = $2), 0)
+       - COALESCE((SELECT SUM(amount) FROM transfers WHERE from_account_id = a.id AND status='pago' AND user_id = $2), 0)
        AS balance
      FROM accounts a WHERE a.id = $1 AND a.user_id = $2`,
     [accountId, userId]
@@ -1273,6 +1273,7 @@ export interface Transfer {
   amount: number;
   date: string;
   notes: string;
+  status: string;
 }
 
 function mapTransfer(row: any): Transfer {
@@ -1283,20 +1284,37 @@ function mapTransfer(row: any): Transfer {
     amount: Number(row.amount),
     date: row.date,
     notes: row.notes,
+    status: row.status,
   };
 }
 
-export async function listTransfers(userId: string, profileId?: string | null): Promise<Transfer[]> {
-  const { rows } =
-    profileId && profileId !== "all"
-      ? await sql.query(
-          `SELECT * FROM transfers
-           WHERE user_id=$1 AND (from_account_id IN (SELECT id FROM accounts WHERE profile_id=$2)
-              OR to_account_id IN (SELECT id FROM accounts WHERE profile_id=$2))
-           ORDER BY date DESC`,
-          [userId, profileId]
-        )
-      : await sql.query(`SELECT * FROM transfers WHERE user_id=$1 ORDER BY date DESC`, [userId]);
+export interface TransferFilters {
+  start?: string;
+  end?: string;
+  status?: string;
+  search?: string;
+  profile_id?: string;
+}
+
+export async function listTransfers(userId: string, filters: TransferFilters = {}): Promise<Transfer[]> {
+  const conditions: string[] = [];
+  const params: any[] = [];
+  function add(cond: string, value: any) {
+    params.push(value);
+    conditions.push(cond.replace("?", `$${params.length}`));
+  }
+  add("user_id = ?", userId);
+  if (filters.start) add("date >= ?", filters.start);
+  if (filters.end) add("date <= ?", filters.end);
+  if (filters.status) add("status = ?", filters.status);
+  if (filters.search) add("notes ILIKE ?", `%${filters.search}%`);
+  if (filters.profile_id && filters.profile_id !== "all") {
+    params.push(filters.profile_id);
+    const idx = params.length;
+    conditions.push(`(from_account_id IN (SELECT id FROM accounts WHERE profile_id = $${idx}) OR to_account_id IN (SELECT id FROM accounts WHERE profile_id = $${idx}))`);
+  }
+  const where = `WHERE ${conditions.join(" AND ")}`;
+  const { rows } = await sql.query(`SELECT * FROM transfers ${where} ORDER BY date DESC`, params);
   return rows.map(mapTransfer);
 }
 
@@ -1305,9 +1323,10 @@ export async function createTransfer(userId: string, payload: any): Promise<Tran
     return { error: "Escolha contas diferentes para a transferência." };
   }
   const id = newId();
+  const status = payload.status === "pendente" ? "pendente" : "pago";
   const { rows } = await sql.query(
-    `INSERT INTO transfers (id, user_id, from_account_id, to_account_id, amount, date, notes) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-    [id, userId, payload.from_account_id, payload.to_account_id, round2(Number(payload.amount)), payload.date || todayStr(), payload.notes || ""]
+    `INSERT INTO transfers (id, user_id, from_account_id, to_account_id, amount, date, notes, status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+    [id, userId, payload.from_account_id, payload.to_account_id, round2(Number(payload.amount)), payload.date || todayStr(), payload.notes || "", status]
   );
   const tr = mapTransfer(rows[0]);
   await log(userId, "created", "transfer", `Transferência de ${tr.amount} criada`);
@@ -1319,6 +1338,63 @@ export async function deleteTransfer(userId: string, id: string): Promise<{ ok: 
   if (!rows[0]) return null;
   await log(userId, "deleted", "transfer", "Transferência excluída");
   return { ok: true };
+}
+
+export async function payTransfer(userId: string, id: string, paid: boolean): Promise<Transfer | null> {
+  const { rows } = await sql.query(
+    `UPDATE transfers SET status=$1 WHERE id=$2 AND user_id=$3 RETURNING *`,
+    [paid ? "pago" : "pendente", id, userId]
+  );
+  if (!rows[0]) return null;
+  const tr = mapTransfer(rows[0]);
+  await log(userId, paid ? "paid" : "unpaid", "transfer", `Transferência ${paid ? "marcada como paga" : "reaberta como pendente"}`);
+  return tr;
+}
+
+export async function bulkActionTransfers(userId: string, ids: string[], action: string, params: any = {}): Promise<BulkActionResult> {
+  if (!Array.isArray(ids) || !ids.length) return { affected: 0, errors: ["Nenhuma transferência selecionada."] };
+  const errors: string[] = [];
+  let affected = 0;
+
+  if (action === "delete") {
+    for (const id of ids) {
+      const result = await deleteTransfer(userId, id);
+      if (result) affected++; else errors.push(`Transferência ${id} não encontrada.`);
+    }
+    return { affected, errors };
+  }
+
+  if (action === "mark_paid" || action === "mark_unpaid") {
+    const paid = action === "mark_paid";
+    for (const id of ids) {
+      const result = await payTransfer(userId, id, paid);
+      if (result) affected++; else errors.push(`Transferência ${id} não encontrada.`);
+    }
+    return { affected, errors };
+  }
+
+  if (action === "duplicate") {
+    const targetMonth = params.target === "next" ? 1 : 0; // 0 = mes atual, 1 = proximo mes
+    const now = new Date();
+    const ref = addMonthsYM(now.getUTCFullYear(), now.getUTCMonth() + 1, targetMonth);
+    for (const id of ids) {
+      const { rows } = await sql.query(`SELECT * FROM transfers WHERE id=$1 AND user_id=$2`, [id, userId]);
+      const t = rows[0];
+      if (!t) { errors.push(`Transferência ${id} não encontrada.`); continue; }
+      const day = Number(String(t.date).slice(8, 10));
+      const daysInMonth = new Date(Date.UTC(ref.year, ref.month, 0)).getUTCDate();
+      const newDate = `${ref.year}-${pad(ref.month)}-${pad(Math.min(day, daysInMonth))}`;
+      await sql.query(
+        `INSERT INTO transfers (id, user_id, from_account_id, to_account_id, amount, date, notes, status) VALUES ($1,$2,$3,$4,$5,$6,$7,'pendente')`,
+        [newId(), userId, t.from_account_id, t.to_account_id, t.amount, newDate, t.notes]
+      );
+      affected++;
+    }
+    await log(userId, "created", "transfer", `${affected} transferência(s) duplicada(s)`);
+    return { affected, errors };
+  }
+
+  return { affected: 0, errors: [`Ação desconhecida: ${action}`] };
 }
 
 // ---------------------------------------------------------------------
