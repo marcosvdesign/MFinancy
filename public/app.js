@@ -388,7 +388,16 @@ function closeGlobalDropdown() {
   menu._openedBy = null;
 }
 document.addEventListener("click", closeGlobalDropdown);
-document.addEventListener("scroll", closeGlobalDropdown, true);
+// Scroll na pagina por tras fecha o menu (evita ele ficar "grudado" no
+// lugar errado); mas rolar a PROPRIA lista de opcoes (quando ela tem
+// mais itens do que cabe, com overflow-y:auto) tambem dispara "scroll"
+// nesse mesmo listener em fase de captura -- sem essa checagem, o menu
+// se fechava assim que o usuario tentava rolar pra ver mais opcoes.
+document.addEventListener("scroll", (e) => {
+  const menu = document.getElementById("globalDropdownMenu");
+  if (menu && (e.target === menu || menu.contains(e.target))) return;
+  closeGlobalDropdown();
+}, true);
 
 // ---------------------------------------------------------------------
 // Dialogo de confirmacao/prompt (substitui confirm()/prompt() nativos do
