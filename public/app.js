@@ -719,15 +719,42 @@ function metaScopeBalance(scope, accounts) {
   return 0;
 }
 
+/** Conta onde o lançamento de resgate deve cair: a conta principal quando
+ * a meta e de saldo geral (ou de um perfil sem conta principal propria),
+ * ou a conta especifica vinculada a meta. */
+function findRedeemAccountId(scope, accounts) {
+  if (!accounts.length) return null;
+  if (scope?.type === "account") {
+    return accounts.find((a) => a.id === scope.id)?.id || null;
+  }
+  if (scope?.type === "profile") {
+    const profileAccounts = accounts.filter((a) => a.profile_id === scope.id);
+    if (profileAccounts.length) return (profileAccounts.find((a) => a.is_primary) || profileAccounts[0]).id;
+  }
+  return (accounts.find((a) => a.is_primary) || accounts[0]).id;
+}
+
+/** Acha (ou cria, na primeira vez) a categoria "Meta" usada nos
+ * lançamentos automáticos de resgate. */
+async function findOrCreateMetaCategory() {
+  const existing = state.categories.find((c) => c.group === "despesa_variavel" && c.name.trim().toLowerCase() === "meta");
+  if (existing) return existing.id;
+  const created = await api("POST", "/api/categories", { name: "Meta", group: "despesa_variavel" });
+  state.categories.push(created);
+  return created.id;
+}
+
 function goalCardHtml(goal, saldo) {
   const target = Number(goal.target_amount) || 0;
   const pct = target > 0 ? Math.max(0, Math.min(100, Math.round((saldo / target) * 1000) / 10)) : 0;
   const today = todayIso();
+  const redeemed = !!goal.redeemedAt;
   const achieved = target > 0 && saldo >= target;
-  const overdue = !achieved && goal.deadline && goal.deadline < today;
+  const overdue = !redeemed && !achieved && goal.deadline && goal.deadline < today;
 
   let statusHtml = "";
-  if (achieved) statusHtml = `<div class="meta-status meta-status-achieved">${ICONS.trophy}<span>Meta alcançada</span></div>`;
+  if (redeemed) statusHtml = `<div class="meta-status meta-status-achieved">${ICONS.trophy}<span>Resgatada em ${formatDateBR(goal.redeemedAt)}</span></div>`;
+  else if (achieved) statusHtml = `<div class="meta-status meta-status-achieved">${ICONS.trophy}<span>Meta alcançada</span></div>`;
   else if (overdue) statusHtml = `<div class="meta-status meta-status-overdue">${ICONS.alertTriangle}<span>Meta atrasada</span></div>`;
 
   return `
@@ -746,8 +773,8 @@ function goalCardHtml(goal, saldo) {
       <div class="mini-row" style="padding:6px 0;"><span>Saldo atual</span><b>${formatCurrency(saldo)}</b></div>
       <div class="mini-row" style="padding:6px 0; border-bottom:none;"><span>Meta</span><b>${formatCurrency(target)}</b></div>
       ${statusHtml}
-      <button type="button" class="btn-primary meta-resgatar-btn" style="margin-top:10px; width:100%;" ${achieved ? "" : "disabled"}>Resgatar meta</button>
-      <div class="meta-trophy-box hidden">${ICONS.trophy}<span>Parabéns, meta resgatada!</span></div>
+      ${redeemed ? "" : `<button type="button" class="btn-primary meta-resgatar-btn" style="margin-top:10px; width:100%;" ${achieved ? "" : "disabled"}>Resgatar meta</button>`}
+      <div class="meta-trophy-box ${redeemed ? "" : "hidden"}">${ICONS.trophy}<span>Parabéns, meta resgatada!</span></div>
     </div>
   `;
 }
@@ -778,10 +805,28 @@ async function renderMetaPanel() {
       await saveGoals(goals.filter((g) => g.id !== goalId));
       showToast("Meta removida.");
     });
-    card.querySelector(".meta-resgatar-btn")?.addEventListener("click", (e) => {
+    card.querySelector(".meta-resgatar-btn")?.addEventListener("click", async (e) => {
       if (e.currentTarget.disabled) return;
-      card.querySelector(".meta-trophy-box")?.classList.remove("hidden");
-      showToast("Parabéns! Meta resgatada.");
+      const accountId = findRedeemAccountId(goal.scope, accounts);
+      if (!accountId) return showToast("Cadastre uma conta antes de resgatar a meta.", true);
+      const today = todayIso();
+      try {
+        const categoryId = await findOrCreateMetaCategory();
+        await api("POST", "/api/transactions", {
+          description: `Meta: ${goal.name}`,
+          amount: Number(goal.target_amount) || 0,
+          group: "despesa_variavel",
+          account_id: accountId,
+          category_id: categoryId,
+          contact_id: null,
+          due_date: today,
+          status: "pago",
+          paid_date: today,
+        });
+      } catch (err) { return showToast(err.message, true); }
+      await saveGoals(goals.map((g) => (g.id === goal.id ? { ...g, redeemedAt: today } : g)));
+      showToast("Meta resgatada! Lançamento criado.");
+      refreshCurrentView();
     });
   });
 }
