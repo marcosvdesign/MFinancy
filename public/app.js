@@ -22,7 +22,12 @@ const ICONS = {
   starFilled: '<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M12 3l2.6 5.9 6.4.6-4.9 4.3 1.5 6.3L12 16.9 6.4 20.1l1.5-6.3-4.9-4.3 6.4-.6z"/></svg>',
   starOutline: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"><path d="M12 3l2.6 5.9 6.4.6-4.9 4.3 1.5 6.3L12 16.9 6.4 20.1l1.5-6.3-4.9-4.3 6.4-.6z"/></svg>',
   chevronDown: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>',
+  trophy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 01-10 0V4z"/><path d="M7 5H4a1 1 0 00-1 1v1a4 4 0 004 4M17 5h3a1 1 0 011 1v1a4 4 0 01-4 4"/></svg>',
+  alertTriangle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5L2.5 20h19L12 3.5z"/><path d="M12 10v4.5"/><circle cx="12" cy="17.5" r="0.6" fill="currentColor" stroke="none"/></svg>',
+  repeat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2l4 4-4 4"/><path d="M3 11V9a4 4 0 014-4h14"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>',
 };
+
+function round2(n) { return Math.round((n + Number.EPSILON) * 100) / 100; }
 
 const state = {
   activeProfile: "all",
@@ -45,6 +50,7 @@ const state = {
   activeReport: { report: "despesas_receitas", side: null, label: "Despesas/Receitas" },
   activeConfig: "perfis",
   categoriesGroup: "recebimento",
+  lancSort: { column: null, direction: "asc" },
 };
 
 // ---------------------------------------------------------------------
@@ -277,6 +283,78 @@ function styleSelectAsCustomDropdown(selectId) {
   syncLabel();
 }
 
+/** Mesma ideia de styleSelectAsCustomDropdown, so que com um campo de
+ * busca fixo no topo (pra listas longas de categoria/contato/centro de
+ * custo). O campo de busca e criado UMA VEZ por abertura do menu; so a
+ * lista de opcoes por baixo dele e re-renderizada a cada tecla -- assim
+ * o campo nunca perde o foco/cursor no meio da digitacao. */
+function styleSelectAsSearchableDropdown(selectId) {
+  const select = document.getElementById(selectId);
+  if (!select || select.dataset.styled) return;
+  select.dataset.styled = "1";
+
+  const wrap = document.createElement("div");
+  wrap.className = "custom-select native-select-wrap";
+  select.parentNode.insertBefore(wrap, select);
+  select.classList.add("native-select-hidden");
+  wrap.appendChild(select);
+
+  const trigger = document.createElement("button");
+  trigger.type = "button";
+  trigger.className = "custom-select-trigger light-trigger";
+  trigger.innerHTML = `<span class="select-label-text"></span><span class="chevron">▾</span>`;
+  wrap.appendChild(trigger);
+
+  function syncLabel() {
+    const opt = select.options[select.selectedIndex];
+    trigger.querySelector(".select-label-text").textContent = opt ? opt.textContent : "";
+  }
+
+  function renderOptions(filterText) {
+    const listEl = document.getElementById("gddSearchableList");
+    if (!listEl) return;
+    const opts = Array.from(select.options).filter((opt) => !opt.classList.contains("hidden"));
+    const filtered = filterText ? opts.filter((opt) => opt.textContent.toLowerCase().includes(filterText.toLowerCase())) : opts;
+    listEl.innerHTML = filtered.map((opt) => `
+      <div class="custom-select-option ${opt.value === select.value ? "selected" : ""}" data-value="${opt.value}">
+        <span>${escapeHtml(opt.textContent)}</span><span class="check">✓</span>
+      </div>`).join("") || `<div class="empty-state">Nada encontrado.</div>`;
+    listEl.querySelectorAll(".custom-select-option").forEach((el) => {
+      el.addEventListener("click", (e) => {
+        e.stopPropagation();
+        select.value = el.dataset.value;
+        select.dispatchEvent(new Event("change", { bubbles: true }));
+        closeGlobalDropdown();
+        syncLabel();
+      });
+    });
+  }
+  function openMenu() {
+    const menu = document.getElementById("globalDropdownMenu");
+    menu.innerHTML = `
+      <input type="text" class="picker-search" id="gddSearchInput" placeholder="Buscar..." />
+      <div id="gddSearchableList"></div>
+    `;
+    renderOptions("");
+    const searchInput = document.getElementById("gddSearchInput");
+    searchInput.addEventListener("click", (e) => e.stopPropagation());
+    searchInput.addEventListener("input", (e) => renderOptions(e.target.value));
+    positionGlobalDropdown(trigger);
+    wrap.classList.add("open");
+    setTimeout(() => searchInput.focus(), 0);
+  }
+  trigger.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const menu = document.getElementById("globalDropdownMenu");
+    const willOpen = menu.classList.contains("hidden") || menu._openedBy !== trigger;
+    closeGlobalDropdown();
+    closeCustomSelect();
+    if (willOpen) { menu._openedBy = trigger; openMenu(); }
+  });
+  select.addEventListener("change", syncLabel);
+  syncLabel();
+}
+
 /** Container global de dropdown (position:fixed), usado por qualquer
  * dropdown estilizado que precise escapar do stacking context de paineis
  * com glassmorphism (backdrop-filter). */
@@ -414,9 +492,19 @@ function closeModal() { document.getElementById("modalOverlay").classList.add("h
 document.getElementById("modalClose").addEventListener("click", closeModal);
 document.getElementById("modalOverlay").addEventListener("click", (e) => { if (e.target.id === "modalOverlay") closeModal(); });
 
+// Esc fecha o popup Adicionar/Editar lancamento -- o modal2 (Parcelas,
+// Repetir, escolha de escopo) fecha primeiro, por estar empilhado por cima.
+document.addEventListener("keydown", (e) => {
+  if (e.key !== "Escape") return;
+  const modal2 = document.getElementById("modalOverlay2");
+  if (modal2 && !modal2.classList.contains("hidden")) { closeModal2(); return; }
+  const modal1 = document.getElementById("modalOverlay");
+  if (modal1 && !modal1.classList.contains("hidden")) closeModal();
+});
+
 /** Modal de 3 opções usado ao editar/excluir um lançamento que faz parte de
  * uma recorrência ou parcelamento. */
-function openScopeModal(actionLabel, onChoose) {
+function openScopeModal(actionLabel, onChoose, extraOption) {
   openModal("Aplicar a quais lançamentos?", `
     <p class="card-sub" style="margin:-6px 0 14px 0;">Este lançamento faz parte de uma recorrência ou parcelamento.</p>
     <div class="scope-options">
@@ -426,6 +514,8 @@ function openScopeModal(actionLabel, onChoose) {
         <span class="scope-desc">Este lançamento e os futuros do mesmo grupo.</span></button>
       <button type="button" class="scope-option" data-scope="all">${actionLabel} todas as transações
         <span class="scope-desc">Todas as ocorrências deste grupo, passadas e futuras.</span></button>
+      ${extraOption ? `<button type="button" class="scope-option" data-scope="${extraOption.scope}">${extraOption.label}
+        <span class="scope-desc">${extraOption.desc}</span></button>` : ""}
     </div>
   `);
   document.querySelectorAll(".scope-option").forEach((btn) => {
@@ -592,7 +682,98 @@ async function loadDashboard() {
     ? new Date().getDate() : 1;
   state.selectedDay = initialDay;
   loadAgendaDia(`${state.dashYear}-${String(state.dashMonth).padStart(2, "0")}-${String(initialDay).padStart(2, "0")}`);
+
+  renderMetaPanel();
 }
+
+// ---------------------------------------------------------------------
+// Meta financeira (dashboard)
+// ---------------------------------------------------------------------
+
+/** Mostra o progresso da meta financeira de acordo com o saldo atual real
+ * (nao muda com o mes selecionado no dashboard, ja que saldo_atual sempre
+ * reflete o saldo de hoje). "Alcançada" quando o saldo atinge o valor da
+ * meta; "atrasada" quando o prazo passou sem alcançar. */
+function renderMetaPanel() {
+  const content = document.getElementById("metaContent");
+  if (!content) return;
+  const goal = state.settings?.prefs?.goal;
+  if (!goal || !goal.name) {
+    content.innerHTML = `<div class="card-sub">Nenhuma meta definida ainda. Clique em "Editar meta" para criar uma.</div>`;
+    return;
+  }
+  const saldo = state.lastDashboardData ? state.lastDashboardData.saldo_atual : 0;
+  const target = Number(goal.target_amount) || 0;
+  const pct = target > 0 ? Math.max(0, Math.min(100, Math.round((saldo / target) * 1000) / 10)) : 0;
+  const today = todayIso();
+  const achieved = target > 0 && saldo >= target;
+  const overdue = !achieved && goal.deadline && goal.deadline < today;
+
+  let statusHtml = "";
+  if (achieved) statusHtml = `<div class="meta-status meta-status-achieved">${ICONS.trophy}<span>Meta alcançada</span></div>`;
+  else if (overdue) statusHtml = `<div class="meta-status meta-status-overdue">${ICONS.alertTriangle}<span>Meta atrasada</span></div>`;
+
+  content.innerHTML = `
+    <div class="meta-name">${escapeHtml(goal.name)}</div>
+    <div class="card-sub" style="margin-bottom:10px;">Prazo: ${goal.deadline ? formatDateBR(goal.deadline) : "-"}</div>
+    <div class="progress-bar"><div class="progress-fill ${achieved ? "progress-fill-green" : overdue ? "progress-fill-red" : "progress-fill-green"}" style="width:${pct}%;"></div></div>
+    <div class="mini-row" style="padding:6px 0;"><span>Saldo atual</span><b>${formatCurrency(saldo)}</b></div>
+    <div class="mini-row" style="padding:6px 0; border-bottom:none;"><span>Meta</span><b>${formatCurrency(target)}</b></div>
+    ${statusHtml}
+    <button type="button" class="btn-primary" id="btnResgatarMeta" style="margin-top:10px; width:100%;" ${achieved ? "" : "disabled"}>Resgatar meta?</button>
+    <div id="metaTrophyBox" class="meta-trophy-box hidden">${ICONS.trophy}<span>Parabéns, meta resgatada!</span></div>
+  `;
+  document.getElementById("btnResgatarMeta")?.addEventListener("click", () => {
+    if (!achieved) return;
+    document.getElementById("metaTrophyBox")?.classList.remove("hidden");
+    showToast("Parabéns! Meta resgatada.");
+  });
+}
+
+function openMetaEditPopup() {
+  const goal = state.settings?.prefs?.goal || {};
+  openModal2("Meta financeira", `
+    <div class="form-row"><label>Nome da meta</label><input type="text" id="meta_name" placeholder="Ex: Reserva de emergência" value="${escapeHtml(goal.name || "")}" /></div>
+    <div class="form-row"><label>Valor da meta (R$)</label>
+      <div class="value-input-wrap">
+        <input type="text" id="meta_amount" value="${goal.target_amount ? toMaskedString(goal.target_amount) : ""}" />
+        <button type="button" class="calc-trigger" data-calc-target="meta_amount">🖩</button>
+      </div>
+    </div>
+    <div class="form-row"><label>Prazo da meta</label><input type="date" id="meta_deadline" value="${goal.deadline || ""}" /></div>
+    <div class="form-actions">
+      ${goal.name ? `<button class="btn-secondary" id="meta_clear" style="margin-right:auto;">Remover meta</button>` : ""}
+      <button class="btn-secondary" id="meta_cancel">Cancelar</button>
+      <button class="btn-primary" id="meta_save">Salvar</button>
+    </div>
+  `);
+  attachCustomDatePicker("meta_deadline");
+  maskCurrencyInput(document.getElementById("meta_amount"));
+  document.getElementById("meta_cancel").addEventListener("click", closeModal2);
+  document.getElementById("meta_clear")?.addEventListener("click", async () => {
+    try {
+      const updated = await api("PUT", "/api/settings", { prefs: { goal: null } });
+      state.settings = updated;
+      closeModal2();
+      renderMetaPanel();
+      showToast("Meta removida.");
+    } catch (e) { showToast(e.message, true); }
+  });
+  document.getElementById("meta_save").addEventListener("click", async () => {
+    const name = document.getElementById("meta_name").value.trim();
+    const target_amount = parseMaskedCurrency(document.getElementById("meta_amount").value);
+    const deadline = document.getElementById("meta_deadline").value;
+    if (!name || !target_amount || !deadline) return showToast("Preencha nome, valor e prazo.", true);
+    try {
+      const updated = await api("PUT", "/api/settings", { prefs: { goal: { name, target_amount, deadline } } });
+      state.settings = updated;
+      closeModal2();
+      renderMetaPanel();
+      showToast("Meta salva.");
+    } catch (e) { showToast(e.message, true); }
+  });
+}
+document.getElementById("btnEditMeta")?.addEventListener("click", openMetaEditPopup);
 
 /** Uma linha do "Comparativo mês anterior": valor atual + variação (seta,
  * valor, %) + barra de progresso mostrando a intensidade da variação. */
@@ -685,8 +866,8 @@ function renderMonthYearPicker(triggerEl) {
       ${MESES.map((label, i) => `<div class="picker-item ${i + 1 === month ? "selected" : ""}" style="justify-content:center; text-align:center;" data-month="${i + 1}">${label.slice(0, 3)}</div>`).join("")}
     </div>
   `;
-  if (triggerEl) positionPopupNear(popup, triggerEl);
   popup.classList.remove("hidden");
+  if (triggerEl) positionPopupNear(popup, triggerEl);
   popup.querySelector('[data-myp="prev"]').addEventListener("click", (e) => { e.stopPropagation(); monthYearPickerState.year--; renderMonthYearPicker(triggerEl); });
   popup.querySelector('[data-myp="next"]').addEventListener("click", (e) => { e.stopPropagation(); monthYearPickerState.year++; renderMonthYearPicker(triggerEl); });
   popup.querySelectorAll("[data-month]").forEach((el) => {
@@ -816,7 +997,10 @@ async function loadLancDashboard() {
 
   const contaAtual = state.lancamentosAccountId ? data.saldo_por_conta.find((a) => a.id === state.lancamentosAccountId) : null;
   const saldo = contaAtual ? contaAtual.balance : data.saldo_atual;
-  const previsaoFechamento = saldo + data.falta_receitas - data.falta_despesas;
+  // Acumula desde hoje ate o fim do mes selecionado (nao so aquele mes
+  // isolado) -- senao a previsao pra meses futuros ignora pendencias de
+  // meses intermediarios entre hoje e o mes selecionado.
+  const previsaoFechamento = saldo + data.falta_receitas_ate_fechamento - data.falta_despesas_ate_fechamento;
 
   document.getElementById("lancContaLabel").textContent = "Saldo - " + (contaAtual ? contaAtual.name : "Todas as contas");
   const saldoEl = document.getElementById("lancSaldoConta");
@@ -894,6 +1078,66 @@ function loadLancamentos() {
   if (state.lancamentosGroup === "transferencias") loadTransfers(); else loadTransactionsTable();
 }
 
+// ---- Ordenacao das colunas da tabela de Lancamentos ----
+
+const PAGAMENTO_SORT_RANK = { unico: 0, parcelado: 1, repetir: 2 };
+function pagamentoSortKind(t) {
+  if (t.installment_total) return "parcelado";
+  if (t.recurrence_group_id) return "repetir";
+  return "unico";
+}
+
+/** Ordena os itens da tabela de Lancamentos de acordo com state.lancSort.
+ * Colunas de texto (descricao/contato/categoria) ordenam A-Z/Z-A; valor e
+ * data ordenam crescente/decrescente; as de status (pagamento, pago?) tem
+ * uma ordem fixa e significativa (unico/parcelado/repetir; pago/nao pago)
+ * que so se inverte, em vez de ordem alfabetica. */
+function sortLancItems(items, catById, contactById) {
+  const { column, direction } = state.lancSort;
+  if (!column) return items;
+  const dir = direction === "desc" ? -1 : 1;
+  const sorted = items.slice();
+  const keyFns = {
+    date: (t) => t.due_date || "",
+    description: (t) => (t.description || "").toLowerCase(),
+    contact: (t) => (contactById[t.contact_id]?.name || "").toLowerCase(),
+    category: (t) => (catById[t.category_id]?.name || "").toLowerCase(),
+    pagamento: (t) => PAGAMENTO_SORT_RANK[pagamentoSortKind(t)],
+    amount: (t) => Number(t.amount) || 0,
+    status: (t) => (t.status === "pago" ? 0 : 1),
+  };
+  const keyFn = keyFns[column];
+  if (!keyFn) return items;
+  sorted.sort((a, b) => {
+    const ka = keyFn(a), kb = keyFn(b);
+    if (ka < kb) return -1 * dir;
+    if (ka > kb) return 1 * dir;
+    return 0;
+  });
+  return sorted;
+}
+
+function updateSortHeaderUI() {
+  document.querySelectorAll(".sortable-th").forEach((th) => {
+    const isActive = th.dataset.sort === state.lancSort.column;
+    th.classList.toggle("sort-active", isActive);
+    const arrow = th.querySelector(".sort-arrow");
+    if (arrow) arrow.textContent = isActive ? (state.lancSort.direction === "desc" ? "▼" : "▲") : "";
+  });
+}
+document.querySelectorAll(".sortable-th").forEach((th) => {
+  th.addEventListener("click", () => {
+    const column = th.dataset.sort;
+    if (state.lancSort.column === column) {
+      state.lancSort.direction = state.lancSort.direction === "asc" ? "desc" : "asc";
+    } else {
+      state.lancSort = { column, direction: "asc" };
+    }
+    updateSortHeaderUI();
+    loadTransactionsTable();
+  });
+});
+
 let _transactionsTableReqId = 0;
 async function loadTransactionsTable() {
   const reqId = ++_transactionsTableReqId;
@@ -910,15 +1154,17 @@ async function loadTransactionsTable() {
   // Mesma protecao do loadLancDashboard: ignora resposta atrasada de um
   // filtro/mes que o usuario ja trocou de novo.
   if (reqId !== _transactionsTableReqId) return;
-  state.lastTransactionItems = items;
-
-  const visibleIds = new Set(items.map((t) => t.id));
-  Array.from(state.selectedTransactionIds).forEach((id) => { if (!visibleIds.has(id)) state.selectedTransactionIds.delete(id); });
 
   const accById = Object.fromEntries(state.accounts.map((a) => [a.id, a]));
   const catById = Object.fromEntries(state.categories.map((c) => [c.id, c]));
   const contactById = Object.fromEntries(state.contacts.map((c) => [c.id, c]));
   const today = todayIso();
+
+  items = sortLancItems(items, catById, contactById);
+  state.lastTransactionItems = items;
+
+  const visibleIds = new Set(items.map((t) => t.id));
+  Array.from(state.selectedTransactionIds).forEach((id) => { if (!visibleIds.has(id)) state.selectedTransactionIds.delete(id); });
 
   const body = document.getElementById("transactionsBody");
   body.innerHTML = items.length ? items.map((t) => {
@@ -1252,17 +1498,19 @@ function attachSubmenuFlip(menu) {
   });
 }
 
+async function commitTransactionFieldWithScope(t, field, value, scope) {
+  try {
+    await api("PUT", `/api/transactions/${t.id}?scope=${scope}`, { [field]: value });
+    showToast("Lançamento atualizado.");
+    refreshCurrentView();
+  } catch (e) { showToast(e.message, true); }
+}
+
 /** Aplica a alteracao de um unico campo, perguntando o escopo antes se o
  * lancamento fizer parte de uma recorrencia/parcelamento. */
 function commitTransactionField(t, field, value) {
   const groupId = t.recurrence_group_id || t.installment_group_id;
-  const doCommit = async (scope) => {
-    try {
-      await api("PUT", `/api/transactions/${t.id}?scope=${scope}`, { [field]: value });
-      showToast("Lançamento atualizado.");
-      refreshCurrentView();
-    } catch (e) { showToast(e.message, true); }
-  };
+  const doCommit = (scope) => commitTransactionFieldWithScope(t, field, value, scope);
   if (groupId) openScopeModal("Alterar", doCommit);
   else doCommit("single");
 }
@@ -1305,8 +1553,15 @@ function startInlineNumberEdit(cell, t) {
     if (done) return;
     done = true;
     const val = parseMaskedCurrency(input.value);
-    if (commit && Number.isFinite(val) && val > 0 && val !== t.amount) commitTransactionField(t, "amount", val);
-    else cell.innerHTML = original;
+    if (!commit || !Number.isFinite(val) || val <= 0 || val === t.amount) { cell.innerHTML = original; return; }
+    if (t.installment_group_id) {
+      openScopeModal("Alterar", (scope) => {
+        if (scope === "recalcular") openEditParcelasForGroup(t.installment_group_id, t, { id: t.id, amount: val });
+        else commitTransactionFieldWithScope(t, "amount", val, scope);
+      }, { scope: "recalcular", label: "Recalcular parcelas", desc: "Aplica este valor nesta parcela e recalcula as próximas de acordo com o total original." });
+    } else {
+      commitTransactionField(t, "amount", val);
+    }
   };
   input.addEventListener("blur", () => finish(true));
   input.addEventListener("keydown", (e) => {
@@ -1370,8 +1625,8 @@ function renderDatePicker() {
       ${buildPlainCalendarHtml(year, month, selectedDay)}
     </div>
   `;
-  positionPopupNear(popup, triggerEl);
   popup.classList.remove("hidden");
+  positionPopupNear(popup, triggerEl);
   popup.querySelector('[data-dp="prev"]').addEventListener("click", (e) => {
     e.stopPropagation();
     datePickerState.month--; if (datePickerState.month < 1) { datePickerState.month = 12; datePickerState.year--; }
@@ -1478,8 +1733,8 @@ function attachCustomColorPicker(inputId) {
       </div>
       <button type="button" class="btn-secondary color-picker-custom-btn" id="colorPickerCustomBtn">Escolher cor</button>
     `;
-    positionPopupNear(popup, swatchBtn);
     popup.classList.remove("hidden");
+    positionPopupNear(popup, swatchBtn);
     popup.querySelectorAll(".color-preset-swatch").forEach((el) => {
       el.addEventListener("click", (e) => {
         e.stopPropagation();
@@ -1510,55 +1765,65 @@ function openPickerPopup(triggerEl, t, kind) {
   const isContact = kind === "contact";
   const popup = document.getElementById("pickerPopup");
 
-  function render(filterText) {
+  // O input de busca e o de "criar novo" sao criados UMA UNICA VEZ (fora
+  // de renderList) -- so a lista de opcoes e re-renderizada a cada tecla.
+  // Antes, o popup inteiro (innerHTML) era refeito a cada input, o que
+  // recriava o campo de busca do zero e derrubava o foco/cursor: dava a
+  // impressao de travar depois de 1 letra (e de a lista nao rolar, ja que
+  // o scroll tambem era resetado a cada re-render).
+  function renderList(filterText) {
     const source = isContact ? state.contacts : state.categories.filter((c) => c.group === t.group);
     const currentId = isContact ? t.contact_id : t.category_id;
     const filtered = filterText ? source.filter((i) => i.name.toLowerCase().includes(filterText.toLowerCase())) : source;
-    popup.innerHTML = `
-      <input type="text" id="pickerSearch" class="picker-search" placeholder="Buscar ${isContact ? "contato" : "categoria"}..." value="${escapeHtml(filterText || "")}" />
-      <div class="picker-list">
-        <div class="picker-item ${!currentId ? "selected" : ""}" data-value="">— Sem ${isContact ? "contato" : "categoria"} —</div>
-        ${filtered.map((i) => `
-          <div class="picker-item ${i.id === currentId ? "selected" : ""}" data-value="${i.id}">
-            ${i.color ? `<span class="color-dot" style="background:${i.color}"></span>` : ""}${escapeHtml(i.name)}
-          </div>`).join("") || (filterText ? `<div class="empty-state">Nada encontrado.</div>` : "")}
-      </div>
-      <div class="picker-add">
-        <input type="text" id="pickerNewName" placeholder="Criar novo..." />
-        <button type="button" id="pickerAddBtn">+</button>
-      </div>
+    const listEl = document.getElementById("pickerList");
+    listEl.innerHTML = `
+      <div class="picker-item ${!currentId ? "selected" : ""}" data-value="">— Sem ${isContact ? "contato" : "categoria"} —</div>
+      ${filtered.map((i) => `
+        <div class="picker-item ${i.id === currentId ? "selected" : ""}" data-value="${i.id}">
+          ${i.color ? `<span class="color-dot" style="background:${i.color}"></span>` : ""}${escapeHtml(i.name)}
+        </div>`).join("") || (filterText ? `<div class="empty-state">Nada encontrado.</div>` : "")}
     `;
-    popup.querySelectorAll(".picker-item").forEach((el) => el.addEventListener("click", (e) => {
+    listEl.querySelectorAll(".picker-item").forEach((el) => el.addEventListener("click", (e) => {
       e.stopPropagation();
       closePickerPopup();
       const value = el.dataset.value || null;
       if (value !== currentId) commitTransactionField(t, isContact ? "contact_id" : "category_id", value);
     }));
-    const searchInput = document.getElementById("pickerSearch");
-    searchInput.addEventListener("click", (e) => e.stopPropagation());
-    searchInput.addEventListener("input", (e) => render(e.target.value));
-    const newNameInput = document.getElementById("pickerNewName");
-    newNameInput.addEventListener("click", (e) => e.stopPropagation());
-    newNameInput.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); document.getElementById("pickerAddBtn").click(); } });
-    document.getElementById("pickerAddBtn").addEventListener("click", async (e) => {
-      e.stopPropagation();
-      const name = newNameInput.value.trim();
-      if (!name) return;
-      try {
-        let created;
-        if (isContact) created = await api("POST", "/api/contacts", { name });
-        else created = await api("POST", "/api/categories", { name, group: t.group });
-        (isContact ? state.contacts : state.categories).push(created);
-        closePickerPopup();
-        commitTransactionField(t, isContact ? "contact_id" : "category_id", created.id);
-      } catch (err) { showToast(err.message, true); }
-    });
   }
 
-  render("");
-  positionPopupNear(popup, triggerEl);
+  popup.innerHTML = `
+    <input type="text" id="pickerSearch" class="picker-search" placeholder="Buscar ${isContact ? "contato" : "categoria"}..." />
+    <div class="picker-list" id="pickerList"></div>
+    <div class="picker-add">
+      <input type="text" id="pickerNewName" placeholder="Criar novo..." />
+      <button type="button" id="pickerAddBtn">+</button>
+    </div>
+  `;
+  renderList("");
+
+  const searchInput = document.getElementById("pickerSearch");
+  searchInput.addEventListener("click", (e) => e.stopPropagation());
+  searchInput.addEventListener("input", (e) => renderList(e.target.value));
+  const newNameInput = document.getElementById("pickerNewName");
+  newNameInput.addEventListener("click", (e) => e.stopPropagation());
+  newNameInput.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); document.getElementById("pickerAddBtn").click(); } });
+  document.getElementById("pickerAddBtn").addEventListener("click", async (e) => {
+    e.stopPropagation();
+    const name = newNameInput.value.trim();
+    if (!name) return;
+    try {
+      let created;
+      if (isContact) created = await api("POST", "/api/contacts", { name });
+      else created = await api("POST", "/api/categories", { name, group: t.group });
+      (isContact ? state.contacts : state.categories).push(created);
+      closePickerPopup();
+      commitTransactionField(t, isContact ? "contact_id" : "category_id", created.id);
+    } catch (err) { showToast(err.message, true); }
+  });
+
   popup.classList.remove("hidden");
-  setTimeout(() => document.getElementById("pickerSearch")?.focus(), 0);
+  positionPopupNear(popup, triggerEl);
+  setTimeout(() => searchInput.focus(), 0);
 }
 function closePickerPopup() { document.getElementById("pickerPopup")?.classList.add("hidden"); }
 document.addEventListener("click", (e) => {
@@ -1617,8 +1882,8 @@ function openSearchPopup(triggerEl) {
   const popup = document.getElementById("searchPopup");
   const input = document.getElementById("searchPopupInput");
   input.value = document.getElementById("filterSearch").value;
-  positionPopupNear(popup, triggerEl);
   popup.classList.remove("hidden");
+  positionPopupNear(popup, triggerEl);
   setTimeout(() => input.focus(), 30);
 }
 document.getElementById("btnSearchToggle")?.addEventListener("click", (e) => {
@@ -1698,9 +1963,9 @@ function openRepetirPopup(existing, onSave, onCancel) {
   const occ = existing?.occurrences || 12;
   openModal2("Repetir transação", `
     <p class="card-sub" style="margin-top:-6px;">Com que frequência esse lançamento se repete?</p>
-    <div class="radio-group" style="flex-direction:column; align-items:flex-start; gap:11px; margin-bottom:16px;">
+    <div class="radio-list" style="margin-bottom:16px;">
       ${Object.entries(FREQ_LABELS_PT).map(([key, label]) => `
-        <label><input type="radio" name="rf_freq" value="${key}" ${freq === key ? "checked" : ""}/> ${label}</label>
+        <label class="${freq === key ? "radio-checked" : ""}"><input type="radio" name="rf_freq" value="${key}" ${freq === key ? "checked" : ""}/> ${label}</label>
       `).join("")}
     </div>
     <div class="form-row">
@@ -1743,6 +2008,24 @@ function computeParcelasRows(pState) {
   return rows;
 }
 
+/** Redistribui o valor restante (target - soma das linhas ate fixedUpToIdx,
+ * inclusive) igualmente entre as linhas DEPOIS de fixedUpToIdx -- usado
+ * tanto pelo botao de recalculo dentro do popup de Parcelas quanto pelo
+ * fluxo de "Recalcular parcelas" ao editar uma parcela ja existente. Muta
+ * o array `rows` in-place. */
+function redistributeRemaining(rows, fixedUpToIdx, target) {
+  const fixedSum = rows.slice(0, fixedUpToIdx + 1).reduce((s, r) => s + (Number(r.amount) || 0), 0);
+  const nextRows = rows.slice(fixedUpToIdx + 1);
+  if (!nextRows.length) return;
+  const remaining = round2(target - fixedSum);
+  const per = Math.floor((remaining / nextRows.length) * 100) / 100;
+  let allocated = 0;
+  nextRows.forEach((r, i) => {
+    if (i === nextRows.length - 1) r.amount = round2(remaining - allocated);
+    else { r.amount = per; allocated = round2(allocated + per); }
+  });
+}
+
 function parcelasTableHtml(rows) {
   const total = rows.reduce((s, r) => s + (Number(r.amount) || 0), 0);
   const body = rows.map((r, i) => `
@@ -1763,6 +2046,9 @@ function parcelasTableHtml(rows) {
       </table>
     </div>
     <button type="button" class="btn-secondary" id="pf_add_row" style="margin-top:8px;">+ Adicionar parcela</button>
+    <button type="button" class="parcelas-recalc-row hidden" id="pf_recalc_row">
+      ${ICONS.repeat}<span>O total mudou -- recalcular as próximas parcelas?</span>
+    </button>
     <div class="parcelas-total-row"><span>Total</span><span id="pf_total_value">${formatCurrency(total)}</span></div>
   `;
 }
@@ -1777,6 +2063,20 @@ function openParcelasPopup(defaults, existing, onSave, onCancel) {
     startDate: defaults.due_date || todayIso(),
   };
   let rows = existing?.rows ? existing.rows.map((r) => ({ ...r })) : computeParcelasRows(pState);
+  // Enquanto nenhuma parcela individual foi editada a mao, o total "alvo"
+  // (usado pra saber se o recalculo e necessario) e o implicado pelos
+  // campos de cima; assim que uma linha e editada, essa referencia trava
+  // no valor que ela tinha ANTES da edicao, ate o usuario recalcular.
+  let lastEditedIdx = null;
+
+  function targetTotal() {
+    return pState.valorModo === "total" ? pState.valorTotal : round2(pState.valorParcela * pState.numero);
+  }
+  function syncRecalcAffordance() {
+    const current = rows.reduce((s, r) => s + (Number(r.amount) || 0), 0);
+    const needsRecalc = lastEditedIdx !== null && lastEditedIdx < rows.length - 1 && Math.abs(current - targetTotal()) > 0.005;
+    document.getElementById("pf_recalc_row")?.classList.toggle("hidden", !needsRecalc);
+  }
 
   function renderTable() {
     document.getElementById("pf_table_area").innerHTML = parcelasTableHtml(rows);
@@ -1787,8 +2087,11 @@ function openParcelasPopup(defaults, existing, onSave, onCancel) {
     document.querySelectorAll(".prow-amount").forEach((inp) => {
       maskCurrencyInput(inp);
       inp.addEventListener("input", () => {
-        rows[inp.dataset.idx].amount = parseMaskedCurrency(inp.value);
+        const idx = parseInt(inp.dataset.idx);
+        rows[idx].amount = parseMaskedCurrency(inp.value);
+        lastEditedIdx = idx;
         document.getElementById("pf_total_value").textContent = formatCurrency(rows.reduce((s, r) => s + (Number(r.amount) || 0), 0));
+        syncRecalcAffordance();
       });
     });
     document.querySelectorAll(".prow-status").forEach((inp) => inp.addEventListener("change", () => { rows[inp.dataset.idx].status = inp.checked ? "pago" : "pendente"; }));
@@ -1796,6 +2099,7 @@ function openParcelasPopup(defaults, existing, onSave, onCancel) {
       if (rows.length <= 1) return showToast("É preciso ao menos uma parcela.", true);
       rows.splice(parseInt(btn.dataset.idx), 1);
       rows.forEach((r, i) => { r.number = i + 1; });
+      lastEditedIdx = null;
       renderTable();
     }));
     document.getElementById("pf_add_row")?.addEventListener("click", () => {
@@ -1809,6 +2113,27 @@ function openParcelasPopup(defaults, existing, onSave, onCancel) {
       if (numeroInput) numeroInput.value = rows.length;
       renderTable();
     });
+    document.getElementById("pf_recalc_row")?.addEventListener("click", () => {
+      if (lastEditedIdx === null) return;
+      redistributeRemaining(rows, lastEditedIdx, targetTotal());
+      lastEditedIdx = null;
+      renderTable();
+    });
+    syncRecalcAffordance();
+  }
+
+  // Regera a tabela ao vivo conforme os campos de cima mudam -- nao
+  // precisa mais clicar em "Gerar parcelas" pra ver o valor de cada
+  // parcela dividido (soh precisa do botao pra reconfigurar do zero
+  // depois de ja ter editado linhas individualmente).
+  function liveRegenerate() {
+    const val = parseMaskedCurrency(document.getElementById("pf_valor").value);
+    if (pState.valorModo === "total") pState.valorTotal = val; else pState.valorParcela = val;
+    pState.numero = Math.max(1, parseInt(document.getElementById("pf_numero").value || "1"));
+    pState.frequencia = document.getElementById("pf_frequencia").value;
+    rows = computeParcelasRows(pState);
+    lastEditedIdx = null;
+    renderTable();
   }
 
   openModal2("Parcelas", `
@@ -1852,21 +2177,63 @@ function openParcelasPopup(defaults, existing, onSave, onCancel) {
     pState.valorModo = e.target.value;
     document.getElementById("pf_valor_label").textContent = pState.valorModo === "total" ? "Valor Total (R$)" : "Valor de cada parcela (R$)";
     document.getElementById("pf_valor").value = toMaskedString(pState.valorModo === "total" ? pState.valorTotal : pState.valorParcela);
+    liveRegenerate();
   });
-  document.getElementById("pf_gerar").addEventListener("click", () => {
-    const val = parseMaskedCurrency(document.getElementById("pf_valor").value);
-    if (pState.valorModo === "total") pState.valorTotal = val; else pState.valorParcela = val;
-    pState.numero = Math.max(1, parseInt(document.getElementById("pf_numero").value || "1"));
-    pState.frequencia = document.getElementById("pf_frequencia").value;
-    rows = computeParcelasRows(pState);
-    renderTable();
-  });
+  document.getElementById("pf_valor").addEventListener("input", liveRegenerate);
+  document.getElementById("pf_numero").addEventListener("input", liveRegenerate);
+  document.getElementById("pf_frequencia").addEventListener("change", liveRegenerate);
+  document.getElementById("pf_gerar").addEventListener("click", liveRegenerate);
   document.getElementById("pf_cancel").addEventListener("click", () => { closeModal2(); onCancel?.(); });
   document.getElementById("pf_save").addEventListener("click", () => {
     if (!rows.length) return showToast("Gere ao menos uma parcela.", true);
     closeModal2();
     onSave({ rows: rows.map((r) => ({ ...r })), valorModo: pState.valorModo, valorTotal: pState.valorTotal, valorParcela: pState.valorParcela, frequencia: pState.frequencia });
   });
+}
+
+/** Abre o popup de Parcelas com o cronograma real de um parcelamento ja
+ * existente, pra editar datas/valores/status (usado tanto pelo botao
+ * "Editar parcelas" no painel de edicao quanto pelo fluxo de "Recalcular
+ * parcelas" ao editar o valor direto na lista).
+ *
+ * `override`, quando informado ({id, amount}), aplica esse valor na
+ * parcela correspondente ANTES de abrir o popup e ja recalcula as
+ * parcelas seguintes pra manter o total original do parcelamento. */
+async function openEditParcelasForGroup(groupId, anchorTransaction, override) {
+  let siblings;
+  try {
+    siblings = await api("GET", "/api/transactions?" + qs({ installment_group_id: groupId }));
+  } catch (e) { return showToast(e.message, true); }
+  siblings.sort((a, b) => (a.installment_number || 0) - (b.installment_number || 0));
+  const rows = siblings.map((s) => ({ id: s.id, number: s.installment_number, due_date: s.due_date, amount: s.amount, status: s.status }));
+
+  if (override) {
+    const editedIdx = rows.findIndex((r) => r.id === override.id);
+    if (editedIdx !== -1) {
+      const originalTotal = rows.reduce((s, r) => s + Number(r.amount || 0), 0);
+      rows[editedIdx].amount = override.amount;
+      redistributeRemaining(rows, editedIdx, originalTotal);
+    }
+  }
+
+  const defaults = { amount: anchorTransaction.amount, due_date: anchorTransaction.due_date };
+  const existing = {
+    rows,
+    valorModo: "parcela",
+    valorParcela: rows[0]?.amount ?? anchorTransaction.amount,
+    valorTotal: rows.reduce((s, r) => s + Number(r.amount || 0), 0),
+    frequencia: "mensal",
+  };
+  openParcelasPopup(defaults, existing, async (result) => {
+    try {
+      await api("PUT", `/api/transactions/${anchorTransaction.id}/installments`, {
+        schedule: result.rows.map((r) => ({ id: r.id, due_date: r.due_date, amount: r.amount, status: r.status })),
+      });
+      showToast("Parcelas atualizadas.");
+      closeModal();
+      refreshCurrentView();
+    } catch (e) { showToast(e.message, true); }
+  }, () => {});
 }
 
 function transactionFormHtml(t, presetGroup) {
@@ -1968,9 +2335,9 @@ function openTransactionModal(t, scope) {
   maskCurrencyInput(document.getElementById("f_amount"));
   attachCustomDatePicker("f_due_date");
   styleSelectAsCustomDropdown("f_account_id");
-  styleSelectAsCustomDropdown("f_category_id");
-  styleSelectAsCustomDropdown("f_contact_id");
-  styleSelectAsCustomDropdown("f_cost_center_id");
+  styleSelectAsSearchableDropdown("f_category_id");
+  styleSelectAsSearchableDropdown("f_contact_id");
+  styleSelectAsSearchableDropdown("f_cost_center_id");
   styleSelectAsCustomDropdown("f_status");
 
   document.getElementById("btnQuickContact").addEventListener("click", async () => {
@@ -2059,10 +2426,8 @@ function openTransactionModal(t, scope) {
   }
 
   if (t && t.installment_group_id) {
-    let installmentSiblings = null;
     api("GET", "/api/transactions?" + qs({ installment_group_id: t.installment_group_id }))
       .then((siblings) => {
-        installmentSiblings = siblings.slice().sort((a, b) => (a.installment_number || 0) - (b.installment_number || 0));
         const total = siblings.reduce((s, s2) => s + Number(s2.amount || 0), 0);
         const box = document.getElementById("installmentInfoBox");
         if (box) box.textContent = `Parcela ${t.installment_number} de ${t.installment_total} — total do parcelamento: ${formatCurrency(total)}`;
@@ -2070,28 +2435,7 @@ function openTransactionModal(t, scope) {
       .catch(() => {});
 
     document.getElementById("btnEditParcelas")?.addEventListener("click", () => {
-      if (!installmentSiblings) return showToast("Aguarde carregar as parcelas...", true);
-      const rows = installmentSiblings.map((s) => ({
-        id: s.id, number: s.installment_number, due_date: s.due_date, amount: s.amount, status: s.status,
-      }));
-      const defaults = { amount: t.amount, due_date: t.due_date };
-      const existing = {
-        rows,
-        valorModo: "parcela",
-        valorParcela: rows[0]?.amount ?? t.amount,
-        valorTotal: rows.reduce((s, r) => s + Number(r.amount || 0), 0),
-        frequencia: "mensal",
-      };
-      openParcelasPopup(defaults, existing, async (result) => {
-        try {
-          await api("PUT", `/api/transactions/${t.id}/installments`, {
-            schedule: result.rows.map((r) => ({ id: r.id, due_date: r.due_date, amount: r.amount, status: r.status })),
-          });
-          showToast("Parcelas atualizadas.");
-          closeModal();
-          refreshCurrentView();
-        } catch (e) { showToast(e.message, true); }
-      }, () => {});
+      openEditParcelasForGroup(t.installment_group_id, t);
     });
   }
 
@@ -3067,18 +3411,22 @@ document.getElementById("btnToggleTheme")?.addEventListener("click", () => {
 
 function applyHideValues(hidden) {
   document.body.classList.toggle("values-hidden", hidden);
-  const btn = document.getElementById("btnHideValues");
-  if (btn) { btn.innerHTML = hidden ? ICONS.eyeOff : ICONS.eye; btn.title = hidden ? "Mostrar valores" : "Ocultar valores"; }
+  document.querySelectorAll(".hide-values-btn").forEach((btn) => {
+    btn.innerHTML = hidden ? ICONS.eyeOff : ICONS.eye;
+    btn.title = hidden ? "Mostrar valores" : "Ocultar valores";
+  });
 }
 (function initHideValues() {
   let hidden = false;
   try { hidden = localStorage.getItem("valuesHidden") === "1"; } catch (e) {}
   applyHideValues(hidden);
 })();
-document.getElementById("btnHideValues")?.addEventListener("click", () => {
-  const hidden = !document.body.classList.contains("values-hidden");
-  applyHideValues(hidden);
-  try { localStorage.setItem("valuesHidden", hidden ? "1" : "0"); } catch (e) {}
+document.querySelectorAll(".hide-values-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const hidden = !document.body.classList.contains("values-hidden");
+    applyHideValues(hidden);
+    try { localStorage.setItem("valuesHidden", hidden ? "1" : "0"); } catch (e) {}
+  });
 });
 
 // ---------------------------------------------------------------------

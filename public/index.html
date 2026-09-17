@@ -138,6 +138,14 @@
             <div class="card-sub" style="margin-bottom:8px;">Total em atraso: <b class="negative" id="totalVencidas">R$ 0,00</b></div>
             <div id="listaVencidas" class="mini-table"></div>
           </div>
+
+          <div class="panel">
+            <div class="page-header" style="margin-bottom:10px;">
+              <h2 style="margin:0;">Meta financeira</h2>
+              <button type="button" class="btn-secondary" id="btnEditMeta" style="padding:6px 10px;font-size:12px;">Editar meta</button>
+            </div>
+            <div id="metaContent"></div>
+          </div>
         </div>
 
         <div class="dash-col">
@@ -187,6 +195,14 @@
     <section id="tab-lancamentos" class="tab">
       <header class="page-header">
         <h1>Lançamentos</h1>
+        <div class="page-header-actions">
+          <div class="month-switch" id="lancMonthSwitch">
+            <button type="button" id="lancPrevMonth">‹</button>
+            <span id="lancMonthLabel" class="month-label-clickable">—</span>
+            <button type="button" id="lancNextMonth">›</button>
+          </div>
+          <button type="button" class="hide-values-btn" title="Ocultar valores"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.8-7 10-7 10 7 10 7-3.8 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg></button>
+        </div>
       </header>
 
       <div class="lanc-dash-grid">
@@ -241,11 +257,6 @@
 
       <div id="groupPanel">
         <div class="filters">
-          <div class="month-switch" id="lancMonthSwitch">
-            <button type="button" id="lancPrevMonth">‹</button>
-            <span id="lancMonthLabel" class="month-label-clickable">—</span>
-            <button type="button" id="lancNextMonth">›</button>
-          </div>
           <select id="filterPeriodo">
             <option value="mes_atual">Este mês</option>
             <option value="mes_passado">Mês passado</option>
@@ -266,8 +277,8 @@
           <button type="button" id="btnSearchToggle" class="filter-search-btn" title="Buscar por descrição">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
           </button>
-          <button id="btnFiltrar" class="btn-primary">Filtrar</button>
-          <button class="btn-secondary" id="btnNovoLancamento" style="margin-left:auto;">+ Adicionar</button>
+          <button id="btnFiltrar" class="btn-secondary">Filtrar</button>
+          <button class="btn-primary" id="btnNovoLancamento" style="margin-left:auto;">+ Adicionar</button>
         </div>
 
         <div class="bulk-toolbar hidden" id="bulkToolbar">
@@ -282,8 +293,14 @@
           <thead>
             <tr>
               <th style="width:34px;"><input type="checkbox" id="selectAllCheckbox" /></th>
-              <th>Data</th><th>Descrição</th><th>Contato</th><th>Categoria</th>
-              <th>Pagamento</th><th>Valor</th><th>Pago?</th><th></th>
+              <th class="sortable-th" data-sort="date">Data<span class="sort-arrow"></span></th>
+              <th class="sortable-th" data-sort="description">Descrição<span class="sort-arrow"></span></th>
+              <th class="sortable-th" data-sort="contact">Contato<span class="sort-arrow"></span></th>
+              <th class="sortable-th" data-sort="category">Categoria<span class="sort-arrow"></span></th>
+              <th class="sortable-th" data-sort="pagamento">Pagamento<span class="sort-arrow"></span></th>
+              <th class="sortable-th" data-sort="amount">Valor<span class="sort-arrow"></span></th>
+              <th class="sortable-th" data-sort="status">Pago?<span class="sort-arrow"></span></th>
+              <th></th>
             </tr>
           </thead>
           <tbody id="transactionsBody"></tbody>

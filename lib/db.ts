@@ -1429,6 +1429,17 @@ export async function dashboardData(userId: string, profileId?: string | null, y
   const percentReceitas = previstoTotalReceitas ? round1((realizadoReceitas / previstoTotalReceitas) * 100) : 0;
   const percentDespesas = previstoTotalDespesas ? round1((realizadoDespesas / previstoTotalDespesas) * 100) : 0;
 
+  // Previsão de fechamento do MÊS SELECIONADO: saldo_atual só soma o que já
+  // foi PAGO, então pra projetar o saldo no fim do mês selecionado é preciso
+  // somar TODAS as pendências (inclusive as já vencidas e ainda não pagas,
+  // e as de meses intermediários) com vencimento até o fim daquele mês --
+  // sem piso de data, já que nada "pendente" nunca entrou no saldo_atual
+  // pra correr risco de contar em dobro. Sem isso, a previsão pra meses
+  // futuros ignorava pendências de meses anteriores ao selecionado.
+  const SEM_PISO_DE_DATA = "1970-01-01";
+  const faltaReceitasAteFechamento = await sumPrevisto(userId, "recebimento", SEM_PISO_DE_DATA, end, accountIds);
+  const faltaDespesasAteFechamento = await sumExpensePrevisto(userId, SEM_PISO_DE_DATA, end, accountIds);
+
   const todayIso = todayStr();
   const limite = addDays(todayIso, 30);
 
@@ -1505,6 +1516,8 @@ export async function dashboardData(userId: string, profileId?: string | null, y
     realizado_despesas: realizadoDespesas,
     falta_receitas: faltaReceitas,
     falta_despesas: faltaDespesas,
+    falta_receitas_ate_fechamento: round2(faltaReceitasAteFechamento),
+    falta_despesas_ate_fechamento: round2(faltaDespesasAteFechamento),
     previsto_total_receitas: previstoTotalReceitas,
     previsto_total_despesas: previstoTotalDespesas,
     percent_receitas: percentReceitas,
