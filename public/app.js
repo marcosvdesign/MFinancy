@@ -782,7 +782,7 @@ function goalCardHtml(goal, saldo) {
       <div class="mini-row" style="padding:6px 0;"><span>Saldo atual</span><b>${formatCurrency(saldo)}</b></div>
       <div class="mini-row" style="padding:6px 0; border-bottom:none;"><span>Meta</span><b>${formatCurrency(target)}</b></div>
       ${statusHtml}
-      ${redeemed ? "" : `<button type="button" class="btn-primary meta-resgatar-btn" style="margin-top:10px; width:100%;" ${achieved ? "" : "disabled"}>Resgatar meta</button>`}
+      ${redeemed ? "" : `<button type="button" class="btn-primary meta-resgatar-btn" style="margin-top:10px; width:fit-content;" ${achieved ? "" : "disabled"}>Resgatar meta</button>`}
       <div class="meta-trophy-box ${redeemed ? "" : "hidden"}">${ICONS.trophy}<span>Parabéns, meta resgatada!</span></div>
     </div>
   `;
