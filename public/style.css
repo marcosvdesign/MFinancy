@@ -32,7 +32,14 @@
   --glass-bg: rgba(255,255,255,0.66);
   --glass-border: rgba(255,255,255,0.35);
   --glass-blur: 18px;
-  --glass-shadow: 0 18px 40px rgba(0,0,0,0.12);
+  /* Pop-ups (dropdown, menu de contexto, date picker, modal, calculadora,
+     tooltip) sao mais transparentes e com desfoque mais forte que os
+     blocos estaticos da pagina -- reforca que estao "flutuando" por cima. */
+  --popup-bg: rgba(255,255,255,0.42);
+  --popup-blur: 28px;
+  /* Sombra projetada + um filete de brilho na aresta superior (efeito
+     "borda de vidro"), reforcando o glassmorphism em todo bloco que usa. */
+  --glass-shadow: 0 18px 40px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.5);
   --radius: 17px;
 }
 
@@ -69,6 +76,9 @@
   --badge-vencido-bg: rgba(239,100,100,0.18);
   --glass-bg: rgba(35,34,33,0.6);
   --glass-border: rgba(255,255,255,0.045);
+  --glass-shadow: 0 18px 40px rgba(0,0,0,0.3), inset 0 1px 0 rgba(255,255,255,0.08);
+  --popup-bg: rgba(30,29,28,0.38);
+  --popup-blur: 28px;
 }
 
 * { box-sizing: border-box; }
@@ -280,6 +290,7 @@ nav { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
 .card {
   background: var(--glass-bg); backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur));
   border: 1px solid var(--glass-border); border-radius: var(--radius); padding: 16px 18px;
+  box-shadow: var(--glass-shadow);
 }
 .card-label { font-size: 12.5px; color: var(--text-muted); margin-bottom: 8px; }
 .card-value { font-size: 22px; font-weight: 700; }
@@ -543,7 +554,7 @@ nav { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
 .submenu-arrow { color: var(--text-muted); font-size: 11px; }
 .bulk-submenu {
   display: none; position: absolute; top: -5px; left: 100%; margin-left: 4px; z-index: 71;
-  background: var(--glass-bg); backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur));
+  background: var(--popup-bg); backdrop-filter: blur(var(--popup-blur)); -webkit-backdrop-filter: blur(var(--popup-blur));
   border: 1px solid var(--glass-border); border-radius: 9px;
   box-shadow: 0 14px 34px rgba(0,0,0,0.16); min-width: 160px; padding: 5px;
 }
@@ -614,7 +625,7 @@ nav { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
 
 .row-menu-dropdown {
   position: fixed; z-index: 70;
-  background: var(--glass-bg); backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur));
+  background: var(--popup-bg); backdrop-filter: blur(var(--popup-blur)); -webkit-backdrop-filter: blur(var(--popup-blur));
   border: 1px solid var(--glass-border); border-radius: 9px;
   box-shadow: 0 14px 34px rgba(0,0,0,0.16); min-width: 150px; padding: 5px;
 }
@@ -640,6 +651,7 @@ nav { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
   background: var(--glass-bg); backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur));
   border: 1px solid var(--glass-border); border-radius: var(--radius);
   padding: 12px; display: flex; flex-direction: column; gap: 2px; position: sticky; top: 20px;
+  box-shadow: var(--glass-shadow);
 }
 .reports-group-title { font-size: 11px; text-transform: uppercase; color: var(--text-muted); font-weight: 700; margin: 12px 6px 4px 6px; }
 .reports-group-title:first-child { margin-top: 2px; }
@@ -659,7 +671,7 @@ nav { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
 
 .modal-overlay { position: fixed; inset: 0; background: var(--modal-overlay); display: flex; align-items: center; justify-content: center; z-index: 50; }
 .modal {
-  background: var(--glass-bg); backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur));
+  background: var(--popup-bg); backdrop-filter: blur(var(--popup-blur)); -webkit-backdrop-filter: blur(var(--popup-blur));
   border: 1px solid var(--glass-border);
   border-radius: var(--radius); width: 500px; max-width: 92vw; max-height: 88vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.25);
 }
@@ -843,7 +855,7 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 
 .calc-popup {
   position: fixed; z-index: 80;
-  background: var(--glass-bg); backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur));
+  background: var(--popup-bg); backdrop-filter: blur(var(--popup-blur)); -webkit-backdrop-filter: blur(var(--popup-blur));
   border: 1px solid var(--glass-border);
   border-radius: 12px; box-shadow: 0 18px 40px rgba(0,0,0,0.22); padding: 10px; width: 220px;
 }
@@ -904,7 +916,7 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .light-trigger:hover { background: var(--hover-tint) !important; }
 .light-trigger .chevron { color: var(--text-muted) !important; }
 .light-menu {
-  background: var(--glass-bg) !important; backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur));
+  background: var(--popup-bg) !important; backdrop-filter: blur(var(--popup-blur)); -webkit-backdrop-filter: blur(var(--popup-blur));
   border: 1px solid var(--glass-border) !important;
 }
 .light-menu .custom-select-option { color: var(--text) !important; }
@@ -944,7 +956,7 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
      de data dentro do popup de "confirme a data de pagamento" abria o
      calendario atras dele. */
   position: fixed; z-index: 96;
-  background: var(--glass-bg); backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur));
+  background: var(--popup-bg); backdrop-filter: blur(var(--popup-blur)); -webkit-backdrop-filter: blur(var(--popup-blur));
   border: 1px solid var(--glass-border);
   border-radius: 16px; box-shadow: 0 18px 40px rgba(0,0,0,0.22); padding: 14px; width: 260px;
 }
@@ -997,7 +1009,7 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 
 .confirm-dialog-overlay { z-index: 95; }
 .confirm-dialog {
-  background: var(--glass-bg); backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur));
+  background: var(--popup-bg); backdrop-filter: blur(var(--popup-blur)); -webkit-backdrop-filter: blur(var(--popup-blur));
   border: 1px solid var(--glass-border); width: 380px;
 }
 .confirm-dialog-message { margin: 0 0 16px 0; font-size: 14.5px; line-height: 1.5; }
@@ -1071,7 +1083,7 @@ body.values-hidden .mini-row > b {
 
 .chart-tooltip {
   position: fixed; z-index: 85; pointer-events: none;
-  background: var(--glass-bg); backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur));
+  background: var(--popup-bg); backdrop-filter: blur(var(--popup-blur)); -webkit-backdrop-filter: blur(var(--popup-blur));
   border: 1px solid var(--glass-border); border-radius: 8px; padding: 6px 10px;
   font-size: 12.5px; font-weight: 600; color: var(--text); box-shadow: 0 8px 20px rgba(0,0,0,0.18);
   white-space: nowrap;
