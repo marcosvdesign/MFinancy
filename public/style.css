@@ -6,6 +6,12 @@
   --hover-tint: #f0f5e9;
   --today-tint: #e6f0da;
   --border: #eeece7;
+  /* Separado de --border (que ficou bem sutil, quase igual ao fundo) --
+     a barra de rolagem precisa de contraste proprio pra continuar visivel
+     e reconhecivel como parte do design system, mesmo sobre um pop-up
+     translucido/desfocado. */
+  --scrollbar-thumb: rgba(0,0,0,0.16);
+  --scrollbar-thumb-hover: rgba(0,0,0,0.3);
   --text: #26241f;
   --text-muted: #726d62;
   --primary: #5e8a2f;
@@ -51,6 +57,8 @@
   --hover-tint: rgba(143,189,74,0.14);
   --today-tint: rgba(143,189,74,0.20);
   --border: #2a2928;
+  --scrollbar-thumb: rgba(255,255,255,0.16);
+  --scrollbar-thumb-hover: rgba(255,255,255,0.32);
   --text: #eae8e5;
   --text-muted: #9d9a95;
   --primary: #8fbd4a;
@@ -120,11 +128,11 @@ button,
 
 /* ---------- Scrollbars customizadas ---------- */
 
-* { scrollbar-width: thin; scrollbar-color: var(--border) transparent; }
+* { scrollbar-width: thin; scrollbar-color: var(--scrollbar-thumb) transparent; }
 *::-webkit-scrollbar { width: 9px; height: 9px; }
 *::-webkit-scrollbar-track { background: transparent; }
-*::-webkit-scrollbar-thumb { background-color: var(--border); border-radius: 999px; border: 2px solid transparent; background-clip: padding-box; }
-*::-webkit-scrollbar-thumb:hover { background-color: var(--text-muted); background-clip: padding-box; }
+*::-webkit-scrollbar-thumb { background-color: var(--scrollbar-thumb); border-radius: 999px; border: 2px solid transparent; background-clip: padding-box; }
+*::-webkit-scrollbar-thumb:hover { background-color: var(--scrollbar-thumb-hover); background-clip: padding-box; }
 
 /* Glassmorphism: aplicado individualmente em cada componente de superficie
    (paineis, cartoes, modais, popups) mais abaixo neste arquivo, trocando
@@ -482,7 +490,12 @@ nav { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
 /* ---------- Data table ---------- */
 
 .data-table {
-  width: 100%; border-collapse: collapse;
+  /* border-collapse:collapse quebra o clip de border-radius+overflow:hidden
+     em <table> (bug conhecido/cross-browser) -- o fundo da 1a linha (th)
+     "vaza" retangular por cima do canto arredondado. separate+spacing:0
+     corrige isso sem mudar a aparencia (celulas so tem border-bottom, sem
+     bordas verticais que dependessem do collapse). */
+  width: 100%; border-collapse: separate; border-spacing: 0;
   background: var(--glass-bg); backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur));
   border: 1px solid var(--glass-border); border-radius: var(--radius); overflow: hidden;
   box-shadow: var(--glass-shadow);
@@ -671,7 +684,11 @@ nav { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
 
 .modal-overlay { position: fixed; inset: 0; background: var(--modal-overlay); display: flex; align-items: center; justify-content: center; z-index: 50; }
 .modal {
-  background: var(--popup-bg); backdrop-filter: blur(var(--popup-blur)); -webkit-backdrop-filter: blur(var(--popup-blur));
+  /* Diferente dos outros pop-ups: o modal fica por cima de um scrim ESCURO
+     (.modal-overlay), entao usar o --popup-bg (mais transparente) deixava
+     o card escurecido/sujo demais no tema claro -- o fundo escuro vazava
+     atraves dele. Mantem o mesmo nivel de opacidade dos blocos da pagina. */
+  background: var(--glass-bg); backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur));
   border: 1px solid var(--glass-border);
   border-radius: var(--radius); width: 500px; max-width: 92vw; max-height: 88vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.25);
 }
@@ -1009,7 +1026,9 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 
 .confirm-dialog-overlay { z-index: 95; }
 .confirm-dialog {
-  background: var(--popup-bg); backdrop-filter: blur(var(--popup-blur)); -webkit-backdrop-filter: blur(var(--popup-blur));
+  /* Mesma razao do .modal: fica sobre um scrim escuro, entao usa a mesma
+     opacidade dos blocos da pagina em vez do --popup-bg mais transparente. */
+  background: var(--glass-bg); backdrop-filter: blur(var(--glass-blur)); -webkit-backdrop-filter: blur(var(--glass-blur));
   border: 1px solid var(--glass-border); width: 380px;
 }
 .confirm-dialog-message { margin: 0 0 16px 0; font-size: 14.5px; line-height: 1.5; }
