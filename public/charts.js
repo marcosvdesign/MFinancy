@@ -261,7 +261,9 @@ function drawGroupedBarChart(canvas, data) {
  * proporcional ao quanto ja foi pago/recebido (realizado). */
 function drawHatchedFlowChart(canvas, data, hover, forcedNiceMax) {
   canvas._lastFlowData = data;
-  const barAlpha = hover && hover.active ? 0.28 : 1;
+  // So o mes sob o cursor esmaece (nao o grafico inteiro de uma vez) --
+  // ver uso de hoverActive/hover.pointIndex dentro do loop de barras.
+  const hoverActive = hover && hover.active;
   // Um redesenho disparado so pelo hover (hover !== undefined) reaproveita
   // o tamanho ja calculado do canvas, sem re-medir/redimensionar a cada
   // movimento do mouse — evita o bug de o grafico "crescer"/tremer no hover.
@@ -303,10 +305,7 @@ function drawHatchedFlowChart(canvas, data, hover, forcedNiceMax) {
 
   // Linhas de grade (incluindo a linha R$0, sem destaque — igual as demais,
   // pra nao competir com a linha ondulada de tendencia) + numeros do eixo:
-  // as LINHAS esmaecem no hover (fazem parte do "grafico"), mas os NUMEROS
-  // ficam sempre na mesma opacidade.
-  ctx.save();
-  ctx.globalAlpha = barAlpha;
+  // nunca esmaecem no hover -- so a barra do mes sob o cursor esmaece.
   ctx.strokeStyle = borderColor;
   ctx.lineWidth = 1;
   ctx.beginPath();
@@ -322,7 +321,6 @@ function drawHatchedFlowChart(canvas, data, hover, forcedNiceMax) {
       ctx.stroke();
     });
   }
-  ctx.restore();
 
   ctx.fillStyle = mutedColor;
   ctx.font = "10.5px Segoe UI, sans-serif";
@@ -350,9 +348,10 @@ function drawHatchedFlowChart(canvas, data, hover, forcedNiceMax) {
   const trendColor = themeColor("--text", "#1c2333");
 
   const points = [];
-  ctx.save();
-  ctx.globalAlpha = barAlpha;
   data.forEach((d, i) => {
+    // So a barra do mes sob o cursor esmaece -- as demais ficam normais,
+    // em vez do grafico inteiro esmaecer de uma vez.
+    const barFade = hoverActive && hover.pointIndex === i ? 0.55 : 1;
     const groupX = padding.left + groupWidth * i + groupWidth / 2;
     const previstoRec = d.previstoReceitas != null ? d.previstoReceitas : d.receitas;
     const previstoDesp = d.previstoDespesas != null ? d.previstoDespesas : d.despesas;
@@ -372,6 +371,7 @@ function drawHatchedFlowChart(canvas, data, hover, forcedNiceMax) {
     // em ambas as camadas, do mesmo jeito que as cores solidas do resto do app.
     if (hPrevRec > 0) {
       ctx.save();
+      ctx.globalAlpha = barFade;
       ctxCapsuleBar(ctx, x, midY, barWidth, -hPrevRec, tipRadius);
       ctx.clip();
       const dimGrad = ctx.createLinearGradient(0, midY, 0, midY - hPrevRec);
@@ -396,6 +396,7 @@ function drawHatchedFlowChart(canvas, data, hover, forcedNiceMax) {
     // Despesas (abaixo da linha): mesma logica, espelhada.
     if (hPrevDesp > 0) {
       ctx.save();
+      ctx.globalAlpha = barFade;
       ctxCapsuleBar(ctx, x, midY, barWidth, hPrevDesp, tipRadius);
       ctx.clip();
       const dimGrad = ctx.createLinearGradient(0, midY, 0, midY + hPrevDesp);
@@ -418,7 +419,6 @@ function drawHatchedFlowChart(canvas, data, hover, forcedNiceMax) {
     const hSaldo = Math.max(-halfH, Math.min(halfH, (saldo / niceMax) * halfH));
     points.push({ x: groupX, y: midY - hSaldo, label: d.label, saldo });
   });
-  ctx.restore(); // fecha o globalAlpha reduzido do hover — so as barras/hachuras ficam esmaecidas.
 
   // Rotulos dos meses: sempre na mesma opacidade (nao esmaecem no hover).
   ctx.fillStyle = mutedColor;
@@ -430,13 +430,11 @@ function drawHatchedFlowChart(canvas, data, hover, forcedNiceMax) {
   });
 
   // Linha de tendencia (saldo do periodo): branca no escuro / escura no
-  // claro, em curva suave e sem pontos fixos marcados — nunca esmaece, so
-  // o grafico ao redor. Fica em enfase (mais grossa) quando o mouse esta
-  // sobre o grafico, e so entao mostra o ponto mais proximo do cursor.
-  const hoverActive = hover && hover.active;
+  // claro, em curva suave e sem pontos fixos marcados. Espessura fixa --
+  // nao aumenta no hover (so a barra do mes sob o cursor reage).
   ctx.save();
   ctx.strokeStyle = trendColor;
-  ctx.lineWidth = hoverActive ? 3 : 2;
+  ctx.lineWidth = 1.5;
   ctx.lineJoin = "round";
   ctx.lineCap = "round";
   ctx.beginPath();
