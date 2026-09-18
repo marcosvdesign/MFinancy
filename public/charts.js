@@ -40,8 +40,17 @@ function setupCanvasScale(canvas, forcedHeight, reuseDims) {
   return { ctx, width, height };
 }
 
+/** Formata um valor pro eixo do grafico: a partir de mil, usa notacao "K"
+ * com uma casa decimal (54600 -> "R$ 54.6K"; 5000 -> "R$ 5K", sem zero a
+ * mais). Abaixo de mil, mostra o valor cheio. */
 function formatCurrencyShort(v) {
-  const rounded = Math.round(Math.abs(v));
+  const abs = Math.abs(v);
+  if (abs >= 1000) {
+    const k = Math.round(abs / 100) / 10;
+    const kStr = k % 1 === 0 ? String(k) : k.toFixed(1);
+    return `R$ ${kStr}K`;
+  }
+  const rounded = Math.round(abs);
   return `R$ ${rounded.toLocaleString("pt-BR")}`;
 }
 
@@ -263,7 +272,6 @@ function drawHatchedFlowChart(canvas, data, hover, forcedNiceMax) {
 
   const borderColor = themeColor("--border", "#e3e7ee");
   const mutedColor = themeColor("--text-muted", "#6b7383");
-  const textColor = themeColor("--text", "#1c2333");
   const greenColor = themeColor("--green", "#2f9d55");
   const redColor = themeColor("--red", "#d64545");
 
@@ -293,12 +301,18 @@ function drawHatchedFlowChart(canvas, data, hover, forcedNiceMax) {
   const step = niceAxisNumber((forcedNiceMax || maxVal) / 3);
   const niceMax = forcedNiceMax || Math.ceil(maxVal / step) * step;
 
-  // Linhas de grade + numeros do eixo: as LINHAS esmaecem no hover (fazem
-  // parte do "grafico"), mas os NUMEROS ficam sempre na mesma opacidade.
+  // Linhas de grade (incluindo a linha R$0, sem destaque — igual as demais,
+  // pra nao competir com a linha ondulada de tendencia) + numeros do eixo:
+  // as LINHAS esmaecem no hover (fazem parte do "grafico"), mas os NUMEROS
+  // ficam sempre na mesma opacidade.
   ctx.save();
   ctx.globalAlpha = barAlpha;
   ctx.strokeStyle = borderColor;
   ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(padding.left, midY);
+  ctx.lineTo(width - padding.right, midY);
+  ctx.stroke();
   for (let v = step; v <= niceMax; v += step) {
     const dy = (v / niceMax) * halfH;
     [midY - dy, midY + dy].forEach((y) => {
@@ -309,12 +323,6 @@ function drawHatchedFlowChart(canvas, data, hover, forcedNiceMax) {
     });
   }
   ctx.restore();
-  ctx.strokeStyle = textColor;
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.moveTo(padding.left, midY);
-  ctx.lineTo(width - padding.right, midY);
-  ctx.stroke();
 
   ctx.fillStyle = mutedColor;
   ctx.font = "10.5px Segoe UI, sans-serif";
@@ -335,10 +343,10 @@ function drawHatchedFlowChart(canvas, data, hover, forcedNiceMax) {
   const tipRadius = barWidth / 2;
   const greenLight = themeColor("--green-light", "#7b9f54");
   const redLight = themeColor("--red-light", "#dd6666");
-  const greenDim = hexToRgba(greenColor, 0.22);
-  const greenDimLight = hexToRgba(greenLight, 0.22);
-  const redDim = hexToRgba(redColor, 0.22);
-  const redDimLight = hexToRgba(redLight, 0.22);
+  const greenDim = hexToRgba(greenColor, 0.32);
+  const greenDimLight = hexToRgba(greenLight, 0.32);
+  const redDim = hexToRgba(redColor, 0.32);
+  const redDimLight = hexToRgba(redLight, 0.32);
   const trendColor = themeColor("--text", "#1c2333");
 
   const points = [];
@@ -376,7 +384,11 @@ function drawHatchedFlowChart(canvas, data, hover, forcedNiceMax) {
         solidGrad.addColorStop(0, greenColor);
         solidGrad.addColorStop(1, greenLight);
         ctx.fillStyle = solidGrad;
-        ctx.fillRect(x, midY - hRealRec, barWidth, hRealRec);
+        // Capsula propria (nao um fillRect) pra a ponta do trecho realizado
+        // tambem ficar arredondada quando ele for mais curto que o previsto,
+        // em vez de terminar num corte reto no meio da barra.
+        ctxCapsuleBar(ctx, x, midY, barWidth, -hRealRec, tipRadius);
+        ctx.fill();
       }
       ctx.restore();
     }
@@ -396,7 +408,8 @@ function drawHatchedFlowChart(canvas, data, hover, forcedNiceMax) {
         solidGrad.addColorStop(0, redColor);
         solidGrad.addColorStop(1, redLight);
         ctx.fillStyle = solidGrad;
-        ctx.fillRect(x, midY, barWidth, hRealDesp);
+        ctxCapsuleBar(ctx, x, midY, barWidth, hRealDesp, tipRadius);
+        ctx.fill();
       }
       ctx.restore();
     }
@@ -431,20 +444,12 @@ function drawHatchedFlowChart(canvas, data, hover, forcedNiceMax) {
   ctx.stroke();
   ctx.restore();
   if (hoverActive) {
+    // So o circulo, na cor da linha — sem halo nem contorno.
     const p = points[hover.pointIndex];
     ctx.beginPath();
-    ctx.arc(p.x, p.y, 12, 0, Math.PI * 2);
-    ctx.fillStyle = trendColor;
-    ctx.globalAlpha = 0.22;
-    ctx.fill();
-    ctx.globalAlpha = 1;
-    ctx.beginPath();
-    ctx.arc(p.x, p.y, 7, 0, Math.PI * 2);
+    ctx.arc(p.x, p.y, 3.5, 0, Math.PI * 2);
     ctx.fillStyle = trendColor;
     ctx.fill();
-    ctx.lineWidth = 2;
-    ctx.strokeStyle = themeColor("--surface", "#fff");
-    ctx.stroke();
   }
 
   // Metadados guardados no proprio canvas pra permitir tooltip/hover por mouseover.

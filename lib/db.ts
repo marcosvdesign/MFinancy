@@ -1556,7 +1556,7 @@ export async function dashboardData(userId: string, profileId?: string | null, y
     agenda[day].transferencia = true;
   }
 
-  const mesesPt = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+  const mesesPt = ["JAN", "FEV", "MAR", "ABR", "MAI", "JUN", "JUL", "AGO", "SET", "OUT", "NOV", "DEZ"];
   const comparativoMensal = [];
   // Janela ampla (-3 a +2 = 6 meses) calculada uma unica vez; cada tela do
   // frontend recorta o trecho que precisa (dashboard usa os 6, Lancamentos
@@ -1569,7 +1569,7 @@ export async function dashboardData(userId: string, profileId?: string | null, y
     const previstoR = round2(r + (await sumPrevisto(userId, "recebimento", mStart, mEnd, accountIds)));
     const previstoD = round2(d + (await sumExpensePrevisto(userId, mStart, mEnd, accountIds)));
     comparativoMensal.push({
-      label: `${mesesPt[ref.month - 1]}/${String(ref.year).slice(2)}`,
+      label: mesesPt[ref.month - 1],
       receitas: r, despesas: d,
       previstoReceitas: previstoR, previstoDespesas: previstoD,
     });

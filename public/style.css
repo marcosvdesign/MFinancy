@@ -5,15 +5,15 @@
   --input-bg: #ffffff;
   --hover-tint: #f0f5e9;
   --today-tint: #e6f0da;
-  --border: #e6e2d9;
+  --border: #eeece7;
   --text: #26241f;
   --text-muted: #726d62;
   --primary: #5e8a2f;
   --primary-dark: #4a6f22;
   --green: var(--primary); /* mesmo verde dos botoes/nav, em vez de um verde separado */
   --red: #d64545;
-  --green-light: #7b9f54;
-  --red-light: #dd6666;
+  --green-light: #96b378;
+  --red-light: #e48686;
   --green-gradient: linear-gradient(135deg, var(--green) 0%, var(--green-light) 100%);
   --red-gradient: linear-gradient(135deg, var(--red) 0%, var(--red-light) 100%);
   --primary-gradient: var(--green-gradient); /* mesmo gradiente do verde, ver --green acima */
@@ -32,7 +32,7 @@
   --glass-bg: rgba(255,255,255,0.66);
   --glass-border: rgba(255,255,255,0.5);
   --glass-blur: 18px;
-  --radius: 12px;
+  --radius: 17px;
 }
 
 :root[data-theme="dark"] {
@@ -42,15 +42,15 @@
   --input-bg: #292827;
   --hover-tint: rgba(143,189,74,0.14);
   --today-tint: rgba(143,189,74,0.20);
-  --border: #3c3a38;
+  --border: #2a2928;
   --text: #eae8e5;
   --text-muted: #9d9a95;
   --primary: #8fbd4a;
   --primary-dark: #a9d164;
   --green: var(--primary); /* mesmo verde dos botoes/nav, em vez de um verde separado */
   --red: #ef6464;
-  --green-light: #a3c96b;
-  --red-light: #f28080;
+  --green-light: #b6d489;
+  --red-light: #f59a9a;
   --green-gradient: linear-gradient(135deg, var(--green) 0%, var(--green-light) 100%);
   --red-gradient: linear-gradient(135deg, var(--red) 0%, var(--red-light) 100%);
   --primary-gradient: var(--green-gradient); /* mesmo gradiente do verde, ver --green acima */
@@ -145,7 +145,7 @@ button, select, input, textarea { color: inherit; font-family: inherit; }
 .custom-select { position: relative; }
 .custom-select-trigger {
   width: 100%; display: flex; align-items: center; justify-content: flex-start; gap: 8px;
-  padding: 8px 10px; border-radius: 7px; border: 1px solid var(--sidebar-border);
+  padding: 8px 10px; border-radius: 10px; border: 1px solid var(--sidebar-border);
   background: var(--sidebar-hover); color: var(--sidebar-text-strong); font-size: 13px; cursor: pointer;
   font-family: inherit;
 }
@@ -186,7 +186,7 @@ button, select, input, textarea { color: inherit; font-family: inherit; }
 nav { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
 .nav-item {
   text-align: left; background: transparent; border: none; color: var(--sidebar-text);
-  padding: 11px 12px; border-radius: 8px; cursor: pointer; font-size: 14px; transition: background 0.15s, color 0.15s;
+  padding: 11px 12px; border-radius: 11px; cursor: pointer; font-size: 14px; transition: background 0.15s, color 0.15s;
 }
 .nav-item:hover { background: var(--sidebar-hover); }
 .nav-item.active { background: var(--primary-gradient); color: #fff; }
@@ -225,7 +225,7 @@ nav { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
 
 .btn-primary {
   background: var(--primary-gradient); color: #fff; border: none; padding: 10px 16px;
-  border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 600; white-space: nowrap;
+  border-radius: 11px; cursor: pointer; font-size: 14px; font-weight: 600; white-space: nowrap;
 }
 .btn-primary:hover { background: var(--primary-dark); }
 .btn-primary:disabled, .btn-secondary:disabled { opacity: 0.45; cursor: not-allowed; }

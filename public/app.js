@@ -25,17 +25,17 @@ const ICONS = {
   moon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8.5 8.5 0 1110.2 4a7 7 0 009.8 10.5z" vector-effect="non-scaling-stroke"/></svg>',
   eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.8-7 10-7 10 7 10 7-3.8 7-10 7-10-7-10-7z" vector-effect="non-scaling-stroke"/><circle cx="12" cy="12" r="3" vector-effect="non-scaling-stroke"/></svg>',
   eyeOff: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18" vector-effect="non-scaling-stroke"/><path d="M10.6 5.2A10.8 10.8 0 0112 5c6.2 0 10 7 10 7a17.9 17.9 0 01-3.4 4.3M6.5 6.6C4 8.3 2 12 2 12s3.8 7 10 7a10.4 10.4 0 004.2-.9" vector-effect="non-scaling-stroke"/><path d="M9.9 9.9a3 3 0 004.2 4.2" vector-effect="non-scaling-stroke"/></svg>',
-  starFilled: '<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M12 3l2.6 5.9 6.4.6-4.9 4.3 1.5 6.3L12 16.9 6.4 20.1l1.5-6.3-4.9-4.3 6.4-.6z" vector-effect="non-scaling-stroke"/></svg>',
+  starFilled: '<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><path d="M12 3l2.6 5.9 6.4.6-4.9 4.3 1.5 6.3L12 16.9 6.4 20.1l1.5-6.3-4.9-4.3 6.4-.6z" vector-effect="non-scaling-stroke"/></svg>',
   starOutline: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"><path d="M12 3l2.6 5.9 6.4.6-4.9 4.3 1.5 6.3L12 16.9 6.4 20.1l1.5-6.3-4.9-4.3 6.4-.6z" vector-effect="non-scaling-stroke"/></svg>',
-  chevronDown: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6" vector-effect="non-scaling-stroke"/></svg>',
+  chevronDown: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6" vector-effect="non-scaling-stroke"/></svg>',
   trophy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 01-10 0V4z" vector-effect="non-scaling-stroke"/><path d="M7 5H4a1 1 0 00-1 1v1a4 4 0 004 4M17 5h3a1 1 0 011 1v1a4 4 0 01-4 4" vector-effect="non-scaling-stroke"/></svg>',
   alertTriangle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5L2.5 20h19L12 3.5z" vector-effect="non-scaling-stroke"/><path d="M12 10v4.5" vector-effect="non-scaling-stroke"/><circle cx="12" cy="17.5" r="0.6" fill="currentColor" stroke="none"/></svg>',
   repeat: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 2l4 4-4 4" vector-effect="non-scaling-stroke"/><path d="M3 11V9a4 4 0 014-4h14" vector-effect="non-scaling-stroke"/><path d="M7 22l-4-4 4-4" vector-effect="non-scaling-stroke"/><path d="M21 13v2a4 4 0 01-4 4H3" vector-effect="non-scaling-stroke"/></svg>',
   checkCircle: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" vector-effect="non-scaling-stroke"/><path d="M8.5 12.5l2.5 2.5 5-5" vector-effect="non-scaling-stroke"/></svg>',
-  chevronUp: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6" vector-effect="non-scaling-stroke"/></svg>',
+  chevronUp: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 15l6-6 6 6" vector-effect="non-scaling-stroke"/></svg>',
   pencil: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l4.5-1L19 8.5a2 2 0 000-2.8l-.7-.7a2 2 0 00-2.8 0L5 15.5 4 20z" vector-effect="non-scaling-stroke"/></svg>',
   trash: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2M6 7l1 13a1 1 0 001 1h8a1 1 0 001-1l1-13" vector-effect="non-scaling-stroke"/></svg>',
-  plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14" vector-effect="non-scaling-stroke"/></svg>',
+  plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14" vector-effect="non-scaling-stroke"/></svg>',
 };
 
 function round2(n) { return Math.round((n + Number.EPSILON) * 100) / 100; }
@@ -134,6 +134,22 @@ function formatDateBR(iso) {
   return `${d}/${m}/${y}`;
 }
 function todayIso() { return new Date().toISOString().slice(0, 10); }
+
+/** Gera um leve gradiente (cor -> tom mais claro dela mesma) a partir de
+ * uma cor arbitraria "#rrggbb" -- usado nas bolinhas coloridas de perfis
+ * e contas bancarias, que o usuario escolhe livremente (nao vem de uma
+ * variavel de tema fixa como --green/--red). Mesma intensidade (~35%)
+ * usada no gradiente das cores verde/vermelha do resto do app. */
+function colorGradient(hex) {
+  const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex || "");
+  if (!m) return hex;
+  const lighten = (c) => Math.round(c + (255 - c) * 0.35);
+  const r = lighten(parseInt(m[1], 16));
+  const g = lighten(parseInt(m[2], 16));
+  const b = lighten(parseInt(m[3], 16));
+  const light = `rgb(${r}, ${g}, ${b})`;
+  return `linear-gradient(135deg, ${hex} 0%, ${light} 100%)`;
+}
 function escapeHtml(str) {
   return String(str ?? "").replace(/[&<>"']/g, (c) => (
     { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
@@ -651,7 +667,7 @@ async function loadDashboard() {
   document.getElementById("saldoAtual").className = "card-value " + (data.saldo_atual > 0 ? "positive" : data.saldo_atual < 0 ? "negative" : "");
   document.getElementById("saldoPorPerfil").innerHTML = data.saldo_por_perfil.map((p) => `
     <div class="account-balance-row">
-      <span class="color-dot" style="background:${p.color}"></span>
+      <span class="color-dot" style="background:${colorGradient(p.color)}"></span>
       <span class="name">${escapeHtml(p.name)}</span>
       <span class="value ${p.balance < 0 ? "negative" : p.balance > 0 ? "positive" : ""}">${formatCurrency(p.balance)}</span>
     </div>`).join("") || `<div class="empty-state">Nenhum perfil.</div>`;
@@ -659,7 +675,7 @@ async function loadDashboard() {
   document.getElementById("saldoPorConta").innerHTML = data.saldo_por_conta.length
     ? data.saldo_por_conta.map((a) => `
         <div class="account-balance-row">
-          <span class="color-dot" style="background:${a.color || "#546e7a"}"></span>
+          <span class="color-dot" style="background:${colorGradient(a.color || "#546e7a")}"></span>
           <span class="name">${a.is_primary ? `<span class="account-dropdown-star">${ICONS.starFilled}</span>` : ""}${escapeHtml(a.name)}</span>
           <span class="value ${a.balance < 0 ? "negative" : a.balance > 0 ? "positive" : ""}">${formatCurrency(a.balance)}</span>
         </div>`).join("")
@@ -1144,7 +1160,7 @@ async function loadLancDashboard() {
   document.getElementById("lancProgressReceita").style.width = Math.max(0, Math.min(100, data.percent_receitas)) + "%";
   document.getElementById("lancProgressDespesa").style.width = Math.max(0, Math.min(100, data.percent_despesas)) + "%";
 
-  const lancChartData = (data.comparativo_mensal || []).slice(1, 4); // 2 meses atras + atual
+  const lancChartData = (data.comparativo_mensal || []).slice(1, 6); // 2 meses atras + atual + 2 a frente
   animateHatchedFlowChart(document.getElementById("lancChart"), lancChartData);
   attachChartTooltip(document.getElementById("lancChart"), lancChartData);
 
@@ -3390,7 +3406,7 @@ async function loadPerfis() {
   state.profiles = profiles;
   document.getElementById("profilesGrid").innerHTML = profiles.map((p) => `
     <div class="entity-card">
-      <div class="entity-card-head"><span class="color-dot" style="background:${p.color}"></span><span class="entity-card-title">${escapeHtml(p.name)}</span></div>
+      <div class="entity-card-head"><span class="color-dot" style="background:${colorGradient(p.color)}"></span><span class="entity-card-title">${escapeHtml(p.name)}</span></div>
       <div class="entity-card-actions"><button data-action="edit" data-id="${p.id}">Editar</button><button data-action="delete" data-id="${p.id}" class="btn-danger">Excluir</button></div>
     </div>`).join("");
   document.getElementById("profilesGrid").querySelectorAll("button[data-action]").forEach((btn) => {
@@ -3462,7 +3478,7 @@ async function loadAccounts() {
     return `
     <div class="entity-card">
       <div class="entity-card-head">
-        <span class="color-dot" style="background:${a.color}"></span>
+        <span class="color-dot" style="background:${colorGradient(a.color)}"></span>
         <span class="entity-card-title">${escapeHtml(a.name)}</span>
         <button type="button" class="primary-star-btn ${a.is_primary ? "is-primary" : ""}" data-action="star" data-id="${a.id}" title="${a.is_primary ? "Conta principal" : "Definir como conta principal"}">${a.is_primary ? ICONS.starFilled : ICONS.starOutline}</button>
       </div>
@@ -3766,7 +3782,7 @@ function redrawThemedCharts() {
     if (document.getElementById("chartComparativo")) drawHatchedFlowChart(document.getElementById("chartComparativo"), d1.comparativo_mensal);
   }
   const d2 = state.lastLancDashboardData;
-  if (d2 && lancVisible && document.getElementById("lancChart")) drawHatchedFlowChart(document.getElementById("lancChart"), (d2.comparativo_mensal || []).slice(1, 4));
+  if (d2 && lancVisible && document.getElementById("lancChart")) drawHatchedFlowChart(document.getElementById("lancChart"), (d2.comparativo_mensal || []).slice(1, 6));
 }
 
 // Torna os graficos de fluxo de caixa responsivos horizontalmente: ao
