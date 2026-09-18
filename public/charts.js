@@ -62,24 +62,65 @@ function niceAxisNumber(value) {
   return niceFraction * Math.pow(10, exponent);
 }
 
-/** Retangulo com cantos arredondados (com fallback pra navegadores sem
- * CanvasRenderingContext2D.roundRect). */
-function ctxRoundRect(ctx, x, y, w, h, r) {
-  const radius = Math.max(0, Math.min(r, Math.abs(w) / 2, Math.abs(h) / 2));
-  if (typeof ctx.roundRect === "function") {
-    ctx.beginPath();
-    ctx.roundRect(x, h >= 0 ? y : y + h, Math.abs(w), Math.abs(h), radius);
-    return;
-  }
-  const yy = h >= 0 ? y : y + h;
-  const hh = Math.abs(h);
+/** Barra "capsula": arredondada so na ponta (extremidade mais longe da
+ * linha central), com a base (encostada no eixo R$0) reta -- visual mais
+ * proximo do estilo Apple (Screen Time/Activity) do que um retangulo com
+ * as 4 pontas arredondadas igualmente. `hSigned` negativo = barra pra cima. */
+function ctxCapsuleBar(ctx, x, midY, w, hSigned, rTip) {
+  const up = hSigned < 0;
+  const h = Math.abs(hSigned);
+  const r = Math.max(0, Math.min(rTip, w / 2, h));
+  const top = up ? midY - h : midY;
+  const bottom = up ? midY : midY + h;
   ctx.beginPath();
-  ctx.moveTo(x + radius, yy);
-  ctx.arcTo(x + w, yy, x + w, yy + hh, radius);
-  ctx.arcTo(x + w, yy + hh, x, yy + hh, radius);
-  ctx.arcTo(x, yy + hh, x, yy, radius);
-  ctx.arcTo(x, yy, x + w, yy, radius);
+  if (up) {
+    ctx.moveTo(x, bottom);
+    ctx.lineTo(x, top + r);
+    ctx.arcTo(x, top, x + r, top, r);
+    ctx.lineTo(x + w - r, top);
+    ctx.arcTo(x + w, top, x + w, top + r, r);
+    ctx.lineTo(x + w, bottom);
+  } else {
+    ctx.moveTo(x, top);
+    ctx.lineTo(x, bottom - r);
+    ctx.arcTo(x, bottom, x + r, bottom, r);
+    ctx.lineTo(x + w - r, bottom);
+    ctx.arcTo(x + w, bottom, x + w, bottom - r, r);
+    ctx.lineTo(x + w, top);
+  }
   ctx.closePath();
+}
+
+/** Converte uma cor "#rrggbb" pra "rgba(...)" com a opacidade informada --
+ * usado pra esmaecer o preenchimento previsto/nao realizado das barras
+ * (em vez da hachura antiga), e as cores do tema (--green/--red) sempre
+ * chegam aqui nesse formato. */
+function hexToRgba(hex, alpha) {
+  const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
+  if (!m) return hex;
+  const r = parseInt(m[1], 16), g = parseInt(m[2], 16), b = parseInt(m[3], 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+/** Traca uma curva suave (Catmull-Rom convertida em bezier) passando por
+ * todos os pontos, em vez de segmentos retos -- usado na linha de
+ * fechamento do fluxo de caixa. Precisa ser chamado entre beginPath() e
+ * stroke()/fill(). */
+function drawSmoothPath(ctx, pts) {
+  if (!pts.length) return;
+  ctx.moveTo(pts[0].x, pts[0].y);
+  if (pts.length === 1) return;
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i === 0 ? 0 : i - 1];
+    const p1 = pts[i];
+    const p2 = pts[i + 1];
+    const p3 = pts[i + 2 < pts.length ? i + 2 : i + 1];
+    const cp1x = p1.x + (p2.x - p0.x) / 6;
+    const cp1y = p1.y + (p2.y - p0.y) / 6;
+    const cp2x = p2.x - (p3.x - p1.x) / 6;
+    const cp2y = p2.y - (p3.y - p1.y) / 6;
+    ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.x, p2.y);
+  }
 }
 
 /** Le uma custom property do tema atual (claro/escuro), pra graficos em
@@ -280,24 +321,11 @@ function drawHatchedFlowChart(canvas, data, hover, forcedNiceMax) {
   // Colunas (barras) mais largas dentro do mesmo bloco/canvas — o que deve
   // crescer aqui e a "vela", nao o tamanho do painel ao redor dela.
   const barWidth = Math.min(48, groupWidth * 0.62);
-  const barRadius = Math.min(6, barWidth / 3);
-
-  // Padrao hachurado (diagonal), reutilizado pra cima e pra baixo em cores diferentes.
-  function hatchPattern(color) {
-    const tile = document.createElement("canvas");
-    tile.width = 5; tile.height = 5;
-    const tctx = tile.getContext("2d");
-    tctx.strokeStyle = color;
-    tctx.lineWidth = 1;
-    tctx.beginPath();
-    tctx.moveTo(0, 5); tctx.lineTo(5, 0);
-    tctx.moveTo(-1.5, 1.5); tctx.lineTo(1.5, -1.5);
-    tctx.moveTo(3.5, 6.5); tctx.lineTo(6.5, 3.5);
-    tctx.stroke();
-    return ctx.createPattern(tile, "repeat");
-  }
-  const greenHatch = hatchPattern(greenColor);
-  const redHatch = hatchPattern(redColor);
+  // Arredonda so a ponta da barra (estilo "capsula", ver ctxCapsuleBar);
+  // a base encostada no eixo R$0 fica reta.
+  const tipRadius = Math.min(barWidth / 2, 16);
+  const greenDim = hexToRgba(greenColor, 0.22);
+  const redDim = hexToRgba(redColor, 0.22);
   const trendColor = themeColor("--text", "#1c2333");
 
   const points = [];
@@ -317,42 +345,34 @@ function drawHatchedFlowChart(canvas, data, hover, forcedNiceMax) {
 
     const x = groupX - barWidth / 2;
 
-    // Recebimentos (acima da linha): contorno hachurado = previsto, preenchimento
-    // solido = realizado — desenhados dentro de um clip com cantos arredondados
-    // pra nao gerar um segundo arredondado "flutuando" no meio da barra.
+    // Recebimentos (acima da linha): toda a barra (previsto) esmaecida, com
+    // a parte ja realizada em cor solida por cima — capsula arredondada so
+    // na ponta, base reta encostada no eixo R$0.
     if (hPrevRec > 0) {
       ctx.save();
-      ctxRoundRect(ctx, x, midY, barWidth, -hPrevRec, barRadius);
+      ctxCapsuleBar(ctx, x, midY, barWidth, -hPrevRec, tipRadius);
       ctx.clip();
-      ctx.fillStyle = greenHatch;
+      ctx.fillStyle = greenDim;
       ctx.fillRect(x, midY - hPrevRec, barWidth, hPrevRec);
       if (hRealRec > 0) {
         ctx.fillStyle = greenColor;
         ctx.fillRect(x, midY - hRealRec, barWidth, hRealRec);
       }
       ctx.restore();
-      ctxRoundRect(ctx, x + 0.5, midY, barWidth - 1, -hPrevRec + 1, barRadius);
-      ctx.strokeStyle = greenColor;
-      ctx.lineWidth = 1;
-      ctx.stroke();
     }
 
     // Despesas (abaixo da linha): mesma logica, espelhada.
     if (hPrevDesp > 0) {
       ctx.save();
-      ctxRoundRect(ctx, x, midY, barWidth, hPrevDesp, barRadius);
+      ctxCapsuleBar(ctx, x, midY, barWidth, hPrevDesp, tipRadius);
       ctx.clip();
-      ctx.fillStyle = redHatch;
+      ctx.fillStyle = redDim;
       ctx.fillRect(x, midY, barWidth, hPrevDesp);
       if (hRealDesp > 0) {
         ctx.fillStyle = redColor;
         ctx.fillRect(x, midY, barWidth, hRealDesp);
       }
       ctx.restore();
-      ctxRoundRect(ctx, x + 0.5, midY, barWidth - 1, hPrevDesp - 1, barRadius);
-      ctx.strokeStyle = redColor;
-      ctx.lineWidth = 1;
-      ctx.stroke();
     }
 
     const saldo = realizadoRec - realizadoDesp;
@@ -371,33 +391,35 @@ function drawHatchedFlowChart(canvas, data, hover, forcedNiceMax) {
   });
 
   // Linha de tendencia (saldo do periodo): branca no escuro / escura no
-  // claro, com um ponto marcado por mes — nunca esmaece, so o grafico ao
-  // redor. Fica em enfase (mais grossa) quando o mouse esta sobre o grafico.
+  // claro, em curva suave e sem pontos fixos marcados — nunca esmaece, so
+  // o grafico ao redor. Fica em enfase (mais grossa) quando o mouse esta
+  // sobre o grafico, e so entao mostra o ponto mais proximo do cursor.
   const hoverActive = hover && hover.active;
+  ctx.save();
   ctx.strokeStyle = trendColor;
   ctx.lineWidth = hoverActive ? 3 : 2;
+  ctx.lineJoin = "round";
+  ctx.lineCap = "round";
   ctx.beginPath();
-  points.forEach((p, i) => { if (i === 0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y); });
+  drawSmoothPath(ctx, points);
   ctx.stroke();
-  points.forEach((p, i) => {
-    const isHovered = hoverActive && hover.pointIndex === i;
-    const radius = isHovered ? 7 : hoverActive ? 4.5 : 4;
-    if (isHovered) {
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, radius + 5, 0, Math.PI * 2);
-      ctx.fillStyle = trendColor;
-      ctx.globalAlpha = 0.22;
-      ctx.fill();
-      ctx.globalAlpha = 1;
-    }
+  ctx.restore();
+  if (hoverActive) {
+    const p = points[hover.pointIndex];
     ctx.beginPath();
-    ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+    ctx.arc(p.x, p.y, 12, 0, Math.PI * 2);
+    ctx.fillStyle = trendColor;
+    ctx.globalAlpha = 0.22;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, 7, 0, Math.PI * 2);
     ctx.fillStyle = trendColor;
     ctx.fill();
     ctx.lineWidth = 2;
     ctx.strokeStyle = themeColor("--surface", "#fff");
     ctx.stroke();
-  });
+  }
 
   // Metadados guardados no proprio canvas pra permitir tooltip/hover por mouseover.
   canvas._chartPoints = points;
