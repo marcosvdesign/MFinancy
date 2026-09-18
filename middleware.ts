@@ -7,6 +7,10 @@ const PUBLIC_PATHS = [
   "/login", "/login.html", "/api/login",
   "/signup", "/signup.html", "/api/signup",
   "/style.css", "/favicon.ico",
+  // A logo aparece nas proprias telas de login/cadastro (usuario ainda nao
+  // autenticado), entao precisa ser publica como o favicon/style.css --
+  // sem isso ela (e o icone da aba) ficava com redirect pro /login.
+  "/favicon.png", "/apple-touch-icon.png", "/logo.png",
 ];
 
 export async function middleware(request: NextRequest) {
