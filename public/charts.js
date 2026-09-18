@@ -350,8 +350,12 @@ function drawHatchedFlowChart(canvas, data, hover, forcedNiceMax) {
   const points = [];
   data.forEach((d, i) => {
     // So a barra do mes sob o cursor esmaece -- as demais ficam normais,
-    // em vez do grafico inteiro esmaecer de uma vez.
-    const barFade = hoverActive && hover.pointIndex === i ? 0.55 : 1;
+    // em vez do grafico inteiro esmaecer de uma vez. Quando ha um array de
+    // alphas animados (ver animateBarHover), usa o valor continuo dele pra
+    // a transicao ficar suave em vez de saltar entre 1 e 0.55.
+    const barFade = hover && hover.barAlphas
+      ? hover.barAlphas[i]
+      : (hoverActive && hover.pointIndex === i ? 0.55 : 1);
     const groupX = padding.left + groupWidth * i + groupWidth / 2;
     const previstoRec = d.previstoReceitas != null ? d.previstoReceitas : d.receitas;
     const previstoDesp = d.previstoDespesas != null ? d.previstoDespesas : d.despesas;
@@ -513,9 +517,35 @@ function animateHatchedFlowChart(canvas, newData) {
   canvas._flowAnimFrame = requestAnimationFrame(frame);
 }
 
+/** Anima o esmaecimento da barra sob o cursor (ver drawHatchedFlowChart):
+ * em vez de saltar de opacidade 1 pra 0.55 de uma vez, cada barra tem seu
+ * proprio valor de alpha que caminha suavemente ate o alvo (0.55 pra quem
+ * esta sob o cursor, 1 pras demais) a cada frame, ate convergir. `pointIndex`
+ * null tira o destaque de todas (mouse saiu do grafico). */
+function animateBarHover(canvas, pointIndex) {
+  const data = canvas._lastFlowData || [];
+  if (!canvas._barAlphas || canvas._barAlphas.length !== data.length) {
+    canvas._barAlphas = data.map(() => 1);
+  }
+  if (canvas._barAlphaAnimFrame) cancelAnimationFrame(canvas._barAlphaAnimFrame);
+
+  function frame() {
+    let settled = true;
+    canvas._barAlphas = canvas._barAlphas.map((a, i) => {
+      const target = i === pointIndex ? 0.55 : 1;
+      if (Math.abs(a - target) < 0.004) return target;
+      settled = false;
+      return a + (target - a) * 0.22;
+    });
+    drawHatchedFlowChart(canvas, data, { active: pointIndex != null, pointIndex, barAlphas: canvas._barAlphas });
+    canvas._barAlphaAnimFrame = settled ? null : requestAnimationFrame(frame);
+  }
+  canvas._barAlphaAnimFrame = requestAnimationFrame(frame);
+}
+
 /** Liga um tooltip (mostrando o saldo do mes) que segue o mouse sobre o
- * grafico, e a animacao de enfase (esmaece as barras, destaca a linha de
- * tendencia e o ponto mais proximo do cursor). */
+ * grafico, e a animacao de enfase (esmaece a barra sob o cursor e destaca
+ * o ponto mais proximo dela na linha de tendencia). */
 function attachChartTooltip(canvas) {
   if (!canvas || canvas._tooltipAttached) return;
   canvas._tooltipAttached = true;
@@ -538,16 +568,16 @@ function attachChartTooltip(canvas) {
     tooltip.style.left = `${e.clientX + 12}px`;
     tooltip.style.top = `${e.clientY + 12}px`;
     tooltip.classList.remove("hidden");
-    // So redesenha o grafico quando o ponto em destaque realmente muda —
-    // evita redesenhos redundantes a cada pixel de movimento do mouse.
+    // So reinicia a animacao quando o ponto em destaque realmente muda —
+    // evita reiniciar a cada pixel de movimento do mouse.
     if (canvas._lastHoverIdx !== nearestIdx) {
       canvas._lastHoverIdx = nearestIdx;
-      if (canvas._lastFlowData) drawHatchedFlowChart(canvas, canvas._lastFlowData, { active: true, pointIndex: nearestIdx });
+      animateBarHover(canvas, nearestIdx);
     }
   });
   canvas.addEventListener("mouseleave", () => {
     tooltip.classList.add("hidden");
     canvas._lastHoverIdx = undefined;
-    if (canvas._lastFlowData) drawHatchedFlowChart(canvas, canvas._lastFlowData, null);
+    animateBarHover(canvas, null);
   });
 }
