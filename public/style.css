@@ -177,9 +177,8 @@ button,
   font-weight: 700; font-size: 17px; color: var(--sidebar-text-strong);
   padding: 0 8px 16px 8px;
 }
-.brand-dot {
-  width: 10px; height: 10px; border-radius: 50%;
-  background: var(--primary); box-shadow: 0 0 0 4px rgba(143,189,74,0.25);
+.brand-logo {
+  width: 26px; height: 26px; flex-shrink: 0; object-fit: contain;
 }
 
 .profile-switch {
@@ -826,7 +825,7 @@ nav { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
 .sidebar.collapsed .theme-toggle-label { display: none; }
 .sidebar.collapsed .profile-switch { padding-left: 0; padding-right: 0; }
 .sidebar.collapsed .logout-form { padding: 0; }
-.sidebar.collapsed .brand-dot { display: none; }
+.sidebar.collapsed .brand-logo { display: none; }
 .sidebar.collapsed .brand { justify-content: center; padding: 0 0 16px 0; }
 .sidebar.collapsed .sidebar-toggle-btn { margin-left: 0; width: 40px; }
 

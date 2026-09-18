@@ -4,7 +4,8 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <title>Entrar — MyFinance</title>
-<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+<link rel="icon" href="/favicon.png" type="image/png" />
+<link rel="apple-touch-icon" href="/apple-touch-icon.png" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&display=swap" rel="stylesheet" />
@@ -26,7 +27,7 @@
     box-shadow: 0 24px 60px rgba(0,0,0,0.35);
   }
   .login-brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 18px; margin-bottom: 22px; }
-  .login-brand .brand-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--primary); box-shadow: 0 0 0 4px rgba(47,111,237,0.25); }
+  .login-brand img { width: 28px; height: 28px; }
   .login-card input {
     width: 100%; padding: 11px 12px; border-radius: 8px; border: 1px solid var(--border);
     background: var(--input-bg); color: var(--text); font-size: 14px; margin-bottom: 14px;
@@ -45,7 +46,7 @@
 </head>
 <body>
   <div class="login-card">
-    <div class="login-brand"><span class="brand-dot"></span><span>MyFinance</span></div>
+    <div class="login-brand"><img src="/logo.png" alt="" /><span>MyFinance</span></div>
     <p class="login-error" id="loginError">E-mail ou senha incorretos. Tente novamente.</p>
     <form method="POST" action="/api/login">
       <input type="email" name="email" placeholder="E-mail" autofocus required />
