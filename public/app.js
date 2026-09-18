@@ -636,8 +636,8 @@ async function loadDashboard() {
   } catch (e) { return showToast(e.message, true); }
   state.lastDashboardData = data;
 
-  drawDonut(document.getElementById("donutReceitas"), data.percent_receitas, themeColor("--green", "#2f9d55"));
-  drawDonut(document.getElementById("donutDespesas"), data.percent_despesas, themeColor("--red", "#d64545"));
+  drawDonut(document.getElementById("donutReceitas"), data.percent_receitas, themeColor("--green", "#2f9d55"), themeColor("--green-light"));
+  drawDonut(document.getElementById("donutDespesas"), data.percent_despesas, themeColor("--red", "#d64545"), themeColor("--red-light"));
   document.getElementById("dProgressReceita").style.width = Math.max(0, Math.min(100, data.percent_receitas)) + "%";
   document.getElementById("dProgressDespesa").style.width = Math.max(0, Math.min(100, data.percent_despesas)) + "%";
   document.getElementById("dReceitaRealizado").textContent = formatCurrency(data.realizado_receitas);
@@ -3761,8 +3761,8 @@ function redrawThemedCharts() {
   const lancVisible = document.getElementById("tab-lancamentos")?.classList.contains("active");
   const d1 = state.lastDashboardData;
   if (d1 && dashboardVisible) {
-    if (document.getElementById("donutReceitas")) drawDonut(document.getElementById("donutReceitas"), d1.percent_receitas, themeColor("--green", "#2f9d55"));
-    if (document.getElementById("donutDespesas")) drawDonut(document.getElementById("donutDespesas"), d1.percent_despesas, themeColor("--red", "#d64545"));
+    if (document.getElementById("donutReceitas")) drawDonut(document.getElementById("donutReceitas"), d1.percent_receitas, themeColor("--green", "#2f9d55"), themeColor("--green-light"));
+    if (document.getElementById("donutDespesas")) drawDonut(document.getElementById("donutDespesas"), d1.percent_despesas, themeColor("--red", "#d64545"), themeColor("--red-light"));
     if (document.getElementById("chartComparativo")) drawHatchedFlowChart(document.getElementById("chartComparativo"), d1.comparativo_mensal);
   }
   const d2 = state.lastLancDashboardData;

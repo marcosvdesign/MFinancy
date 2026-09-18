@@ -130,8 +130,10 @@ function themeColor(varName, fallback) {
   return v || fallback;
 }
 
-/** Anel de progresso (Previsto x Realizado). */
-function drawDonut(canvas, percent, color) {
+/** Anel de progresso (Previsto x Realizado). `lightColor` (opcional) cria um
+ * leve gradiente ao longo do arco, na mesma linha do gradiente usado nas
+ * demais cores verde/vermelha do app; sem ele, usa a cor solida (compat). */
+function drawDonut(canvas, percent, color, lightColor) {
   // Mesmo cuidado do setupCanvasScale: guarda o tamanho original UMA vez,
   // antes que canvas.width vire o buffer em pixels de dispositivo (que
   // tambem se reflete no atributo width="") — reler o atributo depois
@@ -161,7 +163,14 @@ function drawDonut(canvas, percent, color) {
   if (pct > 0) {
     ctx.beginPath();
     ctx.arc(cx, cy, radius, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * pct);
-    ctx.strokeStyle = color;
+    if (lightColor) {
+      const grad = ctx.createLinearGradient(cx - radius, cy - radius, cx + radius, cy + radius);
+      grad.addColorStop(0, color);
+      grad.addColorStop(1, lightColor);
+      ctx.strokeStyle = grad;
+    } else {
+      ctx.strokeStyle = color;
+    }
     ctx.lineWidth = lineWidth;
     ctx.stroke();
   }
@@ -320,12 +329,16 @@ function drawHatchedFlowChart(canvas, data, hover, forcedNiceMax) {
   const groupWidth = chartW / data.length;
   // Colunas (barras) mais largas dentro do mesmo bloco/canvas — o que deve
   // crescer aqui e a "vela", nao o tamanho do painel ao redor dela.
-  const barWidth = Math.min(48, groupWidth * 0.62);
-  // Arredonda so a ponta da barra (estilo "capsula", ver ctxCapsuleBar);
-  // a base encostada no eixo R$0 fica reta.
-  const tipRadius = Math.min(barWidth / 2, 16);
+  const barWidth = Math.min(24, groupWidth * 0.31);
+  // Ponta totalmente arredondada (semicirculo, estilo "capsula" — ver
+  // ctxCapsuleBar); a base encostada no eixo R$0 fica reta.
+  const tipRadius = barWidth / 2;
+  const greenLight = themeColor("--green-light", "#7b9f54");
+  const redLight = themeColor("--red-light", "#dd6666");
   const greenDim = hexToRgba(greenColor, 0.22);
+  const greenDimLight = hexToRgba(greenLight, 0.22);
   const redDim = hexToRgba(redColor, 0.22);
+  const redDimLight = hexToRgba(redLight, 0.22);
   const trendColor = themeColor("--text", "#1c2333");
 
   const points = [];
@@ -347,15 +360,22 @@ function drawHatchedFlowChart(canvas, data, hover, forcedNiceMax) {
 
     // Recebimentos (acima da linha): toda a barra (previsto) esmaecida, com
     // a parte ja realizada em cor solida por cima — capsula arredondada so
-    // na ponta, base reta encostada no eixo R$0.
+    // na ponta, base reta encostada no eixo R$0. Leve gradiente (base -> ponta)
+    // em ambas as camadas, do mesmo jeito que as cores solidas do resto do app.
     if (hPrevRec > 0) {
       ctx.save();
       ctxCapsuleBar(ctx, x, midY, barWidth, -hPrevRec, tipRadius);
       ctx.clip();
-      ctx.fillStyle = greenDim;
+      const dimGrad = ctx.createLinearGradient(0, midY, 0, midY - hPrevRec);
+      dimGrad.addColorStop(0, greenDim);
+      dimGrad.addColorStop(1, greenDimLight);
+      ctx.fillStyle = dimGrad;
       ctx.fillRect(x, midY - hPrevRec, barWidth, hPrevRec);
       if (hRealRec > 0) {
-        ctx.fillStyle = greenColor;
+        const solidGrad = ctx.createLinearGradient(0, midY, 0, midY - hRealRec);
+        solidGrad.addColorStop(0, greenColor);
+        solidGrad.addColorStop(1, greenLight);
+        ctx.fillStyle = solidGrad;
         ctx.fillRect(x, midY - hRealRec, barWidth, hRealRec);
       }
       ctx.restore();
@@ -366,10 +386,16 @@ function drawHatchedFlowChart(canvas, data, hover, forcedNiceMax) {
       ctx.save();
       ctxCapsuleBar(ctx, x, midY, barWidth, hPrevDesp, tipRadius);
       ctx.clip();
-      ctx.fillStyle = redDim;
+      const dimGrad = ctx.createLinearGradient(0, midY, 0, midY + hPrevDesp);
+      dimGrad.addColorStop(0, redDim);
+      dimGrad.addColorStop(1, redDimLight);
+      ctx.fillStyle = dimGrad;
       ctx.fillRect(x, midY, barWidth, hPrevDesp);
       if (hRealDesp > 0) {
-        ctx.fillStyle = redColor;
+        const solidGrad = ctx.createLinearGradient(0, midY, 0, midY + hRealDesp);
+        solidGrad.addColorStop(0, redColor);
+        solidGrad.addColorStop(1, redLight);
+        ctx.fillStyle = solidGrad;
         ctx.fillRect(x, midY, barWidth, hRealDesp);
       }
       ctx.restore();
