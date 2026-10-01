@@ -1179,6 +1179,10 @@ body.values-hidden .mini-row > b {
 .rep-checks { display: flex; gap: 16px; flex-wrap: wrap; padding: 7px 0; font-size: 13px; }
 .rep-checks label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
 .rep-checks input, .rep-toggles input { accent-color: var(--primary); width: 15px; height: 15px; margin: 0; }
+/* Pagamento/Competencia: mesmo segmented control do formulario de
+   lancamento (Unico/Parcelado/Repetir), na altura dos demais campos. */
+.rep-segmented { flex-wrap: nowrap; max-width: 100%; }
+.rep-segmented label { padding: 7px 13px; white-space: nowrap; }
 .rep-field-actions { align-items: flex-end; justify-self: end; }
 .rep-actions { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--input-bg); }
 .rep-action-btn {
