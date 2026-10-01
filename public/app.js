@@ -3082,102 +3082,847 @@ async function openContactDetail(contact) {
 // RELATORIOS
 // ---------------------------------------------------------------------
 
-document.querySelectorAll(".report-link").forEach((btn) => {
+const svgIcon = (body) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">${body}</svg>`;
+const vs = 'vector-effect="non-scaling-stroke"';
+Object.assign(ICONS, {
+  calendar: svgIcon(`<rect x="3.5" y="5" width="17" height="15.5" rx="2" ${vs}/><path d="M3.5 9.5h17M8 3v4M16 3v4M7.5 13h2M11 13h2M14.5 13h2M7.5 16.5h2M11 16.5h2" ${vs}/>`),
+  layers: svgIcon(`<path d="M4 6h16M7 12h10M10 18h4" ${vs}/>`),
+  bookmark: svgIcon(`<path d="M6.5 3.5h11v17l-5.5-4-5.5 4z" ${vs}/>`),
+  tag: svgIcon(`<path d="M3.5 12.2V4.5a1 1 0 011-1h7.7l8.3 8.3a1.4 1.4 0 010 2l-6.2 6.2a1.4 1.4 0 01-2 0z" ${vs}/><circle cx="8" cy="8" r="1.4" ${vs}/>`),
+  user: svgIcon(`<circle cx="12" cy="8" r="4" ${vs}/><path d="M4.5 20.5a7.5 7.5 0 0115 0" ${vs}/>`),
+  users: svgIcon(`<circle cx="9" cy="8.5" r="3.5" ${vs}/><path d="M2.5 20a6.5 6.5 0 0113 0" ${vs}/><path d="M15.5 5.2a3.5 3.5 0 010 6.6M18 14.2a6.5 6.5 0 013.5 5.8" ${vs}/>`),
+  list: svgIcon(`<path d="M9 6h11M9 12h11M9 18h11" ${vs}/><circle cx="4.5" cy="6" r="0.9" ${vs}/><circle cx="4.5" cy="12" r="0.9" ${vs}/><circle cx="4.5" cy="18" r="0.9" ${vs}/>`),
+  table: svgIcon(`<rect x="3.5" y="4.5" width="17" height="15" rx="2" ${vs}/><path d="M3.5 9.5h17M3.5 14.5h17M10 9.5v10" ${vs}/>`),
+  lineChart: svgIcon(`<path d="M3.5 3.5v17h17" ${vs}/><path d="M7 15l4-5 3 3 5-6" ${vs}/>`),
+  fileText: svgIcon(`<path d="M14 3.5H6.5a1 1 0 00-1 1v15a1 1 0 001 1h11a1 1 0 001-1V8z" ${vs}/><path d="M14 3.5V8h4.5M8.5 12.5h7M8.5 16h7" ${vs}/>`),
+  barChart: svgIcon(`<path d="M3.5 20.5h17" ${vs}/><path d="M6.5 20.5v-7M11 20.5V8M15.5 20.5v-10M20 20.5V5" ${vs}/>`),
+  wallet: svgIcon(`<path d="M19.5 7.5h-14a2 2 0 01-2-2v13a2 2 0 002 2h14a1 1 0 001-1v-11a1 1 0 00-1-1z" ${vs}/><path d="M17 3.5H5.5a2 2 0 000 4" ${vs}/><circle cx="16.5" cy="14" r="1" ${vs}/>`),
+  pin: svgIcon(`<path d="M9 3.5h6l-1 5 3.5 3.5v1.5h-11V12L10 8.5z" ${vs}/><path d="M12 13.5v7" ${vs}/>`),
+  printer: svgIcon(`<path d="M7 8.5v-5h10v5" ${vs}/><rect x="3.5" y="8.5" width="17" height="8" rx="1.5" ${vs}/><path d="M7 13.5h10v7H7z" ${vs}/>`),
+  download: svgIcon(`<path d="M12 3.5v12M7 11l5 5 5-5" ${vs}/><path d="M4 17.5v2a1 1 0 001 1h14a1 1 0 001-1v-2" ${vs}/>`),
+  settings: svgIcon(`<circle cx="12" cy="12" r="3" ${vs}/><path d="M19.4 15a1.6 1.6 0 00.3 1.8l.1.1a2 2 0 11-2.8 2.8l-.1-.1a1.6 1.6 0 00-1.8-.3 1.6 1.6 0 00-1 1.5v.2a2 2 0 01-4 0v-.1a1.6 1.6 0 00-1-1.5 1.6 1.6 0 00-1.8.3l-.1.1a2 2 0 11-2.8-2.8l.1-.1a1.6 1.6 0 00.3-1.8 1.6 1.6 0 00-1.5-1H3a2 2 0 010-4h.1a1.6 1.6 0 001.5-1 1.6 1.6 0 00-.3-1.8l-.1-.1a2 2 0 112.8-2.8l.1.1a1.6 1.6 0 001.8.3H9a1.6 1.6 0 001-1.5V3a2 2 0 014 0v.1a1.6 1.6 0 001 1.5 1.6 1.6 0 001.8-.3l.1-.1a2 2 0 112.8 2.8l-.1.1a1.6 1.6 0 00-.3 1.8V9a1.6 1.6 0 001.5 1h.2a2 2 0 010 4h-.1a1.6 1.6 0 00-1.5 1z" ${vs}/>`),
+  filter: svgIcon(`<path d="M3.5 4.5h17l-6.5 8v6l-4 2v-8z" ${vs}/>`),
+  plusCircle: svgIcon(`<circle cx="12" cy="12" r="8.5" ${vs}/><path d="M12 8.5v7M8.5 12h7" ${vs}/>`),
+  minusCircle: svgIcon(`<circle cx="12" cy="12" r="8.5" ${vs}/><path d="M8.5 12h7" ${vs}/>`),
+  arrowRightCircle: svgIcon(`<circle cx="12" cy="12" r="8.5" ${vs}/><path d="M8.5 12h7M12.5 9l3 3-3 3" ${vs}/>`),
+  clock: svgIcon(`<circle cx="12" cy="12" r="8.5" ${vs}/><path d="M12 7.5V12l3 2" ${vs}/>`),
+  arrowDown: svgIcon(`<path d="M12 5v14M6.5 13.5L12 19l5.5-5.5" ${vs}/>`),
+  arrowUp: svgIcon(`<path d="M12 19V5M6.5 10.5L12 5l5.5 5.5" ${vs}/>`),
+});
+
+document.querySelectorAll("#tab-relatorios .report-link[data-icon]").forEach((btn) => {
+  btn.insertAdjacentHTML("afterbegin", `<span class="rep-link-icon">${ICONS[btn.dataset.icon] || ""}</span>`);
+});
+document.getElementById("repPinBtn").innerHTML = ICONS.pin;
+document.getElementById("repPrintBtn").innerHTML = ICONS.printer;
+document.getElementById("btnGerarRelatorio").innerHTML = ICONS.download;
+document.getElementById("repSettingsBtn").innerHTML = ICONS.settings;
+
+const MESES_CURTOS = ["jan.", "fev.", "mar.", "abr.", "mai.", "jun.", "jul.", "ago.", "set.", "out.", "nov.", "dez."];
+const REP_PRESETS = [
+  ["hoje", "Hoje"], ["esta_semana", "Esta semana"], ["este_mes", "Este mês"], ["mes_passado", "Mês passado"],
+  ["proximo_mes", "Próximo mês"], ["ultimos_30", "Últimos 30 dias"], ["ultimos_12m", "Últimos 12 meses"],
+  ["este_ano", "Este ano"], ["ano_passado", "Ano passado"], ["personalizado", "Personalizado"],
+];
+const REP_PLANS = [{ id: "avista", name: "À vista" }, { id: "parcelado", name: "Parcelado" }, { id: "recorrente", name: "Recorrente" }];
+const REP_MULTI_KEYS = ["accounts", "profiles", "categories", "contacts", "tags", "payment_methods", "plans"];
+const REP_MORE_KEYS = ["categories", "contacts", "tags", "payment_methods", "plans"];
+const REP_ALL = "__all__";
+
+/** Data local (nao UTC: a noite no Brasil o UTC ja e o dia seguinte). */
+function localIso(d) { return `${d.getFullYear()}-${jsPad(d.getMonth() + 1)}-${jsPad(d.getDate())}`; }
+
+function presetRange(preset) {
+  const now = new Date();
+  const y = now.getFullYear(), m = now.getMonth();
+  const d = (yy, mm, dd) => localIso(new Date(yy, mm, dd));
+  switch (preset) {
+    case "hoje": return [localIso(now), localIso(now)];
+    case "esta_semana": {
+      const dow = (now.getDay() + 6) % 7; // segunda = 0
+      return [d(y, m, now.getDate() - dow), d(y, m, now.getDate() - dow + 6)];
+    }
+    case "mes_passado": return [d(y, m - 1, 1), d(y, m, 0)];
+    case "proximo_mes": return [d(y, m + 1, 1), d(y, m + 2, 0)];
+    case "ultimos_30": return [d(y, m, now.getDate() - 29), localIso(now)];
+    case "ultimos_12m": return [d(y, m - 11, 1), d(y, m + 1, 0)];
+    case "este_ano": return [d(y, 0, 1), d(y, 11, 31)];
+    case "ano_passado": return [d(y - 1, 0, 1), d(y - 1, 11, 31)];
+    default: return [d(y, m, 1), d(y, m + 1, 0)];
+  }
+}
+
+function defaultRepFilters() {
+  const [start, end] = presetRange("este_mes");
+  const now = new Date();
+  return {
+    preset: "este_mes", start, end,
+    accounts: [], profiles: [], categories: [], contacts: [], tags: [], payment_methods: [], plans: [],
+    paid: true, pending: true, dateMode: "pagamento",
+    month: `${now.getFullYear()}-${jsPad(now.getMonth() + 1)}`, year: String(now.getFullYear()),
+  };
+}
+
+function loadPinnedRepFilters() {
+  try {
+    const raw = localStorage.getItem("repPinnedFilters");
+    if (!raw) return null;
+    const saved = { ...defaultRepFilters(), ...JSON.parse(raw) };
+    // Periodo relativo (ex.: "Este mes") e recalculado a cada visita.
+    if (saved.preset !== "personalizado") [saved.start, saved.end] = presetRange(saved.preset);
+    return saved;
+  } catch (e) { return null; }
+}
+
+function loadRepView() {
+  const view = { showChart: true, showTable: true, sort: "valor_desc", expandOthers: false, histSeries: { receitas: true, despesas: true, resultado: true } };
+  try { Object.assign(view, JSON.parse(localStorage.getItem("repView") || "{}")); } catch (e) {}
+  view.expandOthers = false;
+  return view;
+}
+function saveRepView() {
+  try { localStorage.setItem("repView", JSON.stringify({ ...state.repView, expandOthers: false })); } catch (e) {}
+}
+
+state.activeReport = { report: "por_descricao", side: "despesa" };
+state.repFilters = loadPinnedRepFilters() || defaultRepFilters();
+state.repView = loadRepView();
+state.repOptions = { payment_methods: [] };
+state.repLastData = null;
+try {
+  const savedReport = JSON.parse(localStorage.getItem("repActiveReport") || "null");
+  if (savedReport && savedReport.report) state.activeReport = { report: savedReport.report, side: savedReport.side || null };
+} catch (e) {}
+
+function syncReportLinks() {
+  document.querySelectorAll("#tab-relatorios .report-link").forEach((b) => {
+    b.classList.toggle("active", b.dataset.report === state.activeReport.report && (b.dataset.side || null) === state.activeReport.side);
+  });
+}
+syncReportLinks();
+
+document.querySelectorAll("#tab-relatorios .report-link").forEach((btn) => {
   btn.addEventListener("click", () => {
-    document.querySelectorAll(".report-link").forEach((b) => b.classList.remove("active"));
-    btn.classList.add("active");
-    state.activeReport = { report: btn.dataset.report, side: btn.dataset.side || null, label: btn.textContent.trim() };
+    state.activeReport = { report: btn.dataset.report, side: btn.dataset.side || null };
+    state.repView.expandOthers = false;
+    try { localStorage.setItem("repActiveReport", JSON.stringify(state.activeReport)); } catch (e) {}
+    syncReportLinks();
     loadReport();
   });
 });
-document.getElementById("btnGerarRelatorio").addEventListener("click", () => loadReport(true));
 
-function renderGroupedTable(rows, side, report) {
-  if (!rows.length) return `<div class="empty-state">Nenhum lançamento no período.</div>`;
-  const displayLabel = (r) => (report === "por_dia" && /^\d{4}-\d{2}-\d{2}$/.test(r.key)) ? formatDateBR(r.key) : r.label;
-  return `<table class="data-table"><thead><tr><th>${side === "receita" ? "Recebimento" : "Item"}</th><th>Qtd.</th><th>Total</th></tr></thead><tbody>
-    ${rows.map((r) => `<tr><td>${escapeHtml(displayLabel(r))}</td><td>${r.count}</td><td class="${side === "receita" ? "positive" : side === "despesa" ? "negative" : ""}">${formatCurrency(r.total)}</td></tr>`).join("")}
-  </tbody></table>`;
-}
+// ---- Opcoes dos filtros de multipla escolha ----
 
-function renderListTable(items) {
-  if (!items.length) return `<div class="empty-state">Nenhum lançamento no período.</div>`;
-  return `<table class="data-table"><thead><tr><th>Data</th><th>Descrição</th><th>Grupo</th><th>Categoria</th><th>Contato</th><th>Valor</th><th>Status</th></tr></thead><tbody>
-    ${items.map((t) => `<tr>
-      <td>${formatDateBR(t.due_date)}</td><td>${escapeHtml(t.description)}</td><td>${t.group_label}</td>
-      <td>${escapeHtml(t.category_name)}</td><td>${escapeHtml(t.contact_name || "-")}</td>
-      <td class="${t.group === "recebimento" ? "positive" : "negative"}">${formatCurrency(t.amount)}</td>
-      <td><span class="badge ${t.status === "pago" ? "badge-pago" : "badge-pendente"}">${t.status}</span></td>
-    </tr>`).join("")}
-  </tbody></table>`;
-}
-
-function renderExtrato(data) {
-  let html = `<table class="data-table"><thead><tr><th>Data</th><th>Descrição</th><th>Valor</th><th>Saldo acumulado</th></tr></thead><tbody>`;
-  html += data.rows.length ? data.rows.map((r) => `
-    <tr><td>${formatDateBR(r.paid_date)}</td><td>${escapeHtml(r.description)}</td>
-      <td class="${r.delta >= 0 ? "positive" : "negative"}">${formatCurrency(r.delta)}</td>
-      <td class="${r.running_balance < 0 ? "negative" : "positive"}">${formatCurrency(r.running_balance)}</td></tr>`).join("") : `<tr><td colspan="4"><div class="empty-state">Nada pago no período.</div></td></tr>`;
-  html += `</tbody></table>`;
-  if (data.transfers.length) {
-    html += `<h3 style="margin-top:18px;">Transferências no período</h3><table class="data-table"><thead><tr><th>Data</th><th>De</th><th>Para</th><th>Valor</th></tr></thead><tbody>
-      ${data.transfers.map((tr) => `<tr><td>${formatDateBR(tr.date)}</td><td>${escapeHtml(tr.from_name)}</td><td>${escapeHtml(tr.to_name)}</td><td>${formatCurrency(tr.amount)}</td></tr>`).join("")}
-    </tbody></table>`;
+function repMultiOptions(key) {
+  const side = state.activeReport.side;
+  const byName = (a, b) => a.name.localeCompare(b.name, "pt-BR");
+  if (key === "accounts") return state.accounts.map((a) => ({ id: a.id, name: accountLabel(a) }));
+  if (key === "profiles") return state.profiles.map((p) => ({ id: p.id, name: p.name }));
+  if (key === "categories") {
+    return state.categories
+      .filter((c) => !side || (side === "receita" ? c.group === "recebimento" : c.group !== "recebimento"))
+      .map((c) => ({ id: c.id, name: c.name })).sort(byName);
   }
-  return html;
+  if (key === "contacts") return state.contacts.map((c) => ({ id: c.id, name: c.name })).sort(byName);
+  if (key === "tags") return state.tags.map((t) => ({ id: t.id, name: t.name })).sort(byName);
+  if (key === "payment_methods") return state.repOptions.payment_methods.map((m) => ({ id: m, name: m }));
+  if (key === "plans") return REP_PLANS;
+  return [];
 }
 
-function renderSaldos(data) {
-  return `<table class="data-table"><thead><tr><th>Conta</th><th>Perfil</th><th>Saldo</th></tr></thead><tbody>
-    ${data.accounts.map((a) => {
-      const profile = state.profiles.find((p) => p.id === a.profile_id);
-      return `<tr><td>${escapeHtml(a.name)}</td><td>${escapeHtml(profile?.name || "-")}</td><td class="${a.balance < 0 ? "negative" : a.balance > 0 ? "positive" : ""}">${formatCurrency(a.balance)}</td></tr>`;
-    }).join("")}
-    <tr><td colspan="2"><b>Total</b></td><td><b>${formatCurrency(data.total)}</b></td></tr>
-  </tbody></table>`;
+function repMultiLabel(key, el) {
+  const sel = state.repFilters[key] || [];
+  if (!sel.length) return { text: el.dataset.placeholder, empty: true };
+  if (sel.includes(REP_ALL)) return { text: "Todas", empty: false };
+  const names = sel.map((id) => repMultiOptions(key).find((o) => o.id === id)?.name).filter(Boolean);
+  if (!names.length) return { text: el.dataset.placeholder, empty: true };
+  return { text: names.length <= 2 ? names.join(", ") : `${names.length} selecionados`, empty: false };
 }
 
-async function loadReport(downloadPdf) {
+function renderRepMultiTriggers() {
+  document.querySelectorAll("#reportFilters .rep-multi").forEach((el) => {
+    const key = el.dataset.key;
+    if (!el.firstChild) {
+      el.innerHTML = `<button type="button" class="rep-multi-trigger"><span class="select-label-text"></span><span class="chevron">▾</span></button>`;
+      el.querySelector("button").addEventListener("click", (e) => {
+        e.stopPropagation();
+        const menu = document.getElementById("globalDropdownMenu");
+        const trigger = el.querySelector("button");
+        const willOpen = menu.classList.contains("hidden") || menu._openedBy !== trigger;
+        closeGlobalDropdown();
+        closeCustomSelect();
+        if (willOpen) openRepMultiMenu(el);
+      });
+    }
+    const { text, empty } = repMultiLabel(key, el);
+    const label = el.querySelector(".select-label-text");
+    label.textContent = text;
+    label.classList.toggle("placeholder", empty);
+  });
+  const activeMore = REP_MORE_KEYS.filter((k) => state.repFilters[k].length).length;
+  const open = !document.getElementById("repMoreFilters").classList.contains("hidden");
+  document.getElementById("repMoreToggle").innerHTML =
+    `${open ? ICONS.arrowUp : ICONS.arrowDown}<span>${open ? "Menos filtros" : "Mais filtros"}</span>${activeMore && !open ? `<span class="rep-more-badge">${activeMore}</span>` : ""}`;
+}
+
+function openRepMultiMenu(el) {
+  const key = el.dataset.key;
+  const trigger = el.querySelector("button");
+  const menu = document.getElementById("globalDropdownMenu");
+  const withAll = el.dataset.all === "1";
+  menu.innerHTML = `<input type="text" class="picker-search" id="repMultiSearch" placeholder="Buscar..." /><div id="repMultiList" class="rep-multi-list"></div>`;
+  function renderList(filter) {
+    const sel = state.repFilters[key];
+    let opts = repMultiOptions(key);
+    if (filter) opts = opts.filter((o) => o.name.toLowerCase().includes(filter.toLowerCase()));
+    const rows = [];
+    if (withAll && !filter) rows.push({ id: REP_ALL, name: "Todas" });
+    rows.push(...opts);
+    const list = document.getElementById("repMultiList");
+    list.innerHTML = rows.map((o) => `
+      <div class="custom-select-option rep-multi-option ${sel.includes(o.id) ? "checked" : ""}" data-id="${escapeHtml(o.id)}">
+        <span class="rep-check-box"></span><span class="rep-opt-name">${escapeHtml(o.name)}</span>
+      </div>`).join("") || `<div class="empty-state">Nada encontrado.</div>`;
+    if (sel.length) list.insertAdjacentHTML("beforeend", `<div class="rep-multi-clear">Limpar seleção</div>`);
+    list.querySelectorAll(".rep-multi-option").forEach((opt) => {
+      opt.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const id = opt.dataset.id;
+        let next = state.repFilters[key].slice();
+        if (id === REP_ALL) next = next.includes(REP_ALL) ? [] : [REP_ALL];
+        else {
+          next = next.filter((v) => v !== REP_ALL);
+          next = next.includes(id) ? next.filter((v) => v !== id) : [...next, id];
+        }
+        state.repFilters[key] = next;
+        renderList(document.getElementById("repMultiSearch").value);
+        renderRepMultiTriggers();
+        scheduleReport();
+      });
+    });
+    list.querySelector(".rep-multi-clear")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      state.repFilters[key] = [];
+      renderList(document.getElementById("repMultiSearch").value);
+      renderRepMultiTriggers();
+      scheduleReport();
+    });
+  }
+  renderList("");
+  const search = document.getElementById("repMultiSearch");
+  search.addEventListener("click", (e) => e.stopPropagation());
+  search.addEventListener("input", (e) => renderList(e.target.value));
+  menu._openedBy = trigger;
+  positionGlobalDropdown(trigger);
+}
+
+// ---- Periodo ----
+
+function syncRepDateInputs() {
+  const f = state.repFilters;
+  const startEl = document.getElementById("repStart");
+  const endEl = document.getElementById("repEnd");
+  startEl.value = f.start;
+  endEl.value = f.end;
+  startEl.dispatchEvent(new Event("change"));
+  endEl.dispatchEvent(new Event("change"));
+  document.getElementById("repPresetLabel").textContent = REP_PRESETS.find((p) => p[0] === f.preset)?.[1] || "Personalizado";
+  document.getElementById("repMonth").value = f.month;
+  document.getElementById("repYear").value = f.year;
+  document.getElementById("repPaid").checked = f.paid;
+  document.getElementById("repPending").checked = f.pending;
+  document.querySelectorAll('input[name="repDateMode"]').forEach((r) => { r.checked = r.value === f.dateMode; });
+}
+
+document.getElementById("repStart").addEventListener("change", (e) => {
+  const v = e.target.value;
+  if (!v || v === state.repFilters.start) return;
+  state.repFilters.start = v;
+  state.repFilters.preset = "personalizado";
+  if (state.repFilters.end < v) state.repFilters.end = v;
+  syncRepDateInputs();
+  scheduleReport();
+});
+document.getElementById("repEnd").addEventListener("change", (e) => {
+  const v = e.target.value;
+  if (!v || v === state.repFilters.end) return;
+  state.repFilters.end = v;
+  state.repFilters.preset = "personalizado";
+  if (state.repFilters.start > v) state.repFilters.start = v;
+  syncRepDateInputs();
+  scheduleReport();
+});
+document.getElementById("repMonth").addEventListener("change", (e) => {
+  if (!/^\d{4}-\d{2}$/.test(e.target.value)) return;
+  state.repFilters.month = e.target.value;
+  scheduleReport();
+});
+document.getElementById("repYear").addEventListener("change", (e) => {
+  if (!/^\d{4}$/.test(e.target.value)) return;
+  state.repFilters.year = e.target.value;
+  scheduleReport();
+});
+document.getElementById("repPaid").addEventListener("change", (e) => { state.repFilters.paid = e.target.checked; scheduleReport(); });
+document.getElementById("repPending").addEventListener("change", (e) => { state.repFilters.pending = e.target.checked; scheduleReport(); });
+document.querySelectorAll('input[name="repDateMode"]').forEach((r) => r.addEventListener("change", () => {
+  if (r.checked) { state.repFilters.dateMode = r.value; scheduleReport(); }
+}));
+
+document.getElementById("repPresetBtn").addEventListener("click", (e) => {
+  e.stopPropagation();
+  const trigger = e.currentTarget;
+  const menu = document.getElementById("globalDropdownMenu");
+  const willOpen = menu.classList.contains("hidden") || menu._openedBy !== trigger;
+  closeGlobalDropdown();
+  if (!willOpen) return;
+  menu.innerHTML = REP_PRESETS.filter((p) => p[0] !== "personalizado").map(([id, label]) => `
+    <div class="custom-select-option ${state.repFilters.preset === id ? "selected" : ""}" data-id="${id}"><span>${label}</span><span class="check">✓</span></div>`).join("");
+  menu.querySelectorAll(".custom-select-option").forEach((opt) => opt.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    state.repFilters.preset = opt.dataset.id;
+    [state.repFilters.start, state.repFilters.end] = presetRange(opt.dataset.id);
+    closeGlobalDropdown();
+    syncRepDateInputs();
+    scheduleReport();
+  }));
+  menu._openedBy = trigger;
+  positionGlobalDropdown(trigger);
+});
+
+document.getElementById("repMoreToggle").addEventListener("click", () => {
+  document.getElementById("repMoreFilters").classList.toggle("hidden");
+  renderRepMultiTriggers();
+});
+
+// ---- Acoes (fixar, imprimir, PDF, opcoes) ----
+
+function syncRepPinState() {
+  let pinned = false;
+  try { pinned = !!localStorage.getItem("repPinnedFilters"); } catch (e) {}
+  document.getElementById("repPinBtn").classList.toggle("active", pinned);
+}
+syncRepPinState();
+document.getElementById("repPinBtn").addEventListener("click", () => {
+  try { localStorage.setItem("repPinnedFilters", JSON.stringify(state.repFilters)); } catch (e) {}
+  syncRepPinState();
+  showToast("Filtros fixados: serão aplicados sempre que você abrir os relatórios.");
+});
+document.getElementById("repPrintBtn").addEventListener("click", () => window.print());
+document.getElementById("btnGerarRelatorio").addEventListener("click", () => downloadReportPdf());
+
+document.getElementById("repSettingsBtn").addEventListener("click", (e) => {
+  e.stopPropagation();
+  const trigger = e.currentTarget;
+  const menu = document.getElementById("globalDropdownMenu");
+  const willOpen = menu.classList.contains("hidden") || menu._openedBy !== trigger;
+  closeGlobalDropdown();
+  if (!willOpen) return;
+  let pinned = false;
+  try { pinned = !!localStorage.getItem("repPinnedFilters"); } catch (e2) {}
+  const v = state.repView;
+  menu.innerHTML = `
+    <div class="custom-select-option rep-multi-option ${v.showChart ? "checked" : ""}" data-act="chart"><span class="rep-check-box"></span><span class="rep-opt-name">Exibir gráfico</span></div>
+    <div class="custom-select-option rep-multi-option ${v.showTable ? "checked" : ""}" data-act="table"><span class="rep-check-box"></span><span class="rep-opt-name">Exibir tabela</span></div>
+    <div class="custom-select-option" data-act="reset"><span>Redefinir filtros</span></div>
+    ${pinned ? `<div class="custom-select-option" data-act="unpin"><span>Desafixar filtros</span></div>` : ""}`;
+  menu.querySelectorAll(".custom-select-option").forEach((opt) => opt.addEventListener("click", (ev) => {
+    ev.stopPropagation();
+    const act = opt.dataset.act;
+    if (act === "chart") { v.showChart = !v.showChart; if (!v.showChart && !v.showTable) v.showTable = true; }
+    if (act === "table") { v.showTable = !v.showTable; if (!v.showChart && !v.showTable) v.showChart = true; }
+    if (act === "chart" || act === "table") { saveRepView(); renderReport(state.repLastData); }
+    if (act === "reset") { state.repFilters = defaultRepFilters(); syncRepDateInputs(); renderRepMultiTriggers(); scheduleReport(); }
+    if (act === "unpin") { try { localStorage.removeItem("repPinnedFilters"); } catch (e3) {} syncRepPinState(); showToast("Filtros desafixados."); }
+    closeGlobalDropdown();
+  }));
+  menu._openedBy = trigger;
+  positionGlobalDropdown(trigger);
+  menu.style.minWidth = "200px";
+});
+
+/** PDF consolidado (DRE, performance, saldos, itens): reaproveita o
+ * gerador existente, traduzindo os filtros novos pro formato antigo. */
+async function downloadReportPdf() {
+  const f = state.repFilters;
   const r = state.activeReport;
-  document.getElementById("reportTitle").textContent = r.label + (r.side ? ` (${r.side === "receita" ? "recebimentos" : "despesas"})` : "");
+  const status = f.paid && !f.pending ? "pago" : (!f.paid && f.pending ? "pendente" : "");
   const params = {
-    report: r.report, side: r.side,
-    start: document.getElementById("repStart").value,
-    end: document.getElementById("repEnd").value,
-    status: document.getElementById("repStatus").value,
-    profile_id: state.activeProfile,
-    year: document.getElementById("repStart").value ? document.getElementById("repStart").value.slice(0, 4) : undefined,
+    start: f.start, end: f.end, status,
+    profile_id: f.profiles.length === 1 ? f.profiles[0] : state.activeProfile,
+    year: f.start.slice(0, 4),
   };
-  let data;
-  try { data = await api("GET", "/api/reports?" + qs(params)); } catch (e) { return showToast(e.message, true); }
-
-  const el = document.getElementById("reportBody");
-  const summary = data.total_receitas !== undefined
-    ? `<div class="cards-row" style="grid-template-columns:repeat(3,1fr); margin-bottom:16px;">
-        <div class="card"><div class="card-label">Total receitas</div><div class="card-value positive">${formatCurrency(data.total_receitas)}</div></div>
-        <div class="card"><div class="card-label">Total despesas</div><div class="card-value negative">${formatCurrency(data.total_despesas)}</div></div>
-        <div class="card"><div class="card-label">Saldo do período</div><div class="card-value ${(data.total_receitas - data.total_despesas) >= 0 ? "positive" : "negative"}">${formatCurrency(data.total_receitas - data.total_despesas)}</div></div>
-      </div>` : "";
-
-  if (data.kind === "grouped") el.innerHTML = summary + renderGroupedTable(data.rows, r.side, r.report);
-  else if (data.kind === "list") el.innerHTML = summary + renderListTable(data.items);
-  else if (data.kind === "extrato") el.innerHTML = `<div class="card-sub" style="margin-bottom:12px;">Saldo final do período: <b class="${data.saldo_final < 0 ? "negative" : "positive"}">${formatCurrency(data.saldo_final)}</b></div>` + renderExtrato(data);
-  else if (data.kind === "dre") el.innerHTML = `<div class="panel" style="max-width:480px;">${renderDreHtml(data.dre)}</div>`;
-  else if (data.kind === "saldos") el.innerHTML = renderSaldos(data);
-  else if (data.kind === "performance") {
-    el.innerHTML = `<div class="panel"><canvas id="perfChart" height="260"></canvas></div>`;
-    const canvas = document.getElementById("perfChart");
-    drawHatchedFlowChart(canvas, data.rows);
-    attachChartTooltip(canvas);
-  } else {
-    el.innerHTML = `<div class="empty-state">Sem dados.</div>`;
-  }
-
-  if (downloadPdf) {
-    try { await generateReportPdf(r, params, data); }
-    catch (e) { showToast("Não foi possível gerar o PDF: " + e.message, true); }
-  }
+  const label = document.querySelector("#tab-relatorios .report-link.active")?.textContent.trim() || "Relatório";
+  try {
+    const data = await api("GET", "/api/reports?" + qs({ ...params, report: r.report === "por_perfil" ? "por_categoria" : r.report, side: r.side }));
+    await generateReportPdf({ ...r, label }, params, data);
+  } catch (e) { showToast("Não foi possível gerar o PDF: " + e.message, true); }
 }
+
+// ---- Carregamento ----
+
+let _repTimer = null;
+function scheduleReport() {
+  clearTimeout(_repTimer);
+  _repTimer = setTimeout(() => loadReport(), 220);
+}
+
+function repParams() {
+  const f = state.repFilters;
+  const r = state.activeReport;
+  const list = (k) => (f[k].length ? f[k].join(",") : undefined);
+  return {
+    v: 2, report: r.report, side: r.side || undefined,
+    start: f.start, end: f.end, month: f.month, year: f.year,
+    accounts: list("accounts"), profiles: list("profiles"), profile_id: state.activeProfile,
+    paid: f.paid ? 1 : 0, pending: f.pending ? 1 : 0, date_mode: f.dateMode,
+    categories: list("categories"), contacts: list("contacts"), tags: list("tags"),
+    payment_methods: list("payment_methods"), plans: list("plans"),
+  };
+}
+
+function syncRepFieldVisibility() {
+  const rep = state.activeReport.report;
+  document.getElementById("repFieldDate").classList.toggle("hidden", rep === "performance_mensal" || rep === "performance_anual");
+  document.getElementById("repFieldMonth").classList.toggle("hidden", rep !== "performance_mensal");
+  document.getElementById("repFieldYear").classList.toggle("hidden", rep !== "performance_anual");
+  const saldos = rep === "saldos";
+  ["repFieldDate", "repFieldStatus", "repFieldDateMode"].forEach((id) => document.getElementById(id).classList.toggle("rep-disabled", saldos));
+}
+
+let _repOptionsLoaded = false;
+let _repReqSeq = 0;
+async function loadReport() {
+  syncRepFieldVisibility();
+  renderRepMultiTriggers();
+  if (!_repOptionsLoaded) {
+    _repOptionsLoaded = true;
+    syncRepDateInputs();
+    api("GET", "/api/reports?" + qs({ v: 2, report: "options" })).then((o) => { state.repOptions = o; renderRepMultiTriggers(); }).catch(() => {});
+  }
+  const seq = ++_repReqSeq;
+  const body = document.getElementById("reportBody");
+  body.classList.add("rep-loading");
+  let data;
+  try { data = await api("GET", "/api/reports?" + qs(repParams())); }
+  catch (e) { body.classList.remove("rep-loading"); return showToast(e.message, true); }
+  if (seq !== _repReqSeq) return; // resposta de um filtro ja superado
+  body.classList.remove("rep-loading");
+  data._report = { ...state.activeReport };
+  state.repLastData = data;
+  renderReport(data);
+}
+
+// ---- Renderizacao ----
+
+const REP_TITLES = {
+  despesa: { por_descricao: "Despesas por descrição", por_dia: "Despesas por dia", por_tipo: "Despesas por tipo", por_categoria: "Despesas por categoria", por_tag: "Despesas por tags", por_perfil: "Despesas por perfil", por_contato: "Despesas pagas a..." },
+  receita: { por_descricao: "Receitas por descrição", por_dia: "Receitas por dia", por_categoria: "Receitas por categoria", por_tag: "Receitas por tags", por_perfil: "Receitas por perfil", por_contato: "Recebimentos de..." },
+  fluxo: { extrato: "Extrato", despesas_receitas: "Fluxo de caixa", historico: "Histórico de receitas e despesas", dre: "Demonstrativo de resultados", performance_mensal: "Performance mensal", performance_anual: "Performance anual", saldos: "Saldos" },
+};
+
+function repMoney(v, cls = "") { return `<span class="rep-val ${cls}">${formatCurrency(v)}</span>`; }
+function repSigned(v) { return repMoney(v, v < 0 ? "negative" : v > 0 ? "positive" : ""); }
+function nowStamp() {
+  const n = new Date();
+  return { date: `${jsPad(n.getDate())}/${jsPad(n.getMonth() + 1)}/${n.getFullYear()}`, time: `${jsPad(n.getHours())}:${jsPad(n.getMinutes())}` };
+}
+
+function repCardHead(data, title) {
+  const stamp = nowStamp();
+  const period = data.kind === "saldos" ? `Posição em ${stamp.date} ${stamp.time}` : `${formatDateBR(data.start)} - ${formatDateBR(data.end)}`;
+  return `
+    <div class="rep-card-head">
+      <div><div class="rep-owner">${escapeHtml(state.settings.display_name || "")}</div><div class="rep-period">${period}</div></div>
+      <div class="rep-stamp"><div><b>Data:</b> ${stamp.date}</div><div><b>Hora:</b> ${stamp.time}</div></div>
+    </div>
+    <div class="rep-card-title"><h2>${escapeHtml(title)}</h2><div class="rep-card-sub">Contas: ${escapeHtml(data.accounts_label || "nenhuma")}</div></div>`;
+}
+
+function repEmpty() {
+  return `<div class="rep-card rep-empty">${ICONS.filter}<h3>Nenhum resultado encontrado</h3>
+    <p>Não encontramos resultados para os filtros informados. Experimente mudar os filtros no painel acima, ou aumentar o período de tempo desejado.</p></div>`;
+}
+
+function repToggles(extra = []) {
+  const v = state.repView;
+  const items = [["chart", "Exibir gráfico", v.showChart], ["table", "Exibir tabela", v.showTable], ...extra];
+  return `<div class="rep-toggles">${items.map(([k, label, on]) =>
+    `<label><input type="checkbox" data-toggle="${k}" ${on ? "checked" : ""} /> ${label}</label>`).join("")}</div>`;
+}
+function bindRepToggles(root) {
+  root.querySelectorAll("[data-toggle]").forEach((cb) => cb.addEventListener("change", () => {
+    const k = cb.dataset.toggle;
+    const v = state.repView;
+    if (k === "chart") v.showChart = cb.checked;
+    else if (k === "table") v.showTable = cb.checked;
+    else v.histSeries[k] = cb.checked;
+    saveRepView();
+    renderReport(state.repLastData);
+  }));
+}
+
+function renderReport(data) {
+  if (!data) return;
+  const el = document.getElementById("reportBody");
+  const r = data._report || state.activeReport;
+  const title = r.side ? REP_TITLES[r.side][r.report] : REP_TITLES.fluxo[r.report];
+  const renderers = {
+    grouped: renderRepGrouped, daily: renderRepDaily, extrato: renderRepExtrato,
+    despesas_receitas: renderRepFluxo, historico: renderRepHistorico, dre: renderRepDre,
+    performance: renderRepPerformance, saldos: renderRepSaldos,
+  };
+  const fn = renderers[data.kind];
+  if (!fn) { el.innerHTML = repEmpty(); return; }
+  fn(el, data, title || "", r);
+}
+
+function groupedSlices(rows) {
+  const pal = reportPalette();
+  const byValue = [...rows].sort((a, b) => b.total - a.total);
+  const top = byValue.length > 7 ? byValue.slice(0, 7) : byValue;
+  const colorOf = {};
+  top.forEach((row, i) => { colorOf[row.key] = pal.colors[i]; });
+  const slices = top.map((row) => ({ label: row.label, value: row.total, color: colorOf[row.key] }));
+  if (byValue.length > 7) slices.push({ label: "Outros", value: round2(byValue.slice(7).reduce((s, x) => s + x.total, 0)), color: pal.other });
+  return { slices, colorOf, other: pal.other };
+}
+
+const REP_SORTS = [["valor_desc", "Valor (Maior → Menor)"], ["valor_asc", "Valor (Menor → Maior)"], ["nome_asc", "Nome (A → Z)"], ["nome_desc", "Nome (Z → A)"]];
+function sortRepRows(rows) {
+  const s = state.repView.sort;
+  const out = [...rows];
+  if (s === "valor_asc") out.sort((a, b) => a.total - b.total);
+  else if (s === "nome_asc") out.sort((a, b) => a.label.localeCompare(b.label, "pt-BR"));
+  else if (s === "nome_desc") out.sort((a, b) => b.label.localeCompare(a.label, "pt-BR"));
+  else out.sort((a, b) => b.total - a.total);
+  return out;
+}
+
+function renderRepGrouped(el, data, title) {
+  if (!data.rows.length) { el.innerHTML = repEmpty(); return; }
+  const v = state.repView;
+  const { slices, colorOf, other } = groupedSlices(data.rows);
+  const sorted = sortRepRows(data.rows);
+  const limit = 10;
+  const visible = v.expandOthers || sorted.length <= limit + 1 ? sorted : sorted.slice(0, limit);
+  const hiddenRows = sorted.slice(visible.length);
+  const sortLabel = REP_SORTS.find((s) => s[0] === v.sort)?.[1] || REP_SORTS[0][1];
+  el.innerHTML = `<div class="rep-card">
+    ${repCardHead(data, title)}
+    ${v.showChart ? `<div class="rep-chart"><canvas id="repDonut" height="320"></canvas></div>` : ""}
+    ${v.showTable ? `
+      <div class="rep-table-tools"><button type="button" class="rep-sort-btn" id="repSortBtn">Ordenar por: <b>${sortLabel}</b> <span class="chevron">▾</span></button></div>
+      <table class="rep-table">
+        <thead><tr><th>Descrição</th><th class="num">Valor</th></tr></thead>
+        <tbody>
+          ${visible.map((row) => `<tr><td><span class="rep-dot" style="background:${colorOf[row.key] || other}"></span>${escapeHtml(row.label)} <span class="rep-count">(${row.count})</span></td><td class="num">${repMoney(row.total)}</td></tr>`).join("")}
+          ${hiddenRows.length ? `<tr class="rep-others-row" id="repShowOthers"><td><span class="rep-link-text">Mostrar outros (${hiddenRows.length})</span></td><td class="num">${repMoney(hiddenRows.reduce((s, x) => s + x.total, 0))}</td></tr>` : ""}
+          ${v.expandOthers && sorted.length > limit + 1 ? `<tr class="rep-others-row" id="repHideOthers"><td colspan="2"><span class="rep-link-text">Mostrar menos</span></td></tr>` : ""}
+        </tbody>
+        <tfoot><tr><td>Total</td><td class="num">${repMoney(data.total)}</td></tr></tfoot>
+      </table>` : ""}
+    ${repToggles()}
+  </div>`;
+  if (v.showChart) {
+    const canvas = document.getElementById("repDonut");
+    drawReportDonut(canvas, slices);
+    attachDonutTooltip(canvas);
+  }
+  document.getElementById("repShowOthers")?.addEventListener("click", () => { v.expandOthers = true; renderReport(data); });
+  document.getElementById("repHideOthers")?.addEventListener("click", () => { v.expandOthers = false; renderReport(data); });
+  document.getElementById("repSortBtn")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const trigger = e.currentTarget;
+    const menu = document.getElementById("globalDropdownMenu");
+    const willOpen = menu.classList.contains("hidden") || menu._openedBy !== trigger;
+    closeGlobalDropdown();
+    if (!willOpen) return;
+    menu.innerHTML = REP_SORTS.map(([id, label]) => `<div class="custom-select-option ${v.sort === id ? "selected" : ""}" data-id="${id}"><span>${label}</span><span class="check">✓</span></div>`).join("");
+    menu.querySelectorAll(".custom-select-option").forEach((opt) => opt.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      v.sort = opt.dataset.id;
+      saveRepView();
+      closeGlobalDropdown();
+      renderReport(data);
+    }));
+    menu._openedBy = trigger;
+    positionGlobalDropdown(trigger);
+  });
+  bindRepToggles(el);
+}
+
+/** Rotulos curtos de dias pro eixo X ("set. 05", depois so "06", "07"...
+ * e o mes de novo quando ele muda). */
+function dayAxisLabels(dates) {
+  let lastMonth = null;
+  return dates.map((iso) => {
+    const [, m, d] = iso.split("-");
+    const label = m !== lastMonth ? `${MESES_CURTOS[Number(m) - 1]} ${d}` : d;
+    lastMonth = m;
+    return label;
+  });
+}
+
+function renderRepDaily(el, data, title, r) {
+  if (!data.rows.length) { el.innerHTML = repEmpty(); return; }
+  const v = state.repView;
+  el.innerHTML = `<div class="rep-card">
+    ${repCardHead(data, title)}
+    ${v.showChart ? `<div class="rep-chart"><canvas id="repLine" height="300"></canvas></div>` : ""}
+    ${v.showTable ? `<table class="rep-table">
+      <thead><tr><th>Data</th><th class="num">Valor</th></tr></thead>
+      <tbody>${data.rows.map((row) => `<tr><td>${formatDateBR(row.date)}</td><td class="num">${repMoney(row.total)}</td></tr>`).join("")}</tbody>
+      <tfoot><tr><td>Total</td><td class="num">${repMoney(data.total)}</td></tr></tfoot>
+    </table>` : ""}
+    ${repToggles()}
+  </div>`;
+  if (v.showChart) {
+    const canvas = document.getElementById("repLine");
+    const color = themeColor(r.side === "receita" ? "--green" : "--red", "#5e8a2f");
+    canvas._fullLabels = data.rows.map((row) => formatDateBR(row.date));
+    drawReportLineChart(canvas, dayAxisLabels(data.rows.map((row) => row.date)), [{ name: r.side === "receita" ? "Receitas" : "Despesas", color, values: data.rows.map((row) => row.total) }]);
+    attachLineTooltip(canvas);
+  }
+  bindRepToggles(el);
+}
+
+function repStatusIcon(status) {
+  return status === "pago"
+    ? `<span class="rep-status paid" title="Pago">${ICONS.checkCircle}</span>`
+    : `<span class="rep-status pending" title="Não pago">${ICONS.clock}</span>`;
+}
+function repDescCell(row) {
+  const inst = row.installment ? ` (${row.installment})` : "";
+  let sub = "";
+  if (row.from !== undefined && row.to !== undefined) sub = `De: ${escapeHtml(row.from)} · Para: ${escapeHtml(row.to)}`;
+  else if (row.contact) sub = `${row.contact_prefix}: ${escapeHtml(row.contact)}`;
+  return `<div class="rep-desc">${escapeHtml(row.description)}${inst}</div>${sub ? `<div class="rep-sub">${sub}</div>` : ""}`;
+}
+
+function renderRepExtrato(el, data, title) {
+  if (!data.rows.length) { el.innerHTML = repEmpty(); return; }
+  el.innerHTML = `<div class="rep-card">
+    ${repCardHead(data, title)}
+    <table class="rep-table rep-table-wide">
+      <thead>
+        <tr class="rep-pre-head"><th colspan="3">Fluxo de caixa: ${formatDateBR(data.start)} - ${formatDateBR(data.end)}</th><th class="num">Saldo anterior</th><th class="num">${repSigned(data.saldo_anterior)}</th></tr>
+        <tr><th>Data</th><th>Descrição</th><th>Categoria</th><th class="num">Valor</th><th class="num">Saldo</th></tr>
+      </thead>
+      <tbody>${data.rows.map((row) => `<tr>
+        <td class="nowrap">${repStatusIcon(row.status)}${formatDateBR(row.date)}</td>
+        <td>${repDescCell(row)}</td>
+        <td>${escapeHtml(row.category)}</td>
+        <td class="num">${repSigned(row.value)}</td>
+        <td class="num">${repSigned(row.balance)}</td></tr>`).join("")}
+      </tbody>
+    </table>
+    <table class="rep-table rep-summary">
+      <tr><td>Saldo anterior</td><td class="num">${repSigned(data.saldo_anterior)}</td></tr>
+      <tr><td>Total de entradas no período</td><td class="num">${repMoney(data.total_entradas, "positive")}</td></tr>
+      <tr><td>Total de saídas no período</td><td class="num">${repMoney(-data.total_saidas, "negative")}</td></tr>
+      <tr><td>Balanço no período</td><td class="num">${repSigned(data.balanco)}</td></tr>
+      <tr class="rep-strong"><td>Saldo final</td><td class="num">${repSigned(data.saldo_final)}</td></tr>
+    </table>
+  </div>`;
+}
+
+function renderRepFluxo(el, data, title) {
+  const hasAny = data.sections.length || data.transfers_sent.rows.length || data.transfers_received.rows.length;
+  if (!hasAny) { el.innerHTML = repEmpty(); return; }
+  const rec = data.sections.filter((s) => s.group === "recebimento");
+  const desp = data.sections.filter((s) => s.group !== "recebimento");
+  const section = (s) => {
+    const receita = s.group === "recebimento";
+    return `<h3 class="rep-section-title ${receita ? "receita" : "despesa"}">${escapeHtml(s.label)}</h3>
+      <table class="rep-table rep-fixed">
+        <colgroup><col style="width:16%"><col style="width:46%"><col style="width:22%"><col style="width:16%"></colgroup>
+        <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th class="num">Valor</th></tr></thead>
+        <tbody>${s.rows.map((row) => `<tr><td class="nowrap">${repStatusIcon(row.status)}${formatDateBR(row.date)}</td><td>${repDescCell(row)}</td><td>${escapeHtml(row.category)}</td><td class="num">${repSigned(row.value)}</td></tr>`).join("")}</tbody>
+        ${receita ? "" : `<tfoot><tr><td colspan="3">Total de ${escapeHtml(s.label.toLowerCase())}</td><td class="num">${repMoney(-s.total, "negative")}</td></tr></tfoot>`}
+      </table>`;
+  };
+  const transfers = (label, block, sign) => block.rows.length ? `
+    <h3 class="rep-section-title transfer">${label}</h3>
+    <table class="rep-table rep-fixed">
+      <colgroup><col style="width:16%"><col style="width:26%"><col style="width:21%"><col style="width:21%"><col style="width:16%"></colgroup>
+      <thead><tr><th>Data</th><th>Descrição</th><th>Conta de origem</th><th>Conta de destino</th><th class="num">Valor</th></tr></thead>
+      <tbody>${block.rows.map((t) => `<tr><td class="nowrap">${repStatusIcon(t.status)}${formatDateBR(t.date)}</td><td>${escapeHtml(t.description)}</td><td><span class="rep-sub">De:</span> ${escapeHtml(t.from)}</td><td><span class="rep-sub">Para:</span> ${escapeHtml(t.to)}</td><td class="num">${repSigned(sign * t.amount)}</td></tr>`).join("")}</tbody>
+      <tfoot><tr><td colspan="4">Total de ${label.toLowerCase()}</td><td class="num">${repMoney(block.total)}</td></tr></tfoot>
+    </table>` : "";
+  el.innerHTML = `<div class="rep-card">
+    ${repCardHead(data, title)}
+    ${rec.map(section).join("")}
+    ${rec.length ? `<div class="rep-big-total"><span>Total de recebimentos</span>${repMoney(data.total_receitas, "positive")}</div>` : ""}
+    ${desp.map(section).join("")}
+    ${desp.length ? `<div class="rep-big-total"><span>Total de despesas</span>${repMoney(data.total_despesas, "negative")}</div>` : ""}
+    ${transfers("Transferências enviadas", data.transfers_sent, -1)}
+    ${transfers("Transferências recebidas", data.transfers_received, 1)}
+    <table class="rep-table rep-summary">
+      <tr class="rep-strong"><td>Saldo anterior</td><td class="num">${repSigned(data.saldo_anterior)}</td></tr>
+      <tr><td>Total de recebimentos no período</td><td class="num">${repMoney(data.total_receitas, "positive")}</td></tr>
+      <tr><td>Total de despesas no período</td><td class="num">${repMoney(-data.total_despesas, "negative")}</td></tr>
+      <tr><td>Total de transferências no período</td><td class="num">${repSigned(data.total_transferencias)}</td></tr>
+      <tr><td>Balanço no período</td><td class="num">${repSigned(data.balanco)}</td></tr>
+      <tr class="rep-strong"><td>Saldo final</td><td class="num">${repSigned(data.saldo_final)}</td></tr>
+    </table>
+  </div>`;
+}
+
+function renderRepHistorico(el, data, title) {
+  const v = state.repView;
+  const hs = v.histSeries;
+  const monthly = data.granularity === "month";
+  const keyLabel = (k) => (monthly ? `${MESES[Number(k.slice(5, 7)) - 1]}/${k.slice(0, 4)}` : formatDateBR(k));
+  const colors = { receitas: themeColor("--green", "#5e8a2f"), despesas: themeColor("--red", "#d64545"), resultado: themeColor("--text-muted", "#726d62") };
+  const names = { receitas: "Recebimentos", despesas: "Despesas", resultado: "Resultado" };
+  const active = ["receitas", "despesas", "resultado"].filter((k) => hs[k]);
+  el.innerHTML = `<div class="rep-card">
+    ${repCardHead(data, title)}
+    ${v.showChart ? `<div class="rep-chart"><canvas id="repHist" height="300"></canvas>
+      <div class="rep-legend">${active.map((k) => `<span><span class="rep-dot" style="background:${colors[k]}"></span>${names[k]}</span>`).join("")}</div></div>` : ""}
+    ${v.showTable ? `<table class="rep-table">
+      <thead><tr><th>${monthly ? "Mês" : "Data"}</th>${hs.receitas ? `<th class="num">Receitas</th>` : ""}${hs.despesas ? `<th class="num">Despesas</th>` : ""}${hs.resultado ? `<th class="num">Resultado</th>` : ""}</tr></thead>
+      <tbody>${data.rows.map((row) => `<tr><td>${keyLabel(row.key)}</td>
+        ${hs.receitas ? `<td class="num">${repMoney(row.receitas, "positive")}</td>` : ""}
+        ${hs.despesas ? `<td class="num">${repMoney(-row.despesas, "negative")}</td>` : ""}
+        ${hs.resultado ? `<td class="num">${repSigned(row.resultado)}</td>` : ""}</tr>`).join("")}</tbody>
+      <tfoot><tr><td>Total</td>
+        ${hs.receitas ? `<td class="num">${repMoney(data.total_receitas, "positive")}</td>` : ""}
+        ${hs.despesas ? `<td class="num">${repMoney(-data.total_despesas, "negative")}</td>` : ""}
+        ${hs.resultado ? `<td class="num">${repSigned(data.total_resultado)}</td>` : ""}</tr></tfoot>
+    </table>` : ""}
+    ${repToggles([["receitas", "Exibir receitas", hs.receitas], ["despesas", "Exibir despesas", hs.despesas], ["resultado", "Exibir resultado", hs.resultado]])}
+  </div>`;
+  if (v.showChart) {
+    const canvas = document.getElementById("repHist");
+    canvas._fullLabels = data.rows.map((row) => keyLabel(row.key));
+    const xLabels = monthly ? data.rows.map((row) => `${MESES_CURTOS[Number(row.key.slice(5, 7)) - 1]}${row.key.slice(2, 4)}`) : dayAxisLabels(data.rows.map((row) => row.key));
+    drawReportLineChart(canvas, xLabels, active.map((k) => ({ name: names[k], color: colors[k], values: data.rows.map((row) => row[k]) })));
+    attachLineTooltip(canvas);
+  }
+  bindRepToggles(el);
+}
+
+function renderRepDre(el, data, title) {
+  const expandable = (id, label, line, sign) => `
+    <tr class="dre-line dre-expandable" data-dre="${id}"><td><span class="dre-toggle">${ICONS.plusCircle}</span>${label}</td><td class="num">${repMoney(sign * line.total, sign > 0 ? "positive" : "negative")}</td></tr>
+    ${line.items.map((it) => `<tr class="dre-item hidden" data-dre-parent="${id}"><td>${escapeHtml(it.label)}</td><td class="num">${repMoney(sign * it.total, sign > 0 ? "positive" : "negative")}</td></tr>`).join("")}`;
+  const result = (label, value) => `<tr class="dre-result"><td><span class="dre-toggle">${ICONS.arrowRightCircle}</span>${label}</td><td class="num">${repSigned(value)}</td></tr>`;
+  const lucro = data.resultado_liquido >= 0;
+  el.innerHTML = `<div class="rep-card">
+    ${repCardHead(data, title)}
+    <table class="rep-table rep-dre">
+      <tbody>
+        ${expandable("receita", "Receita bruta", data.receita_bruta, 1)}
+        ${expandable("impostos", "Impostos", data.impostos, -1)}
+        ${result("Lucro bruto", data.lucro_bruto)}
+        ${expandable("variaveis", "Total de despesas variáveis", data.despesas_variaveis, -1)}
+        ${result("Lucro operacional", data.lucro_operacional)}
+        ${expandable("fixas", "Total de despesas fixas", data.despesas_fixas, -1)}
+        ${expandable("pessoal", "Gastos com pessoal", data.gastos_pessoal, -1)}
+      </tbody>
+      <tfoot><tr class="dre-final ${lucro ? "positive" : "negative"}"><td>${lucro ? "Lucro líquido do exercício" : "Prejuízo líquido do exercício"}</td><td class="num">${repSigned(data.resultado_liquido)}</td></tr></tfoot>
+    </table>
+  </div>`;
+  el.querySelectorAll(".dre-expandable").forEach((row) => {
+    const id = row.dataset.dre;
+    const children = el.querySelectorAll(`[data-dre-parent="${id}"]`);
+    if (!children.length) { row.querySelector(".dre-toggle").innerHTML = ICONS.minusCircle; row.classList.add("dre-empty"); return; }
+    row.addEventListener("click", () => {
+      const open = row.classList.toggle("open");
+      row.querySelector(".dre-toggle").innerHTML = open ? ICONS.minusCircle : ICONS.plusCircle;
+      children.forEach((c) => c.classList.toggle("hidden", !open));
+    });
+  });
+}
+
+function repProgress(variation, isExpense) {
+  if (variation === 0 || variation == null) return `<span class="rep-progress good">${ICONS.checkCircle}Manteve</span>`;
+  const up = variation > 0;
+  const good = isExpense ? !up : up;
+  const pct = Math.abs(variation).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return `<span class="rep-progress ${good ? "good" : "warn"}">${good ? ICONS.checkCircle : ICONS.alertTriangle}${up ? "Aumentou" : "Reduziu"} ${pct}%</span>`;
+}
+
+function repSaldosTable(saldos) {
+  const stamp = nowStamp();
+  return `<table class="rep-table">
+    <thead><tr><th>Conta</th><th class="num">Saldo</th></tr></thead>
+    <tbody>${saldos.accounts.map((a) => `<tr><td><span class="rep-dot" style="background:${escapeHtml(a.color || "#999")}"></span>${escapeHtml(a.name)}</td><td class="num">${repSigned(a.balance)}</td></tr>`).join("")}</tbody>
+    <tfoot><tr><td>Saldo total</td><td class="num">${repSigned(saldos.total)}</td></tr></tfoot>
+  </table>
+  <div class="rep-footnote">Posição das contas em ${stamp.date} ${stamp.time}</div>`;
+}
+
+function renderRepPerformance(el, data, title, r) {
+  const mensal = r.report === "performance_mensal";
+  const periodName = mensal ? `${MESES[Number(data.period.slice(5, 7)) - 1]} / ${data.period.slice(0, 4)}` : data.period;
+  const kpi = (label, block, isExpense) => {
+    const verb = block.diff > 0 ? "aumentaram" : block.diff < 0 ? "diminuíram" : "se mantiveram";
+    const good = isExpense ? block.diff <= 0 : block.diff >= 0;
+    return `<div class="rep-kpi ${good ? "good" : "bad"}"><div class="rep-kpi-label">${isExpense ? "Os" : "As"} <b>${label}</b> ${verb} no período${block.diff ? ":" : ""}</div>
+      ${block.diff ? `<div class="rep-kpi-value">${repMoney(Math.abs(block.diff))}</div>` : ""}</div>`;
+  };
+  const topList = (items, cls) => items.length
+    ? items.map((t) => `<div class="rep-top-item"><div>${escapeHtml(t.description)}</div>${repMoney(t.amount, cls)}</div>`).join("")
+    : `<div class="rep-sub">Nenhum lançamento.</div>`;
+  const pal = reportPalette();
+  const toSlices = (rows) => {
+    const byValue = [...rows].sort((a, b) => b.total - a.total);
+    const top = byValue.length > 7 ? byValue.slice(0, 7) : byValue;
+    const slices = top.map((row, i) => ({ label: row.label, value: row.total, color: pal.colors[i] }));
+    if (byValue.length > 7) slices.push({ label: "Outros", value: byValue.slice(7).reduce((s, x) => s + x.total, 0), color: pal.other });
+    return slices;
+  };
+  const rec = data.movimentacoes.filter((m) => m.group === "recebimento");
+  const desp = data.movimentacoes.filter((m) => m.group !== "recebimento");
+  el.innerHTML = `<div class="rep-card">
+    ${repCardHead(data, title)}
+    <div class="rep-perf-top">
+      <div class="rep-kpis">${kpi("gastos", data.despesas, true)}${kpi("receitas", data.receitas, false)}</div>
+      <div class="rep-tops">
+        <div><div class="rep-tops-title">Maiores gastos</div>${topList(data.maiores_gastos, "negative")}</div>
+        <div><div class="rep-tops-title">Maiores receitas</div>${topList(data.maiores_receitas, "positive")}</div>
+      </div>
+    </div>
+    <h3 class="rep-h3">Receitas por categoria e despesas por tipo</h3>
+    <div class="rep-perf-donuts">
+      <div>${data.receitas_por_categoria.length ? `<canvas id="repPerfRec" height="260"></canvas>` : `<div class="rep-sub rep-center">Sem receitas no período.</div>`}</div>
+      <div>${data.despesas_por_tipo.length ? `<canvas id="repPerfDesp" height="260"></canvas>` : `<div class="rep-sub rep-center">Sem despesas no período.</div>`}</div>
+    </div>
+    <h3 class="rep-h3">Movimentações em ${periodName}</h3>
+    <table class="rep-table">
+      <thead><tr><th>Recebimentos</th><th class="num">Valor</th><th>Progresso*</th></tr></thead>
+      <tbody>${rec.map((m) => `<tr><td>${m.label}</td><td class="num">${repMoney(m.total, "positive")}</td><td>${repProgress(m.variation, false)}</td></tr>`).join("")}</tbody>
+      <thead><tr><th>Despesas por tipo</th><th class="num">Valor</th><th>Progresso*</th></tr></thead>
+      <tbody>${desp.map((m) => `<tr><td>${m.label}</td><td class="num">${repMoney(m.total, "negative")}</td><td>${repProgress(m.variation, true)}</td></tr>`).join("")}</tbody>
+    </table>
+    <div class="rep-footnote">* Progresso calculado em relação ${mensal ? "ao mês anterior" : "ao ano anterior"}</div>
+    <h3 class="rep-h3">Saldo das contas</h3>
+    ${repSaldosTable(data.saldos)}
+  </div>`;
+  [["repPerfRec", data.receitas_por_categoria], ["repPerfDesp", data.despesas_por_tipo]].forEach(([id, rows]) => {
+    const canvas = document.getElementById(id);
+    if (!canvas) return;
+    drawReportDonut(canvas, toSlices(rows));
+    attachDonutTooltip(canvas);
+  });
+}
+
+function renderRepSaldos(el, data, title) {
+  if (!data.accounts.length) { el.innerHTML = repEmpty(); return; }
+  el.innerHTML = `<div class="rep-card">${repCardHead(data, title)}<h3 class="rep-h3">Saldos</h3>${repSaldosTable(data)}</div>`;
+}
+
+// Redesenha os graficos ao redimensionar a janela ou trocar o tema.
+let _repResizeTimer = null;
+window.addEventListener("resize", () => {
+  if (state.tab !== "relatorios") return;
+  clearTimeout(_repResizeTimer);
+  _repResizeTimer = setTimeout(() => renderReport(state.repLastData), 150);
+});
+new MutationObserver(() => { if (state.tab === "relatorios") renderReport(state.repLastData); })
+  .observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
 
 const GROUPED_REPORT_KINDS = ["por_descricao", "por_dia", "por_tipo", "por_categoria", "por_centro_custo", "por_contato", "por_tag"];
 
@@ -4024,7 +4769,6 @@ function closeAllFloatingPopups() {
 (async function init() {
   styleSelectAsCustomDropdown("filterPeriodo");
   styleSelectAsCustomDropdown("filterStatus");
-  styleSelectAsCustomDropdown("repStatus");
   attachCustomDatePicker("confirmDialogPromptDate");
   attachCustomDatePicker("filterStart");
   attachCustomDatePicker("filterEnd");

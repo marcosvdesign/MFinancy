@@ -240,7 +240,7 @@ export interface Account {
   balance?: number;
 }
 
-function mapAccount(row: any): Account {
+export function mapAccount(row: any): Account {
   return {
     id: row.id,
     profile_id: row.profile_id,
@@ -656,7 +656,7 @@ export interface Transaction {
   recurrence_frequency: string | null;
 }
 
-function mapTransaction(row: any): Transaction {
+export function mapTransaction(row: any): Transaction {
   return {
     id: row.id,
     description: row.description,
@@ -1276,7 +1276,7 @@ export interface Transfer {
   status: string;
 }
 
-function mapTransfer(row: any): Transfer {
+export function mapTransfer(row: any): Transfer {
   return {
     id: row.id,
     from_account_id: row.from_account_id,

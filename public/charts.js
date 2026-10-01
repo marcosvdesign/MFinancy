@@ -581,3 +581,264 @@ function attachChartTooltip(canvas) {
     animateBarHover(canvas, null);
   });
 }
+
+// ---------------------------------------------------------------------
+// Graficos da pagina Relatorios
+// ---------------------------------------------------------------------
+
+/** Paleta categorica dos relatorios (ordem fixa, nunca ciclada; validada
+ * pra daltonismo nos dois temas). Da 8a fatia em diante tudo vira
+ * "Outros" (cinza), entao nunca precisamos de mais que 7 cores. */
+const REPORT_PALETTE_LIGHT = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7"];
+const REPORT_PALETTE_DARK = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9"];
+function isDarkTheme() {
+  const attr = document.documentElement.getAttribute("data-theme");
+  if (attr) return attr === "dark";
+  return !!(window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+}
+function reportPalette() {
+  const dark = isDarkTheme();
+  return { colors: dark ? REPORT_PALETTE_DARK : REPORT_PALETTE_LIGHT, other: dark ? "#6b6965" : "#b9b5ad" };
+}
+
+function truncateText(ctx, text, maxWidth) {
+  if (ctx.measureText(text).width <= maxWidth) return text;
+  let t = text;
+  while (t.length > 1 && ctx.measureText(t + "…").width > maxWidth) t = t.slice(0, -1);
+  return t + "…";
+}
+
+function formatPct(p) {
+  return (Math.round(p * 100) / 100).toLocaleString("pt-BR", { maximumFractionDigits: 2 }) + "%";
+}
+
+/** Rosca com rotulos externos (nome + %) ligados por linhas-guia.
+ * `slices`: [{label, value, color}]. Guarda a geometria no canvas pro
+ * tooltip de hover (attachDonutTooltip). */
+function drawReportDonut(canvas, slices, hoverIdx) {
+  const scaled = setupCanvasScale(canvas, null, hoverIdx !== undefined);
+  if (scaled.hidden || !scaled.width) return;
+  const { ctx, width, height } = scaled;
+  ctx.clearRect(0, 0, width, height);
+  const total = slices.reduce((s, x) => s + Math.max(0, x.value), 0);
+  if (!total) return;
+  const cx = width / 2, cy = height / 2;
+  // Espaco lateral reservado pros rotulos: ~150px em graficos largos,
+  // proporcionalmente menos em graficos estreitos (ex.: dois lado a lado).
+  const labelSpace = Math.min(150, Math.max(100, width * 0.3));
+  const R = Math.max(40, Math.min(height / 2 - 34, width / 2 - labelSpace, 120));
+  const r = R * 0.6;
+  const surface = themeColor("--surface", "#fff");
+  const textColor = themeColor("--text", "#26241f");
+  const muted = themeColor("--text-muted", "#726d62");
+
+  let angle = -Math.PI / 2;
+  const geo = [];
+  slices.forEach((s, i) => {
+    const sweep = (Math.max(0, s.value) / total) * Math.PI * 2;
+    const a0 = angle, a1 = angle + sweep;
+    angle = a1;
+    geo.push({ a0, a1, mid: (a0 + a1) / 2, pct: (Math.max(0, s.value) / total) * 100 });
+    const grow = hoverIdx === i ? 5 : 0;
+    ctx.beginPath();
+    ctx.arc(cx, cy, R + grow, a0, a1);
+    ctx.arc(cx, cy, r, a1, a0, true);
+    ctx.closePath();
+    ctx.fillStyle = s.color;
+    ctx.globalAlpha = hoverIdx != null && hoverIdx !== i ? 0.55 : 1;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  });
+  // 2px de respiro (cor da superficie) entre as fatias
+  if (slices.length > 1) {
+    ctx.strokeStyle = surface;
+    ctx.lineWidth = 2;
+    geo.forEach((g) => {
+      ctx.beginPath();
+      ctx.moveTo(cx + Math.cos(g.a0) * (r - 1), cy + Math.sin(g.a0) * (r - 1));
+      ctx.lineTo(cx + Math.cos(g.a0) * (R + 7), cy + Math.sin(g.a0) * (R + 7));
+      ctx.stroke();
+    });
+  }
+
+  // Rotulos: nome quebrado em ate 2 linhas + percentual; separados por
+  // lado e empurrados verticalmente pra nao colidirem.
+  ctx.font = "11.5px DM Sans, Segoe UI, sans-serif";
+  const maxLabelW = Math.max(50, width / 2 - R - 38);
+  const wrapLabel = (text) => {
+    if (ctx.measureText(text).width <= maxLabelW) return [text];
+    const words = text.split(" ");
+    let first = "";
+    while (words.length && ctx.measureText((first ? first + " " : "") + words[0]).width <= maxLabelW) first += (first ? " " : "") + words.shift();
+    if (!first) return [truncateText(ctx, text, maxLabelW)];
+    return words.length ? [first, truncateText(ctx, words.join(" "), maxLabelW)] : [first];
+  };
+  const labels = geo
+    .map((g, i) => {
+      const right = Math.cos(g.mid) >= 0;
+      const lines = wrapLabel(slices[i].label);
+      return { i, right, lines, ax: cx + Math.cos(g.mid) * (R + 2), ay: cy + Math.sin(g.mid) * (R + 2), y: cy + Math.sin(g.mid) * (R + 22) };
+    })
+    .filter((l) => geo[l.i].pct >= 0.8);
+  const gapFor = (l) => 18 + l.lines.length * 13;
+  [true, false].forEach((side) => {
+    const list = labels.filter((l) => l.right === side).sort((a, b) => a.y - b.y);
+    for (let k = 1; k < list.length; k++) { const g = gapFor(list[k - 1]); if (list[k].y - list[k - 1].y < g) list[k].y = list[k - 1].y + g; }
+    const last = list[list.length - 1];
+    const overflow = last ? last.y + 14 - height : 0;
+    if (overflow > 0) list.forEach((l) => { l.y -= overflow; });
+    for (let k = list.length - 2; k >= 0; k--) { const g = gapFor(list[k]); if (list[k + 1].y - list[k].y < g) list[k].y = list[k + 1].y - g; }
+    list.forEach((l) => { const min = 4 + l.lines.length * 13; if (l.y < min) l.y = min; });
+  });
+  labels.forEach((l) => {
+    const s = slices[l.i];
+    const dir = l.right ? 1 : -1;
+    const elbowX = cx + dir * (R + 18);
+    const endX = cx + dir * (R + 30);
+    ctx.strokeStyle = s.color;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(l.ax, l.ay);
+    ctx.lineTo(elbowX, l.y);
+    ctx.lineTo(endX, l.y);
+    ctx.stroke();
+    ctx.textAlign = l.right ? "left" : "right";
+    ctx.textBaseline = "alphabetic";
+    const tx = endX + dir * 4;
+    ctx.fillStyle = textColor;
+    l.lines.forEach((line, k) => ctx.fillText(line, tx, l.y - 2 - (l.lines.length - 1 - k) * 13));
+    ctx.fillStyle = muted;
+    ctx.fillText(formatPct(geo[l.i].pct), tx, l.y + 12);
+  });
+  canvas._donut = { slices, geo, cx, cy, R, r, total };
+}
+
+function attachDonutTooltip(canvas) {
+  if (!canvas || canvas._donutTooltip) return;
+  canvas._donutTooltip = true;
+  const tooltip = document.getElementById("chartTooltip");
+  canvas.addEventListener("mousemove", (e) => {
+    const d = canvas._donut;
+    if (!d || !tooltip) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left - d.cx, y = e.clientY - rect.top - d.cy;
+    const dist = Math.hypot(x, y);
+    let idx = null;
+    if (dist >= d.r && dist <= d.R + 6) {
+      let a = Math.atan2(y, x);
+      if (a < -Math.PI / 2) a += Math.PI * 2;
+      const found = d.geo.findIndex((g) => a >= g.a0 && a < g.a1);
+      idx = found < 0 ? null : found;
+    }
+    if (idx == null) {
+      tooltip.classList.add("hidden");
+      if (canvas._hoverIdx != null) { canvas._hoverIdx = null; drawReportDonut(canvas, d.slices, null); }
+      return;
+    }
+    const s = d.slices[idx];
+    tooltip.textContent = `${s.label}: ${formatCurrency(s.value)} (${formatPct(d.geo[idx].pct)})`;
+    tooltip.style.left = `${e.clientX + 12}px`;
+    tooltip.style.top = `${e.clientY + 12}px`;
+    tooltip.classList.remove("hidden");
+    if (canvas._hoverIdx !== idx) { canvas._hoverIdx = idx; drawReportDonut(canvas, d.slices, idx); }
+  });
+  canvas.addEventListener("mouseleave", () => {
+    if (tooltip) tooltip.classList.add("hidden");
+    canvas._hoverIdx = null;
+    if (canvas._donut) drawReportDonut(canvas, canvas._donut.slices, null);
+  });
+}
+
+/** Grafico de linhas (uma ou mais series) com eixo em R$, marcadores e
+ * crosshair + tooltip no hover. `series`: [{name, color, values}],
+ * `labels`: rotulos curtos do eixo X; `canvas._fullLabels` (opcional)
+ * guarda os rotulos completos usados no tooltip. */
+function drawReportLineChart(canvas, labels, series, hoverIdx) {
+  const scaled = setupCanvasScale(canvas, null, hoverIdx !== undefined);
+  if (scaled.hidden || !scaled.width) return;
+  const { ctx, width, height } = scaled;
+  ctx.clearRect(0, 0, width, height);
+  const all = series.flatMap((s) => s.values);
+  let maxV = Math.max(0, ...all), minV = Math.min(0, ...all);
+  const step = niceAxisNumber((maxV - minV || 1) / 5);
+  maxV = Math.ceil(maxV / step) * step || step;
+  minV = Math.floor(minV / step) * step;
+  const padL = 92, padR = 18, padT = 14, padB = 30;
+  const plotW = width - padL - padR, plotH = height - padT - padB;
+  const n = labels.length;
+  const xAt = (i) => padL + (n <= 1 ? plotW / 2 : (i / (n - 1)) * plotW);
+  const yAt = (v) => padT + (1 - (v - minV) / (maxV - minV)) * plotH;
+  const muted = themeColor("--text-muted", "#726d62");
+  const border = themeColor("--border", "#eeece7");
+  const surface = themeColor("--surface", "#fff");
+
+  ctx.font = "11px DM Sans, Segoe UI, sans-serif";
+  ctx.textBaseline = "middle";
+  for (let v = minV; v <= maxV + step / 2; v += step) {
+    const y = yAt(v);
+    ctx.strokeStyle = border;
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(width - padR, y); ctx.stroke();
+    ctx.fillStyle = muted;
+    ctx.textAlign = "right";
+    ctx.fillText(formatCurrency(v), padL - 8, y);
+  }
+  const every = Math.max(1, Math.ceil(n / Math.max(1, Math.floor(plotW / 40))));
+  ctx.textAlign = "center";
+  ctx.textBaseline = "top";
+  ctx.fillStyle = muted;
+  labels.forEach((lb, i) => { if (i % every === 0) ctx.fillText(lb, xAt(i), height - padB + 9); });
+
+  if (hoverIdx != null) {
+    ctx.strokeStyle = muted;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 3]);
+    ctx.beginPath(); ctx.moveTo(xAt(hoverIdx), padT); ctx.lineTo(xAt(hoverIdx), padT + plotH); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  const showMarkers = n <= 45;
+  series.forEach((s) => {
+    ctx.strokeStyle = s.color;
+    ctx.lineWidth = 2;
+    ctx.lineJoin = "round";
+    ctx.beginPath();
+    s.values.forEach((v, i) => (i ? ctx.lineTo(xAt(i), yAt(v)) : ctx.moveTo(xAt(i), yAt(v))));
+    ctx.stroke();
+    s.values.forEach((v, i) => {
+      if (!showMarkers && i !== hoverIdx) return;
+      ctx.beginPath();
+      ctx.arc(xAt(i), yAt(v), i === hoverIdx ? 5.5 : 4, 0, Math.PI * 2);
+      ctx.fillStyle = surface;
+      ctx.fill();
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = s.color;
+      ctx.stroke();
+    });
+  });
+  canvas._line = { labels, series, xs: labels.map((_, i) => xAt(i)) };
+}
+
+function attachLineTooltip(canvas) {
+  if (!canvas || canvas._lineTooltip) return;
+  canvas._lineTooltip = true;
+  const tooltip = document.getElementById("chartTooltip");
+  canvas.addEventListener("mousemove", (e) => {
+    const d = canvas._line;
+    if (!d || !d.xs.length || !tooltip) return;
+    const mx = e.clientX - canvas.getBoundingClientRect().left;
+    let idx = 0;
+    d.xs.forEach((x, i) => { if (Math.abs(x - mx) < Math.abs(d.xs[idx] - mx)) idx = i; });
+    const head = (canvas._fullLabels || d.labels)[idx];
+    tooltip.innerHTML = `<b>${escapeHtml(head)}</b>` + d.series.map((s) =>
+      `<div><span class="tt-dot" style="background:${s.color}"></span>${escapeHtml(s.name)}: ${formatCurrency(s.values[idx])}</div>`).join("");
+    tooltip.style.left = `${e.clientX + 12}px`;
+    tooltip.style.top = `${e.clientY + 12}px`;
+    tooltip.classList.remove("hidden");
+    if (canvas._hoverIdx !== idx) { canvas._hoverIdx = idx; drawReportLineChart(canvas, d.labels, d.series, idx); }
+  });
+  canvas.addEventListener("mouseleave", () => {
+    if (tooltip) tooltip.classList.add("hidden");
+    canvas._hoverIdx = null;
+    if (canvas._line) drawReportLineChart(canvas, canvas._line.labels, canvas._line.series, null);
+  });
+}

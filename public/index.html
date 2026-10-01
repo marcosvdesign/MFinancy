@@ -378,45 +378,94 @@
       <div class="reports-layout">
         <div class="reports-sidebar">
           <div class="reports-group-title">Despesas</div>
-          <button class="report-link" data-report="por_descricao" data-side="despesa">Por Descrição</button>
-          <button class="report-link" data-report="por_dia" data-side="despesa">Por Dia</button>
-          <button class="report-link" data-report="por_tipo" data-side="despesa">Por Tipo</button>
-          <button class="report-link" data-report="por_categoria" data-side="despesa">Por Categoria</button>
-          <button class="report-link" data-report="por_tag" data-side="despesa">Por Tags</button>
-          <button class="report-link" data-report="por_centro_custo" data-side="despesa">Por Centro de Custo</button>
-          <button class="report-link" data-report="por_contato" data-side="despesa">Pago a...</button>
+          <button class="report-link rep-despesa" data-report="por_descricao" data-side="despesa" data-icon="pencil">Por Descrição</button>
+          <button class="report-link rep-despesa" data-report="por_dia" data-side="despesa" data-icon="calendar">Por Dia</button>
+          <button class="report-link rep-despesa" data-report="por_tipo" data-side="despesa" data-icon="layers">Por Tipo</button>
+          <button class="report-link rep-despesa" data-report="por_categoria" data-side="despesa" data-icon="bookmark">Por Categoria</button>
+          <button class="report-link rep-despesa" data-report="por_tag" data-side="despesa" data-icon="tag">Por Tags</button>
+          <button class="report-link rep-despesa" data-report="por_perfil" data-side="despesa" data-icon="user">Por Perfil</button>
+          <button class="report-link rep-despesa" data-report="por_contato" data-side="despesa" data-icon="users">Pago a...</button>
 
           <div class="reports-group-title">Recebimentos</div>
-          <button class="report-link" data-report="por_descricao" data-side="receita">Por Descrição</button>
-          <button class="report-link" data-report="por_dia" data-side="receita">Por Dia</button>
-          <button class="report-link" data-report="por_categoria" data-side="receita">Por Categoria</button>
-          <button class="report-link" data-report="por_tag" data-side="receita">Por Tags</button>
-          <button class="report-link" data-report="por_centro_custo" data-side="receita">Por Centro de Custo</button>
-          <button class="report-link" data-report="por_contato" data-side="receita">Recebido de...</button>
+          <button class="report-link rep-receita" data-report="por_descricao" data-side="receita" data-icon="pencil">Por Descrição</button>
+          <button class="report-link rep-receita" data-report="por_dia" data-side="receita" data-icon="calendar">Por Dia</button>
+          <button class="report-link rep-receita" data-report="por_categoria" data-side="receita" data-icon="bookmark">Por Categoria</button>
+          <button class="report-link rep-receita" data-report="por_tag" data-side="receita" data-icon="tag">Por Tags</button>
+          <button class="report-link rep-receita" data-report="por_perfil" data-side="receita" data-icon="user">Por Perfil</button>
+          <button class="report-link rep-receita" data-report="por_contato" data-side="receita" data-icon="users">Recebido de...</button>
 
           <div class="reports-group-title">Fluxo de Caixa</div>
-          <button class="report-link" data-report="extrato">Extrato</button>
-          <button class="report-link" data-report="despesas_receitas">Despesas/Receitas</button>
-          <button class="report-link" data-report="historico">Histórico</button>
-          <button class="report-link" data-report="dre">Demonstrativo (DRE)</button>
-          <button class="report-link" data-report="performance_mensal">Performance Mensal</button>
-          <button class="report-link" data-report="performance_anual">Performance Anual</button>
-          <button class="report-link" data-report="saldos">Saldos</button>
+          <button class="report-link rep-fluxo" data-report="extrato" data-icon="list">Extrato</button>
+          <button class="report-link rep-fluxo" data-report="despesas_receitas" data-icon="table">Despesas/Receitas</button>
+          <button class="report-link rep-fluxo" data-report="historico" data-icon="lineChart">Histórico</button>
+          <button class="report-link rep-fluxo" data-report="dre" data-icon="fileText">Demonstrativo (DRE)</button>
+          <button class="report-link rep-fluxo" data-report="performance_mensal" data-icon="barChart">Performance Mensal</button>
+          <button class="report-link rep-fluxo" data-report="performance_anual" data-icon="barChart">Performance Anual</button>
+          <button class="report-link rep-fluxo" data-report="saldos" data-icon="wallet">Saldos</button>
         </div>
 
         <div class="reports-content">
-          <div class="filters" id="reportFilters">
-            <input type="date" id="repStart" />
-            <span>até</span>
-            <input type="date" id="repEnd" />
-            <select id="repStatus">
-              <option value="">Pagos e não pagos</option>
-              <option value="pago">Somente pagos</option>
-              <option value="pendente">Somente não pagos</option>
-            </select>
-            <button id="btnGerarRelatorio" class="btn-primary">Gerar</button>
+          <div class="rep-filters" id="reportFilters">
+            <div class="rep-filters-grid">
+              <div class="rep-field rep-field-date" id="repFieldDate">
+                <label>Data</label>
+                <div class="rep-date-group">
+                  <button type="button" class="rep-preset-btn" id="repPresetBtn"><span id="repPresetLabel">Este mês</span><span class="chevron">▾</span></button>
+                  <input type="date" id="repStart" />
+                  <input type="date" id="repEnd" />
+                </div>
+              </div>
+              <div class="rep-field hidden" id="repFieldMonth">
+                <label>Mês</label>
+                <input type="month" id="repMonth" class="rep-input" />
+              </div>
+              <div class="rep-field hidden" id="repFieldYear">
+                <label>Ano</label>
+                <input type="number" id="repYear" class="rep-input" min="1990" max="2100" step="1" />
+              </div>
+              <div class="rep-field" id="repFieldAccounts">
+                <label>Contas bancárias</label>
+                <div class="rep-multi" data-key="accounts" data-placeholder="Todas as contas"></div>
+              </div>
+              <div class="rep-field" id="repFieldProfiles">
+                <label>Perfis</label>
+                <div class="rep-multi" data-key="profiles" data-placeholder="Selecione..."></div>
+              </div>
+              <div class="rep-field" id="repFieldStatus">
+                <label>Incluir lançamentos</label>
+                <div class="rep-checks">
+                  <label><input type="checkbox" id="repPaid" checked /> Pagos</label>
+                  <label><input type="checkbox" id="repPending" checked /> Não pagos</label>
+                </div>
+              </div>
+              <div class="rep-field" id="repFieldDateMode">
+                <label>Mostrar por data de</label>
+                <div class="rep-checks">
+                  <label><input type="radio" name="repDateMode" value="pagamento" checked /> Pagamento</label>
+                  <label><input type="radio" name="repDateMode" value="competencia" /> Competência</label>
+                </div>
+              </div>
+              <div class="rep-field rep-field-actions">
+                <div class="rep-actions">
+                  <button type="button" class="rep-action-btn" id="repPinBtn" title="Fixar filtros como padrão"></button>
+                  <button type="button" class="rep-action-btn" id="repPrintBtn" title="Imprimir relatório"></button>
+                  <button type="button" class="rep-action-btn" id="btnGerarRelatorio" title="Baixar relatório financeiro em PDF"></button>
+                  <button type="button" class="rep-action-btn" id="repSettingsBtn" title="Opções do relatório"></button>
+                </div>
+              </div>
+            </div>
+            <div class="rep-more hidden" id="repMoreFilters">
+              <div class="rep-filters-grid">
+                <div class="rep-field"><label>Categorias</label><div class="rep-multi" data-key="categories" data-placeholder="Selecione..." data-all="1"></div></div>
+                <div class="rep-field"><label>Contatos</label><div class="rep-multi" data-key="contacts" data-placeholder="Selecione..." data-all="1"></div></div>
+                <div class="rep-field"><label>Tags</label><div class="rep-multi" data-key="tags" data-placeholder="Selecione..." data-all="1"></div></div>
+                <div class="rep-field"><label>Formas de pagamento</label><div class="rep-multi" data-key="payment_methods" data-placeholder="Selecione..." data-all="1"></div></div>
+                <div class="rep-field"><label>Planos de pagamento</label><div class="rep-multi" data-key="plans" data-placeholder="Selecione..." data-all="1"></div></div>
+              </div>
+              <p class="rep-note">Marcar "Todas" em qualquer filtro retorna apenas lançamentos com aquele campo preenchido. Para incluir também os lançamentos sem valor naquele campo, deixe o filtro vazio.</p>
+            </div>
+            <button type="button" class="rep-more-toggle" id="repMoreToggle"></button>
           </div>
-          <h2 id="reportTitle" class="report-title">Despesas/Receitas</h2>
           <div id="reportBody"></div>
         </div>
       </div>
