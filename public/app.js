@@ -3678,10 +3678,12 @@ function renderRepDaily(el, data, title, r) {
   </div>`;
   if (v.showChart) {
     const canvas = document.getElementById("repLine");
-    const color = themeColor(r.side === "receita" ? "--green" : "--red", "#5e8a2f");
-    canvas._fullLabels = data.rows.map((row) => formatDateBR(row.date));
-    drawReportLineChart(canvas, dayAxisLabels(data.rows.map((row) => row.date)), [{ name: r.side === "receita" ? "Receitas" : "Despesas", color, values: data.rows.map((row) => row.total) }]);
-    attachLineTooltip(canvas);
+    drawReportBars(canvas, {
+      labels: dayAxisLabels(data.rows.map((row) => row.date)),
+      fullLabels: data.rows.map((row) => formatDateBR(row.date)),
+      up: { name: r.side === "receita" ? "Receitas" : "Despesas", color: r.side === "receita" ? "--green" : "--red", values: data.rows.map((row) => row.total) },
+    });
+    attachBarsTooltip(canvas);
   }
   bindRepToggles(el);
 }
@@ -3773,13 +3775,13 @@ function renderRepHistorico(el, data, title) {
   const hs = v.histSeries;
   const monthly = data.granularity === "month";
   const keyLabel = (k) => (monthly ? `${MESES[Number(k.slice(5, 7)) - 1]}/${k.slice(0, 4)}` : formatDateBR(k));
-  const colors = { receitas: themeColor("--green", "#5e8a2f"), despesas: themeColor("--red", "#d64545"), resultado: themeColor("--text-muted", "#726d62") };
+  const colors = { receitas: themeColor("--green", "#5e8a2f"), despesas: themeColor("--red", "#d64545"), resultado: themeColor("--text", "#26241f") };
   const names = { receitas: "Recebimentos", despesas: "Despesas", resultado: "Resultado" };
   const active = ["receitas", "despesas", "resultado"].filter((k) => hs[k]);
   el.innerHTML = `<div class="rep-card">
     ${repCardHead(data, title)}
     ${v.showChart ? `<div class="rep-chart"><canvas id="repHist" height="300"></canvas>
-      <div class="rep-legend">${active.map((k) => `<span><span class="rep-dot" style="background:${colors[k]}"></span>${names[k]}</span>`).join("")}</div></div>` : ""}
+      <div class="rep-legend">${active.map((k) => `<span><span class="${k === "resultado" ? "rep-legend-line" : "rep-legend-bar"}" style="background:${k === "resultado" ? colors[k] : `linear-gradient(0deg, ${colors[k]}, ${themeColor(k === "receitas" ? "--green-light" : "--red-light")})`}"></span>${names[k]}</span>`).join("")}</div></div>` : ""}
     ${v.showTable ? `<table class="rep-table">
       <thead><tr><th>${monthly ? "Mês" : "Data"}</th>${hs.receitas ? `<th class="num">Receitas</th>` : ""}${hs.despesas ? `<th class="num">Despesas</th>` : ""}${hs.resultado ? `<th class="num">Resultado</th>` : ""}</tr></thead>
       <tbody>${data.rows.map((row) => `<tr><td>${keyLabel(row.key)}</td>
@@ -3795,10 +3797,17 @@ function renderRepHistorico(el, data, title) {
   </div>`;
   if (v.showChart) {
     const canvas = document.getElementById("repHist");
-    canvas._fullLabels = data.rows.map((row) => keyLabel(row.key));
     const xLabels = monthly ? data.rows.map((row) => `${MESES_CURTOS[Number(row.key.slice(5, 7)) - 1]}${row.key.slice(2, 4)}`) : dayAxisLabels(data.rows.map((row) => row.key));
-    drawReportLineChart(canvas, xLabels, active.map((k) => ({ name: names[k], color: colors[k], values: data.rows.map((row) => row[k]) })));
-    attachLineTooltip(canvas);
+    const series = (k) => data.rows.map((row) => row[k]);
+    drawReportBars(canvas, {
+      labels: xLabels,
+      fullLabels: data.rows.map((row) => keyLabel(row.key)),
+      mirrored: true,
+      up: hs.receitas ? { name: names.receitas, color: "--green", values: series("receitas") } : null,
+      down: hs.despesas ? { name: names.despesas, color: "--red", values: series("despesas") } : null,
+      line: hs.resultado ? { name: names.resultado, values: series("resultado") } : null,
+    });
+    attachBarsTooltip(canvas);
   }
   bindRepToggles(el);
 }

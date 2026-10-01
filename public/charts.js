@@ -585,10 +585,14 @@ function attachChartTooltip(canvas) {
 // ---------------------------------------------------------------------
 // Graficos da pagina Relatorios
 // ---------------------------------------------------------------------
+// Mesma linguagem visual do Dashboard: barras "capsula" (ponta
+// arredondada, base reta) com leve gradiente cor -> tom claro, linha de
+// tendencia em curva suave sem pontos fixos, eixo em valores curtos
+// (R$ 5K) e anel com pontas arredondadas e gradiente nas roscas.
 
-/** Paleta categorica dos relatorios (ordem fixa, nunca ciclada; validada
- * pra daltonismo nos dois temas). Da 8a fatia em diante tudo vira
- * "Outros" (cinza), entao nunca precisamos de mais que 7 cores. */
+/** Paleta categorica das roscas (ordem fixa, nunca ciclada; validada pra
+ * daltonismo nos dois temas). Da 8a fatia em diante tudo vira "Outros"
+ * (cinza), entao nunca precisamos de mais que 7 cores. */
 const REPORT_PALETTE_LIGHT = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7"];
 const REPORT_PALETTE_DARK = ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9"];
 function isDarkTheme() {
@@ -599,6 +603,15 @@ function isDarkTheme() {
 function reportPalette() {
   const dark = isDarkTheme();
   return { colors: dark ? REPORT_PALETTE_DARK : REPORT_PALETTE_LIGHT, other: dark ? "#6b6965" : "#b9b5ad" };
+}
+
+/** Tom mais claro de uma cor "#rrggbb" (mesma intensidade ~35% usada nos
+ * gradientes verde/vermelho e nas bolinhas de perfis/contas do app). */
+function lightenHex(hex, amount = 0.35) {
+  const m = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex || "");
+  if (!m) return hex;
+  const l = (c) => Math.round(parseInt(c, 16) + (255 - parseInt(c, 16)) * amount);
+  return `rgb(${l(m[1])}, ${l(m[2])}, ${l(m[3])})`;
 }
 
 function truncateText(ctx, text, maxWidth) {
@@ -612,9 +625,12 @@ function formatPct(p) {
   return (Math.round(p * 100) / 100).toLocaleString("pt-BR", { maximumFractionDigits: 2 }) + "%";
 }
 
-/** Rosca com rotulos externos (nome + %) ligados por linhas-guia.
- * `slices`: [{label, value, color}]. Guarda a geometria no canvas pro
- * tooltip de hover (attachDonutTooltip). */
+const CHART_FONT = "DM Sans, Segoe UI, sans-serif";
+
+/** Rosca em anel: trilho de fundo + um arco por fatia, com pontas
+ * arredondadas, um respiro entre as fatias e gradiente cor -> tom claro.
+ * Rotulos externos (nome + %) ligados por linhas-guia.
+ * `slices`: [{label, value, color}]. */
 function drawReportDonut(canvas, slices, hoverIdx) {
   const scaled = setupCanvasScale(canvas, null, hoverIdx !== undefined);
   if (scaled.hidden || !scaled.width) return;
@@ -626,12 +642,23 @@ function drawReportDonut(canvas, slices, hoverIdx) {
   // Espaco lateral reservado pros rotulos: ~150px em graficos largos,
   // proporcionalmente menos em graficos estreitos (ex.: dois lado a lado).
   const labelSpace = Math.min(150, Math.max(100, width * 0.3));
-  const R = Math.max(40, Math.min(height / 2 - 34, width / 2 - labelSpace, 120));
-  const r = R * 0.6;
-  const surface = themeColor("--surface", "#fff");
+  const R = Math.max(40, Math.min(height / 2 - 34, width / 2 - labelSpace, 115));
+  const lineW = Math.max(14, Math.round(R * 0.26));
+  const Rm = R - lineW / 2; // raio do meio do anel
   const textColor = themeColor("--text", "#26241f");
   const muted = themeColor("--text-muted", "#726d62");
 
+  // Trilho de fundo (igual ao anel de progresso do Dashboard)
+  ctx.beginPath();
+  ctx.arc(cx, cy, Rm, 0, Math.PI * 2);
+  ctx.strokeStyle = themeColor("--border", "#eeece7");
+  ctx.lineWidth = lineW;
+  ctx.stroke();
+
+  const multi = slices.filter((s) => s.value > 0).length > 1;
+  // Ponta arredondada avanca lineW/2 alem do fim do arco: recua isso (+ um
+  // respiro de 3px) de cada lado pra as fatias nao se sobreporem.
+  const capAngle = multi ? (lineW / 2 + 3) / Rm : 0;
   let angle = -Math.PI / 2;
   const geo = [];
   slices.forEach((s, i) => {
@@ -639,31 +666,33 @@ function drawReportDonut(canvas, slices, hoverIdx) {
     const a0 = angle, a1 = angle + sweep;
     angle = a1;
     geo.push({ a0, a1, mid: (a0 + a1) / 2, pct: (Math.max(0, s.value) / total) * 100 });
-    const grow = hoverIdx === i ? 5 : 0;
-    ctx.beginPath();
-    ctx.arc(cx, cy, R + grow, a0, a1);
-    ctx.arc(cx, cy, r, a1, a0, true);
-    ctx.closePath();
-    ctx.fillStyle = s.color;
+    if (sweep <= 0) return;
+    let d0 = a0 + capAngle, d1 = a1 - capAngle;
+    if (d1 < d0) d0 = d1 = (a0 + a1) / 2; // fatia minuscula: so um ponto
+    const grad = ctx.createLinearGradient(cx + Math.cos(a0) * Rm, cy + Math.sin(a0) * Rm, cx + Math.cos(a1) * Rm, cy + Math.sin(a1) * Rm);
+    grad.addColorStop(0, s.color);
+    grad.addColorStop(1, lightenHex(s.color));
+    ctx.save();
     ctx.globalAlpha = hoverIdx != null && hoverIdx !== i ? 0.55 : 1;
-    ctx.fill();
-    ctx.globalAlpha = 1;
+    ctx.beginPath();
+    if (multi) ctx.arc(cx, cy, Rm, d0, d1 === d0 ? d0 + 0.0001 : d1);
+    else ctx.arc(cx, cy, Rm, 0, Math.PI * 2);
+    ctx.strokeStyle = multi ? grad : s.color;
+    if (!multi) {
+      const g2 = ctx.createLinearGradient(cx - R, cy - R, cx + R, cy + R);
+      g2.addColorStop(0, s.color);
+      g2.addColorStop(1, lightenHex(s.color));
+      ctx.strokeStyle = g2;
+    }
+    ctx.lineWidth = hoverIdx === i ? lineW + 5 : lineW;
+    ctx.lineCap = "round";
+    ctx.stroke();
+    ctx.restore();
   });
-  // 2px de respiro (cor da superficie) entre as fatias
-  if (slices.length > 1) {
-    ctx.strokeStyle = surface;
-    ctx.lineWidth = 2;
-    geo.forEach((g) => {
-      ctx.beginPath();
-      ctx.moveTo(cx + Math.cos(g.a0) * (r - 1), cy + Math.sin(g.a0) * (r - 1));
-      ctx.lineTo(cx + Math.cos(g.a0) * (R + 7), cy + Math.sin(g.a0) * (R + 7));
-      ctx.stroke();
-    });
-  }
 
   // Rotulos: nome quebrado em ate 2 linhas + percentual; separados por
   // lado e empurrados verticalmente pra nao colidirem.
-  ctx.font = "11.5px DM Sans, Segoe UI, sans-serif";
+  ctx.font = `11.5px ${CHART_FONT}`;
   const maxLabelW = Math.max(50, width / 2 - R - 38);
   const wrapLabel = (text) => {
     if (ctx.measureText(text).width <= maxLabelW) return [text];
@@ -677,7 +706,7 @@ function drawReportDonut(canvas, slices, hoverIdx) {
     .map((g, i) => {
       const right = Math.cos(g.mid) >= 0;
       const lines = wrapLabel(slices[i].label);
-      return { i, right, lines, ax: cx + Math.cos(g.mid) * (R + 2), ay: cy + Math.sin(g.mid) * (R + 2), y: cy + Math.sin(g.mid) * (R + 22) };
+      return { i, right, lines, ax: cx + Math.cos(g.mid) * (R + 4), ay: cy + Math.sin(g.mid) * (R + 4), y: cy + Math.sin(g.mid) * (R + 22) };
     })
     .filter((l) => geo[l.i].pct >= 0.8);
   const gapFor = (l) => 18 + l.lines.length * 13;
@@ -695,22 +724,29 @@ function drawReportDonut(canvas, slices, hoverIdx) {
     const dir = l.right ? 1 : -1;
     const elbowX = cx + dir * (R + 18);
     const endX = cx + dir * (R + 30);
-    ctx.strokeStyle = s.color;
+    ctx.strokeStyle = muted;
+    ctx.globalAlpha = 0.6;
     ctx.lineWidth = 1;
+    ctx.lineCap = "round";
     ctx.beginPath();
     ctx.moveTo(l.ax, l.ay);
     ctx.lineTo(elbowX, l.y);
     ctx.lineTo(endX, l.y);
     ctx.stroke();
+    ctx.globalAlpha = 1;
+    ctx.beginPath();
+    ctx.arc(endX, l.y, 2.5, 0, Math.PI * 2);
+    ctx.fillStyle = s.color;
+    ctx.fill();
     ctx.textAlign = l.right ? "left" : "right";
     ctx.textBaseline = "alphabetic";
-    const tx = endX + dir * 4;
+    const tx = endX + dir * 6;
     ctx.fillStyle = textColor;
     l.lines.forEach((line, k) => ctx.fillText(line, tx, l.y - 2 - (l.lines.length - 1 - k) * 13));
     ctx.fillStyle = muted;
     ctx.fillText(formatPct(geo[l.i].pct), tx, l.y + 12);
   });
-  canvas._donut = { slices, geo, cx, cy, R, r, total };
+  canvas._donut = { slices, geo, cx, cy, Rm, lineW, total };
 }
 
 function attachDonutTooltip(canvas) {
@@ -724,7 +760,7 @@ function attachDonutTooltip(canvas) {
     const x = e.clientX - rect.left - d.cx, y = e.clientY - rect.top - d.cy;
     const dist = Math.hypot(x, y);
     let idx = null;
-    if (dist >= d.r && dist <= d.R + 6) {
+    if (Math.abs(dist - d.Rm) <= d.lineW / 2 + 6) {
       let a = Math.atan2(y, x);
       if (a < -Math.PI / 2) a += Math.PI * 2;
       const found = d.geo.findIndex((g) => a >= g.a0 && a < g.a1);
@@ -749,96 +785,179 @@ function attachDonutTooltip(canvas) {
   });
 }
 
-/** Grafico de linhas (uma ou mais series) com eixo em R$, marcadores e
- * crosshair + tooltip no hover. `series`: [{name, color, values}],
- * `labels`: rotulos curtos do eixo X; `canvas._fullLabels` (opcional)
- * guarda os rotulos completos usados no tooltip. */
-function drawReportLineChart(canvas, labels, series, hoverIdx) {
+/** Curva suave monotonica (Fritsch-Carlson): mesma aparencia da curva do
+ * Dashboard, mas sem "passar do ponto" entre valores muito diferentes --
+ * com dados diarios cheios de picos, a Catmull-Rom criava vales/picos
+ * falsos (ex.: resultado negativo num dia sem nenhuma despesa). */
+function drawMonotonePath(ctx, pts) {
+  const n = pts.length;
+  if (!n) return;
+  ctx.moveTo(pts[0].x, pts[0].y);
+  if (n === 1) return;
+  const dx = [], m = [], t = new Array(n);
+  for (let i = 0; i < n - 1; i++) { dx.push(pts[i + 1].x - pts[i].x); m.push((pts[i + 1].y - pts[i].y) / (dx[i] || 1)); }
+  t[0] = m[0]; t[n - 1] = m[n - 2];
+  for (let i = 1; i < n - 1; i++) t[i] = m[i - 1] * m[i] <= 0 ? 0 : (m[i - 1] + m[i]) / 2;
+  for (let i = 0; i < n - 1; i++) {
+    if (m[i] === 0) { t[i] = 0; t[i + 1] = 0; continue; }
+    const a = t[i] / m[i], b = t[i + 1] / m[i], h = a * a + b * b;
+    if (h > 9) { const k = 3 / Math.sqrt(h); t[i] = k * a * m[i]; t[i + 1] = k * b * m[i]; }
+  }
+  for (let i = 0; i < n - 1; i++) {
+    const d = dx[i] / 3;
+    ctx.bezierCurveTo(pts[i].x + d, pts[i].y + t[i] * d, pts[i + 1].x - d, pts[i + 1].y - t[i + 1] * d, pts[i + 1].x, pts[i + 1].y);
+  }
+}
+
+/** Barras capsula no estilo do fluxo de caixa do Dashboard.
+ * cfg = {
+ *   labels: rotulos curtos do eixo X, fullLabels: rotulos do tooltip,
+ *   up:   { name, values, color: "--green" }  -> barras acima da linha R$0
+ *   down: { name, values, color: "--red" }    -> barras abaixo (espelhado)
+ *   line: { name, values }                    -> linha de tendencia suave
+ * }
+ * So com `up` (ou so `down`), a base fica embaixo e as barras sobem. */
+function drawReportBars(canvas, cfg, hoverIdx) {
   const scaled = setupCanvasScale(canvas, null, hoverIdx !== undefined);
   if (scaled.hidden || !scaled.width) return;
   const { ctx, width, height } = scaled;
   ctx.clearRect(0, 0, width, height);
-  const all = series.flatMap((s) => s.values);
-  let maxV = Math.max(0, ...all), minV = Math.min(0, ...all);
-  const step = niceAxisNumber((maxV - minV || 1) / 5);
-  maxV = Math.ceil(maxV / step) * step || step;
-  minV = Math.floor(minV / step) * step;
-  const padL = 92, padR = 18, padT = 14, padB = 30;
-  const plotW = width - padL - padR, plotH = height - padT - padB;
-  const n = labels.length;
-  const xAt = (i) => padL + (n <= 1 ? plotW / 2 : (i / (n - 1)) * plotW);
-  const yAt = (v) => padT + (1 - (v - minV) / (maxV - minV)) * plotH;
-  const muted = themeColor("--text-muted", "#726d62");
-  const border = themeColor("--border", "#eeece7");
-  const surface = themeColor("--surface", "#fff");
+  const borderColor = themeColor("--border", "#e3e7ee");
+  const mutedColor = themeColor("--text-muted", "#6b7383");
+  const trendColor = themeColor("--text", "#1c2333");
+  const n = cfg.labels.length;
+  if (!n) return;
 
-  ctx.font = "11px DM Sans, Segoe UI, sans-serif";
-  ctx.textBaseline = "middle";
-  for (let v = minV; v <= maxV + step / 2; v += step) {
-    const y = yAt(v);
-    ctx.strokeStyle = border;
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(padL, y); ctx.lineTo(width - padR, y); ctx.stroke();
-    ctx.fillStyle = muted;
-    ctx.textAlign = "right";
-    ctx.fillText(formatCurrency(v), padL - 8, y);
+  const mirrored = !!(cfg.mirrored || (cfg.up && cfg.down));
+  const single = !mirrored ? (cfg.up || cfg.down) : null;
+  const padding = { top: 20, right: 16, bottom: 26, left: 66 };
+  const chartW = width - padding.left - padding.right;
+  const chartH = height - padding.top - padding.bottom;
+  const baseY = mirrored ? padding.top + chartH / 2 : padding.top + chartH;
+  const scaleH = mirrored ? chartH / 2 : chartH;
+
+  const vals = [
+    ...(cfg.up ? cfg.up.values : []),
+    ...(cfg.down ? cfg.down.values : []),
+    ...(cfg.line ? cfg.line.values.map(Math.abs) : []),
+  ];
+  const maxVal = Math.max(1, ...vals);
+  const step = niceAxisNumber(maxVal / (mirrored ? 3 : 4));
+  const niceMax = Math.ceil(maxVal / step) * step;
+
+  // Grade + eixo (mesmo visual do Dashboard: linhas discretas, valores curtos)
+  ctx.strokeStyle = borderColor;
+  ctx.lineWidth = 1;
+  ctx.fillStyle = mutedColor;
+  ctx.font = `10.5px ${CHART_FONT}`;
+  ctx.textAlign = "right";
+  ctx.textBaseline = "alphabetic";
+  const hline = (y) => { ctx.beginPath(); ctx.moveTo(padding.left, y); ctx.lineTo(width - padding.right, y); ctx.stroke(); };
+  hline(baseY);
+  ctx.fillText("R$ 0", padding.left - 8, baseY + 4);
+  for (let v = step; v <= niceMax + step / 2; v += step) {
+    const dy = (v / niceMax) * scaleH;
+    hline(baseY - dy);
+    ctx.fillText(formatCurrencyShort(v), padding.left - 8, baseY - dy + 4);
+    if (mirrored) {
+      hline(baseY + dy);
+      ctx.fillText("-" + formatCurrencyShort(v), padding.left - 8, baseY + dy + 4);
+    }
   }
-  const every = Math.max(1, Math.ceil(n / Math.max(1, Math.floor(plotW / 40))));
+
+  const groupWidth = chartW / n;
+  const barWidth = Math.max(3, Math.min(24, groupWidth * (mirrored ? 0.42 : 0.5)));
+  const tip = barWidth / 2;
+  const colorPair = (varName) => {
+    const c = themeColor(varName, varName === "--red" ? "#d64545" : "#5e8a2f");
+    const l = themeColor(varName === "--red" ? "--red-light" : "--green-light", lightenHex(c));
+    return [c, l];
+  };
+  const capsule = (x, h, colors, fade) => {
+    if (Math.abs(h) <= 0.5) return;
+    const dir = h < 0 ? -1 : 1; // -1 = pra cima
+    const len = Math.abs(h);
+    ctx.save();
+    ctx.globalAlpha = fade;
+    const grad = ctx.createLinearGradient(0, baseY, 0, baseY + dir * len);
+    grad.addColorStop(0, colors[0]);
+    grad.addColorStop(1, colors[1]);
+    ctx.fillStyle = grad;
+    ctxCapsuleBar(ctx, x, baseY, barWidth, h, tip);
+    ctx.fill();
+    ctx.restore();
+  };
+  const upColors = cfg.up ? colorPair(cfg.up.color) : null;
+  const downColors = cfg.down ? colorPair(cfg.down.color) : null;
+  const xs = [];
+  for (let i = 0; i < n; i++) {
+    const gx = padding.left + groupWidth * i + groupWidth / 2;
+    xs.push(gx);
+    const fade = hoverIdx === i ? 0.55 : 1;
+    const x = gx - barWidth / 2;
+    if (mirrored) {
+      if (cfg.up) capsule(x, -(cfg.up.values[i] / niceMax) * scaleH, upColors, fade);
+      if (cfg.down) capsule(x, (cfg.down.values[i] / niceMax) * scaleH, downColors, fade);
+    } else if (single) {
+      capsule(x, -(single.values[i] / niceMax) * scaleH, cfg.up ? upColors : downColors, fade);
+    }
+  }
+
+  // Rotulos do eixo X (pulando alguns quando nao cabem)
+  ctx.fillStyle = mutedColor;
+  ctx.font = `11px ${CHART_FONT}`;
   ctx.textAlign = "center";
-  ctx.textBaseline = "top";
-  ctx.fillStyle = muted;
-  labels.forEach((lb, i) => { if (i % every === 0) ctx.fillText(lb, xAt(i), height - padB + 9); });
+  const every = Math.max(1, Math.ceil(n / Math.max(1, Math.floor(chartW / 40))));
+  cfg.labels.forEach((lb, i) => { if (i % every === 0) ctx.fillText(lb, xs[i], height - 6); });
 
-  if (hoverIdx != null) {
-    ctx.strokeStyle = muted;
-    ctx.lineWidth = 1;
-    ctx.setLineDash([3, 3]);
-    ctx.beginPath(); ctx.moveTo(xAt(hoverIdx), padT); ctx.lineTo(xAt(hoverIdx), padT + plotH); ctx.stroke();
-    ctx.setLineDash([]);
-  }
-  const showMarkers = n <= 45;
-  series.forEach((s) => {
-    ctx.strokeStyle = s.color;
-    ctx.lineWidth = 2;
+  // Linha de tendencia: curva suave, sem pontos fixos; so o ponto sob o
+  // cursor aparece no hover (igual ao Dashboard).
+  if (cfg.line) {
+    const pts = cfg.line.values.map((v, i) => ({ x: xs[i], y: baseY - Math.max(-scaleH, Math.min(scaleH, (v / niceMax) * scaleH)) }));
+    ctx.save();
+    ctx.strokeStyle = trendColor;
+    ctx.lineWidth = 1.5;
     ctx.lineJoin = "round";
+    ctx.lineCap = "round";
     ctx.beginPath();
-    s.values.forEach((v, i) => (i ? ctx.lineTo(xAt(i), yAt(v)) : ctx.moveTo(xAt(i), yAt(v))));
+    drawMonotonePath(ctx, pts);
     ctx.stroke();
-    s.values.forEach((v, i) => {
-      if (!showMarkers && i !== hoverIdx) return;
+    ctx.restore();
+    if (hoverIdx != null && pts[hoverIdx]) {
       ctx.beginPath();
-      ctx.arc(xAt(i), yAt(v), i === hoverIdx ? 5.5 : 4, 0, Math.PI * 2);
-      ctx.fillStyle = surface;
+      ctx.arc(pts[hoverIdx].x, pts[hoverIdx].y, 3.5, 0, Math.PI * 2);
+      ctx.fillStyle = trendColor;
       ctx.fill();
-      ctx.lineWidth = 2;
-      ctx.strokeStyle = s.color;
-      ctx.stroke();
-    });
-  });
-  canvas._line = { labels, series, xs: labels.map((_, i) => xAt(i)) };
+    }
+  }
+  canvas._bars = { cfg, xs };
 }
 
-function attachLineTooltip(canvas) {
-  if (!canvas || canvas._lineTooltip) return;
-  canvas._lineTooltip = true;
+function attachBarsTooltip(canvas) {
+  if (!canvas || canvas._barsTooltip) return;
+  canvas._barsTooltip = true;
   const tooltip = document.getElementById("chartTooltip");
   canvas.addEventListener("mousemove", (e) => {
-    const d = canvas._line;
+    const d = canvas._bars;
     if (!d || !d.xs.length || !tooltip) return;
     const mx = e.clientX - canvas.getBoundingClientRect().left;
     let idx = 0;
     d.xs.forEach((x, i) => { if (Math.abs(x - mx) < Math.abs(d.xs[idx] - mx)) idx = i; });
-    const head = (canvas._fullLabels || d.labels)[idx];
-    tooltip.innerHTML = `<b>${escapeHtml(head)}</b>` + d.series.map((s) =>
-      `<div><span class="tt-dot" style="background:${s.color}"></span>${escapeHtml(s.name)}: ${formatCurrency(s.values[idx])}</div>`).join("");
+    const c = d.cfg;
+    const rows = [];
+    if (c.up) rows.push([c.up.name, themeColor(c.up.color), c.up.values[idx]]);
+    if (c.down) rows.push([c.down.name, themeColor(c.down.color), -c.down.values[idx]]);
+    if (c.line) rows.push([c.line.name, themeColor("--text"), c.line.values[idx]]);
+    tooltip.innerHTML = `<b>${escapeHtml((c.fullLabels || c.labels)[idx])}</b>` + rows.map(([name, color, v]) =>
+      `<div><span class="tt-dot" style="background:${color}"></span>${escapeHtml(name)}: ${formatCurrency(v)}</div>`).join("");
     tooltip.style.left = `${e.clientX + 12}px`;
     tooltip.style.top = `${e.clientY + 12}px`;
     tooltip.classList.remove("hidden");
-    if (canvas._hoverIdx !== idx) { canvas._hoverIdx = idx; drawReportLineChart(canvas, d.labels, d.series, idx); }
+    if (canvas._hoverIdx !== idx) { canvas._hoverIdx = idx; drawReportBars(canvas, d.cfg, idx); }
   });
   canvas.addEventListener("mouseleave", () => {
     if (tooltip) tooltip.classList.add("hidden");
     canvas._hoverIdx = null;
-    if (canvas._line) drawReportLineChart(canvas, canvas._line.labels, canvas._line.series, null);
+    if (canvas._bars) drawReportBars(canvas, canvas._bars.cfg, null);
   });
 }
