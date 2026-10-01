@@ -3189,6 +3189,7 @@ state.repFilters = loadPinnedRepFilters() || defaultRepFilters();
 state.repView = loadRepView();
 state.repOptions = { payment_methods: [] };
 state.repLastData = null;
+state.repDrill = null; // detalhamento aberto (ex.: lancamentos de um contato em "Pago a...")
 try {
   const savedReport = JSON.parse(localStorage.getItem("repActiveReport") || "null");
   if (savedReport && savedReport.report) state.activeReport = { report: savedReport.report, side: savedReport.side || null };
@@ -3204,6 +3205,7 @@ syncReportLinks();
 document.querySelectorAll("#tab-relatorios .report-link").forEach((btn) => {
   btn.addEventListener("click", () => {
     state.activeReport = { report: btn.dataset.report, side: btn.dataset.side || null };
+    state.repDrill = null;
     state.repView.expandOthers = false;
     try { localStorage.setItem("repActiveReport", JSON.stringify(state.activeReport)); } catch (e) {}
     syncReportLinks();
@@ -3477,6 +3479,7 @@ function repParams() {
     paid: f.paid ? 1 : 0, pending: f.pending ? 1 : 0, date_mode: f.dateMode,
     categories: list("categories"), contacts: list("contacts"), tags: list("tags"),
     payment_methods: list("payment_methods"), plans: list("plans"),
+    drill: state.repDrill && state.repDrill.report === r.report ? state.repDrill.key : undefined,
   };
 }
 
@@ -3569,7 +3572,7 @@ function renderReport(data) {
   const renderers = {
     grouped: renderRepGrouped, daily: renderRepDaily, extrato: renderRepExtrato,
     despesas_receitas: renderRepFluxo, historico: renderRepHistorico, dre: renderRepDre,
-    performance: renderRepPerformance, saldos: renderRepSaldos,
+    performance: renderRepPerformance, saldos: renderRepSaldos, drill: renderRepDrill,
   };
   const fn = renderers[data.kind];
   if (!fn) { el.innerHTML = repEmpty(); return; }
@@ -3598,9 +3601,11 @@ function sortRepRows(rows) {
   return out;
 }
 
-function renderRepGrouped(el, data, title) {
+function renderRepGrouped(el, data, title, r) {
   if (!data.rows.length) { el.innerHTML = repEmpty(); return; }
   const v = state.repView;
+  // "Pago a..." / "Recebido de...": cada contato abre o detalhamento.
+  const drillable = r.report === "por_contato";
   const { slices, colorOf, other } = groupedSlices(data.rows);
   const sorted = sortRepRows(data.rows);
   const limit = 10;
@@ -3615,7 +3620,7 @@ function renderRepGrouped(el, data, title) {
       <table class="rep-table">
         <thead><tr><th>Descrição</th><th class="num">Valor</th></tr></thead>
         <tbody>
-          ${visible.map((row) => `<tr><td><span class="rep-dot" style="background:${colorOf[row.key] || other}"></span>${escapeHtml(row.label)} <span class="rep-count">(${row.count})</span></td><td class="num">${repMoney(row.total)}</td></tr>`).join("")}
+          ${visible.map((row) => `<tr${drillable ? ` class="rep-row-link" data-key="${escapeHtml(row.key)}" data-label="${escapeHtml(row.label)}" title="Ver lançamentos de ${escapeHtml(row.label)}"` : ""}><td><span class="rep-dot" style="background:${colorOf[row.key] || other}"></span><span class="${drillable ? "rep-link-text" : ""}">${escapeHtml(row.label)}</span> <span class="rep-count">(${row.count})</span></td><td class="num">${repMoney(row.total)}</td></tr>`).join("")}
           ${hiddenRows.length ? `<tr class="rep-others-row" id="repShowOthers"><td><span class="rep-link-text">Mostrar outros (${hiddenRows.length})</span></td><td class="num">${repMoney(hiddenRows.reduce((s, x) => s + x.total, 0))}</td></tr>` : ""}
           ${v.expandOthers && sorted.length > limit + 1 ? `<tr class="rep-others-row" id="repHideOthers"><td colspan="2"><span class="rep-link-text">Mostrar menos</span></td></tr>` : ""}
         </tbody>
@@ -3628,6 +3633,10 @@ function renderRepGrouped(el, data, title) {
     drawReportDonut(canvas, slices);
     attachDonutTooltip(canvas);
   }
+  el.querySelectorAll(".rep-row-link").forEach((tr) => tr.addEventListener("click", () => {
+    state.repDrill = { report: r.report, key: tr.dataset.key, label: tr.dataset.label };
+    loadReport();
+  }));
   document.getElementById("repShowOthers")?.addEventListener("click", () => { v.expandOthers = true; renderReport(data); });
   document.getElementById("repHideOthers")?.addEventListener("click", () => { v.expandOthers = false; renderReport(data); });
   document.getElementById("repSortBtn")?.addEventListener("click", (e) => {
@@ -3641,6 +3650,67 @@ function renderRepGrouped(el, data, title) {
     menu.querySelectorAll(".custom-select-option").forEach((opt) => opt.addEventListener("click", (ev) => {
       ev.stopPropagation();
       v.sort = opt.dataset.id;
+      saveRepView();
+      closeGlobalDropdown();
+      renderReport(data);
+    }));
+    menu._openedBy = trigger;
+    positionGlobalDropdown(trigger);
+  });
+  bindRepToggles(el);
+}
+
+const REP_DRILL_SORTS = [["data_asc", "Data (Mais antiga)"], ["data_desc", "Data (Mais recente)"], ["valor_desc", "Valor (Maior → Menor)"], ["valor_asc", "Valor (Menor → Maior)"], ["desc_asc", "Descrição (A → Z)"]];
+
+/** Detalhamento de um contato (aberto a partir de "Pago a..." /
+ * "Recebido de..."): rosca por descricao + lista dos lancamentos. */
+function renderRepDrill(el, data, title) {
+  const v = state.repView;
+  if (!v.drillSort) v.drillSort = "data_asc";
+  const cmp = {
+    data_asc: (a, b) => a.date.localeCompare(b.date),
+    data_desc: (a, b) => b.date.localeCompare(a.date),
+    valor_desc: (a, b) => b.amount - a.amount,
+    valor_asc: (a, b) => a.amount - b.amount,
+    desc_asc: (a, b) => a.description.localeCompare(b.description, "pt-BR"),
+  }[v.drillSort] || ((a, b) => a.date.localeCompare(b.date));
+  const rows = [...data.rows].sort(cmp);
+  const sortLabel = REP_DRILL_SORTS.find((s) => s[0] === v.drillSort)?.[1] || REP_DRILL_SORTS[0][1];
+  const { slices } = groupedSlices(data.chart);
+  const has = rows.length > 0;
+  el.innerHTML = `<div class="rep-card">
+    ${repCardHead(data, title)}
+    ${has && v.showChart ? `<div class="rep-chart"><canvas id="repDonut" height="320"></canvas></div>` : ""}
+    <div class="rep-drill-bar">
+      <div class="rep-breadcrumb"><button type="button" class="rep-crumb-back" id="repDrillBack">${escapeHtml(title)}</button><span>/</span><b>${escapeHtml(data.drill_label)}</b></div>
+      ${has && v.showTable ? `<button type="button" class="rep-sort-btn" id="repSortBtn">Ordenar por: <b>${sortLabel}</b> <span class="chevron">▾</span></button>` : ""}
+    </div>
+    ${!has ? `<div class="rep-sub rep-center">Nenhum lançamento deste contato com os filtros atuais.</div>` : ""}
+    ${has && v.showTable ? `<table class="rep-table rep-fixed">
+      <colgroup><col style="width:16%"><col style="width:42%"><col style="width:26%"><col style="width:16%"></colgroup>
+      <thead><tr><th>Data</th><th>Descrição</th><th>Categoria</th><th class="num">Valor</th></tr></thead>
+      <tbody>${rows.map((row) => `<tr><td class="nowrap">${repStatusIcon(row.status)}${formatDateBR(row.date)}</td><td><div class="rep-desc">${escapeHtml(row.description)}${row.installment ? ` (${row.installment})` : ""}</div></td><td>${escapeHtml(row.category)}</td><td class="num">${repMoney(row.amount)}</td></tr>`).join("")}</tbody>
+      <tfoot><tr><td colspan="3">Total</td><td class="num">${repMoney(data.total)}</td></tr></tfoot>
+    </table>` : ""}
+    ${repToggles()}
+  </div>`;
+  document.getElementById("repDrillBack").addEventListener("click", () => { state.repDrill = null; loadReport(); });
+  if (has && v.showChart) {
+    const canvas = document.getElementById("repDonut");
+    drawReportDonut(canvas, slices);
+    attachDonutTooltip(canvas);
+  }
+  document.getElementById("repSortBtn")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const trigger = e.currentTarget;
+    const menu = document.getElementById("globalDropdownMenu");
+    const willOpen = menu.classList.contains("hidden") || menu._openedBy !== trigger;
+    closeGlobalDropdown();
+    if (!willOpen) return;
+    menu.innerHTML = REP_DRILL_SORTS.map(([id, label]) => `<div class="custom-select-option ${v.drillSort === id ? "selected" : ""}" data-id="${id}"><span>${label}</span><span class="check">✓</span></div>`).join("");
+    menu.querySelectorAll(".custom-select-option").forEach((opt) => opt.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      v.drillSort = opt.dataset.id;
       saveRepView();
       closeGlobalDropdown();
       renderReport(data);

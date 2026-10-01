@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
     // formato antigo continua servindo o gerador de PDF consolidado.
     if (sp.get("v") === "2") {
       const keys = ["start", "end", "accounts", "profiles", "profile_id", "paid", "pending", "date_mode", "categories",
-        "contacts", "tags", "payment_methods", "plans", "side", "month", "year"] as const;
+        "contacts", "tags", "payment_methods", "plans", "side", "month", "year", "drill"] as const;
       const f: Record<string, string | undefined> = {};
       for (const k of keys) f[k] = sp.get(k) || undefined;
       return NextResponse.json(await reportV2(userId, report, f));

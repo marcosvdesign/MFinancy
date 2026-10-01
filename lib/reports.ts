@@ -92,6 +92,7 @@ export interface ReportV2Filters {
   side?: string; // "receita" | "despesa"
   month?: string; // YYYY-MM (performance mensal)
   year?: string; // YYYY (performance anual)
+  drill?: string; // detalhamento: id do contato ("__none__" = sem contato)
 }
 
 interface Ctx {
@@ -376,7 +377,21 @@ export async function reportV2(userId: string, report: string, f: ReportV2Filter
   if (report === "por_descricao") return grouped(groupBy(items, (t) => [t.description.trim()], (k) => k));
   if (report === "por_tipo") return grouped(groupBy(items, (t) => [t.group], (k) => TYPE_LABELS[k as Group] || k));
   if (report === "por_categoria") return grouped(groupBy(items, (t) => [t.category_id || NONE], (k) => lk.catById[k] || "Sem categoria"));
-  if (report === "por_contato") return grouped(groupBy(items, (t) => [t.contact_id || NONE], (k) => lk.contactById[k] || "Sem contato"));
+  if (report === "por_contato") {
+    if (f.drill) {
+      // Detalhamento de um contato: lancamentos dele + rosca por descricao.
+      const its = items.filter((t) => (t.contact_id || NONE) === f.drill);
+      const rows = its.map((t) => enrichRow(t, lk, ctx.dateMode));
+      return {
+        kind: "drill", ...head,
+        drill_label: f.drill === NONE ? "Sem contato" : lk.contactById[f.drill] || "Contato removido",
+        rows,
+        chart: groupBy(its, (t) => [t.description.trim()], (k) => k),
+        total: sumBy(its, () => true),
+      };
+    }
+    return grouped(groupBy(items, (t) => [t.contact_id || NONE], (k) => lk.contactById[k] || "Sem contato"));
+  }
   if (report === "por_perfil") {
     return grouped(
       groupBy(items, (t) => [lk.accById[t.account_id]?.profile_id || NONE], (k) => lk.profileById[k] || "Sem perfil")
