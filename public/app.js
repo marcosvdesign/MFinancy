@@ -951,7 +951,10 @@ function renderComparativoRow(label, atual, anterior, isReceita, sub) {
   if (atual !== anterior) {
     const up = atual > anterior;
     const favoravel = (isReceita && up) || (!isReceita && !up);
-    barClass = favoravel ? "progress-fill-green" : "progress-fill-red";
+    // Cor da barra identifica o TIPO (recebimento = verde, despesa = vermelho),
+    // independente de a variacao ser favoravel; o texto ao lado continua
+    // verde/vermelho conforme favoravel ou nao.
+    barClass = isReceita ? "progress-fill-green" : "progress-fill-red";
     // O texto mostra a variacao real (pode passar de 100%); so a BARRA e
     // limitada a 100%. Sem valor no mes anterior (base 0) nao existe
     // percentual -- mostra "novo" em vez de um 100% falso.
