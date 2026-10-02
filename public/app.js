@@ -952,8 +952,13 @@ function renderComparativoRow(label, atual, anterior, isReceita, sub) {
     const up = atual > anterior;
     const favoravel = (isReceita && up) || (!isReceita && !up);
     barClass = favoravel ? "progress-fill-green" : "progress-fill-red";
-    pct = anterior !== 0 ? Math.min(100, Math.abs(((atual - anterior) / anterior) * 100)) : 100;
-    changeHtml = `<span class="${favoravel ? "positive" : "negative"}">${up ? "▲" : "▼"} ${formatCurrency(Math.abs(atual - anterior))} · ${pct.toFixed(0)}%</span>`;
+    // O texto mostra a variacao real (pode passar de 100%); so a BARRA e
+    // limitada a 100%. Sem valor no mes anterior (base 0) nao existe
+    // percentual -- mostra "novo" em vez de um 100% falso.
+    const rawPct = anterior !== 0 ? (Math.abs(atual - anterior) / Math.abs(anterior)) * 100 : null;
+    pct = rawPct === null ? 100 : Math.min(100, rawPct);
+    const pctLabel = rawPct === null ? "novo" : `${Math.round(rawPct).toLocaleString("pt-BR")}%`;
+    changeHtml = `<span class="${favoravel ? "positive" : "negative"}">${up ? "▲" : "▼"} ${formatCurrency(Math.abs(atual - anterior))} · ${pctLabel}</span>`;
   }
   return `
     <div class="compare-item ${sub ? "compare-sub" : ""}">
