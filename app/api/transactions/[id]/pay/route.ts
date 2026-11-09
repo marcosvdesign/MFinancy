@@ -8,7 +8,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
     const userId = getUserId(request);
     const payload = await request.json().catch(() => ({}));
     const paid = payload.paid !== undefined ? Boolean(payload.paid) : true;
-    const result = await db.payTransaction(userId, params.id, payload.paid_date || null, paid);
+    const result = await db.payTransaction(userId, params.id, payload.paid_date || null, paid, payload.mode === "move" || payload.mode === "keep" ? payload.mode : null);
     if (result === null) return jsonError("Lançamento não encontrado", 404);
     return NextResponse.json(result);
   });

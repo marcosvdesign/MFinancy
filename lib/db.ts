@@ -968,10 +968,21 @@ export async function updateTransaction(userId: string, id: string, payload: any
   return updated;
 }
 
-export async function payTransaction(userId: string, id: string, paidDate: string | null, paid: boolean): Promise<Transaction | null> {
-  const { rows } = paid
-    ? await sql.query(`UPDATE transactions SET status='pago', paid_date=$1 WHERE id=$2 AND user_id=$3 RETURNING *`, [paidDate || todayStr(), id, userId])
-    : await sql.query(`UPDATE transactions SET status='pendente', paid_date=NULL WHERE id=$1 AND user_id=$2 RETURNING *`, [id, userId]);
+/** mode: "move" = a transacao passa a vencer no dia do pagamento (muda de mes
+ *  na lista e nos totais); "keep" = so troca o status, mantendo vencimento e
+ *  pagamento na mesma data; sem mode = paga na data informada (ou hoje). */
+export async function payTransaction(userId: string, id: string, paidDate: string | null, paid: boolean, mode?: "move" | "keep" | null): Promise<Transaction | null> {
+  let rows: any[];
+  if (!paid) {
+    ({ rows } = await sql.query(`UPDATE transactions SET status='pendente', paid_date=NULL WHERE id=$1 AND user_id=$2 RETURNING *`, [id, userId]));
+  } else if (mode === "move") {
+    const d = paidDate || todayStr();
+    ({ rows } = await sql.query(`UPDATE transactions SET status='pago', paid_date=$1, due_date=$1 WHERE id=$2 AND user_id=$3 RETURNING *`, [d, id, userId]));
+  } else if (mode === "keep") {
+    ({ rows } = await sql.query(`UPDATE transactions SET status='pago', paid_date=due_date WHERE id=$1 AND user_id=$2 RETURNING *`, [id, userId]));
+  } else {
+    ({ rows } = await sql.query(`UPDATE transactions SET status='pago', paid_date=$1 WHERE id=$2 AND user_id=$3 RETURNING *`, [paidDate || todayStr(), id, userId]));
+  }
   if (!rows[0]) return null;
   const t = mapTransaction(rows[0]);
   await log(userId, paid ? "paid" : "unpaid", "transaction", `Lançamento "${t.description}" ${paid ? "marcado como pago" : "reaberto como pendente"}`);

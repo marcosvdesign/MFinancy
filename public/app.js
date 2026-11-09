@@ -533,6 +533,52 @@ function appPromptDate(message, defaultValue) {
   });
 }
 
+/** Popup de pagamento fora do vencimento. Resolve com
+ *  { mode: "move", date } (alterar data: a transacao muda para o dia escolhido),
+ *  { mode: "keep" } (manter como esta: so troca o status) ou null (cancelar). */
+function appPromptPayDate(message, defaultValue) {
+  return new Promise((resolve) => {
+    const overlay = document.getElementById("confirmDialogOverlay");
+    document.getElementById("confirmDialogMessage").textContent = message;
+    const wrap = document.getElementById("confirmDialogPromptWrap");
+    const textInput = document.getElementById("confirmDialogPromptInput");
+    const dateInput = document.getElementById("confirmDialogPromptDate");
+    const dateWrap = dateInput.closest(".custom-date-wrap");
+    wrap.classList.remove("hidden");
+    textInput.classList.add("hidden");
+    if (dateWrap) dateWrap.classList.remove("hidden");
+    dateInput.value = defaultValue || "";
+    dateInput.dispatchEvent(new Event("change"));
+    const okBtn = document.getElementById("confirmDialogOk");
+    const cancelBtn = document.getElementById("confirmDialogCancel");
+    const keepBtn = document.getElementById("confirmDialogKeep");
+    okBtn.textContent = "Alterar data";
+    keepBtn.classList.remove("hidden");
+    overlay.classList.remove("hidden");
+    function cleanup(result) {
+      overlay.classList.add("hidden");
+      wrap.classList.add("hidden");
+      textInput.classList.remove("hidden");
+      if (dateWrap) dateWrap.classList.add("hidden");
+      keepBtn.classList.add("hidden");
+      okBtn.textContent = "Confirmar";
+      okBtn.removeEventListener("click", onOk);
+      keepBtn.removeEventListener("click", onKeep);
+      cancelBtn.removeEventListener("click", onCancel);
+      overlay.removeEventListener("click", onOverlay);
+      resolve(result);
+    }
+    function onOk() { cleanup(dateInput.value ? { mode: "move", date: dateInput.value } : null); }
+    function onKeep() { cleanup({ mode: "keep" }); }
+    function onCancel() { cleanup(null); }
+    function onOverlay(e) { if (e.target === overlay) cleanup(null); }
+    okBtn.addEventListener("click", onOk);
+    keepBtn.addEventListener("click", onKeep);
+    cancelBtn.addEventListener("click", onCancel);
+    overlay.addEventListener("click", onOverlay);
+  });
+}
+
 // ---------------------------------------------------------------------
 // Modal generico
 // ---------------------------------------------------------------------
@@ -1357,7 +1403,7 @@ async function loadTransactionsTable() {
     return `
       <tr data-row-id="${t.id}" class="${checked ? "row-selected" : ""}">
         <td><input type="checkbox" class="row-select-checkbox" data-id="${t.id}" ${checked ? "checked" : ""} /></td>
-        <td class="clickable-cell cell-date" data-id="${t.id}">${formatDateBR(t.due_date)}${overdue ? ' <span class="badge badge-vencido">atrasado</span>' : ""}${t.status === "pago" && t.paid_date && t.paid_date !== t.due_date ? `<div class="meta" style="color:var(--text-muted);font-size:11.5px;">pago em ${formatDateBR(t.paid_date)}</div>` : ""}</td>
+        <td class="clickable-cell cell-date" data-id="${t.id}">${formatDateBR(t.due_date)}${overdue ? ' <span class="badge badge-vencido">atrasado</span>' : ""}</td>
         <td class="clickable-cell cell-desc" data-id="${t.id}"><span class="cell-text">${escapeHtml(t.description)}</span><div class="meta" style="color:var(--text-muted);font-size:11.5px;">${escapeHtml(accById[t.account_id]?.name || "")}</div></td>
         <td class="clickable-cell cell-contact" data-id="${t.id}"><span class="cell-text">${escapeHtml(contactById[t.contact_id]?.name || "-")}</span></td>
         <td class="clickable-cell cell-category" data-id="${t.id}"><span class="cell-text">${escapeHtml(catById[t.category_id]?.name || "-")}</span></td>
@@ -2048,14 +2094,21 @@ document.addEventListener("click", (e) => {
 async function handleTogglePago(checkbox, items) {
   const t = items.find((i) => i.id === checkbox.dataset.id);
   const willPay = checkbox.checked;
-  let paidDate = null;
-  if (willPay && t.due_date < todayIso() && state.settings.prefs.confirm_paid_date) {
-    paidDate = await appPromptDate("Confirme a data de pagamento:", todayIso());
-    if (paidDate === null) { checkbox.checked = false; return; }
+  let mode = null, paidDate = null;
+  // Pago no proprio vencimento: so troca o status. Antes ou depois do
+  // vencimento: pergunta se move a transacao para o dia do pagamento.
+  if (willPay && t.due_date !== todayIso() && state.settings.prefs.confirm_paid_date) {
+    const msg = t.due_date < todayIso()
+      ? "Este lançamento está atrasado. Alterar a data para o dia do pagamento?"
+      : "Este lançamento vence depois de hoje. Alterar a data para o dia do pagamento?";
+    const choice = await appPromptPayDate(msg, todayIso());
+    if (choice === null) { checkbox.checked = false; return; }
+    mode = choice.mode;
+    paidDate = choice.date || null;
   }
   try {
-    await api("POST", `/api/transactions/${t.id}/pay`, { paid: willPay, paid_date: paidDate });
-    showToast(willPay ? "Marcado como pago." : "Reaberto como pendente.");
+    await api("POST", `/api/transactions/${t.id}/pay`, { paid: willPay, paid_date: paidDate, mode });
+    showToast(willPay ? (mode === "move" ? "Pago e movido para " + formatDateBR(paidDate) + "." : "Marcado como pago.") : "Reaberto como pendente.");
     refreshCurrentView();
   } catch (e) { showToast(e.message, true); checkbox.checked = !willPay; }
 }
