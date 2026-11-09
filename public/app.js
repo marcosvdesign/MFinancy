@@ -1357,7 +1357,7 @@ async function loadTransactionsTable() {
     return `
       <tr data-row-id="${t.id}" class="${checked ? "row-selected" : ""}">
         <td><input type="checkbox" class="row-select-checkbox" data-id="${t.id}" ${checked ? "checked" : ""} /></td>
-        <td class="clickable-cell cell-date" data-id="${t.id}">${formatDateBR(t.due_date)}${overdue ? ' <span class="badge badge-vencido">atrasado</span>' : ""}</td>
+        <td class="clickable-cell cell-date" data-id="${t.id}">${formatDateBR(t.due_date)}${overdue ? ' <span class="badge badge-vencido">atrasado</span>' : ""}${t.status === "pago" && t.paid_date && t.paid_date !== t.due_date ? `<div class="meta" style="color:var(--text-muted);font-size:11.5px;">pago em ${formatDateBR(t.paid_date)}</div>` : ""}</td>
         <td class="clickable-cell cell-desc" data-id="${t.id}"><span class="cell-text">${escapeHtml(t.description)}</span><div class="meta" style="color:var(--text-muted);font-size:11.5px;">${escapeHtml(accById[t.account_id]?.name || "")}</div></td>
         <td class="clickable-cell cell-contact" data-id="${t.id}"><span class="cell-text">${escapeHtml(contactById[t.contact_id]?.name || "-")}</span></td>
         <td class="clickable-cell cell-category" data-id="${t.id}"><span class="cell-text">${escapeHtml(catById[t.category_id]?.name || "-")}</span></td>
