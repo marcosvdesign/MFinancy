@@ -12,11 +12,31 @@
 <link rel="stylesheet" href="/style.css" />
 <script>
   (function () {
+    // Segue o modo de cores do sistema (claro/escuro). Se o usuario alternar
+    // manualmente, a escolha vale enquanto o modo do sistema continuar o
+    // mesmo de quando ele escolheu; ao o sistema mudar, volta a seguir o SO.
+    function systemTheme() {
+      return window.matchMedia && matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
+    }
+    function resolveTheme() {
+      var sys = systemTheme();
+      try {
+        var o = JSON.parse(localStorage.getItem("theme_manual") || "null");
+        if (o && o.sys === sys && (o.theme === "dark" || o.theme === "light")) return o.theme;
+      } catch (e) {}
+      return sys;
+    }
+    window.__systemTheme = systemTheme;
+    window.__resolveTheme = resolveTheme;
+    document.documentElement.setAttribute("data-theme", resolveTheme());
     try {
-      // Mesmo padrao fixo (escuro) do app principal — ver index.html.
-      var saved = localStorage.getItem("theme");
-      var theme = saved || "dark";
-      document.documentElement.setAttribute("data-theme", theme);
+      var mq = matchMedia("(prefers-color-scheme: light)");
+      var onChange = function () {
+        if (window.__onThemeChange) window.__onThemeChange(resolveTheme());
+        else document.documentElement.setAttribute("data-theme", resolveTheme());
+      };
+      if (mq.addEventListener) mq.addEventListener("change", onChange);
+      else if (mq.addListener) mq.addListener(onChange);
     } catch (e) {}
   })();
 </script>

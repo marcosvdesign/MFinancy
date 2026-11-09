@@ -4652,6 +4652,8 @@ function applyTheme(theme) {
 (function initTheme() {
   const current = document.documentElement.getAttribute("data-theme") || "light";
   applyTheme(current);
+  // Quando o modo de cores do sistema muda, o app acompanha na hora.
+  window.__onThemeChange = (theme) => { applyTheme(theme); redrawThemedCharts(); };
 })();
 
 /** Redesenha na hora os graficos em <canvas> (que nao reagem ao CSS sozinhos)
@@ -4683,7 +4685,10 @@ document.getElementById("btnToggleTheme")?.addEventListener("click", () => {
   const current = document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
   const next = current === "dark" ? "light" : "dark";
   applyTheme(next);
-  try { localStorage.setItem("theme", next); } catch (e) {}
+  try {
+    localStorage.setItem("theme_manual", JSON.stringify({ theme: next, sys: window.__systemTheme ? window.__systemTheme() : next }));
+    localStorage.removeItem("theme");
+  } catch (e) {}
   redrawThemedCharts();
 });
 
